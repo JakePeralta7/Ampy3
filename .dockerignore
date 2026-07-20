@@ -1,0 +1,61 @@
+# Git and version control
+.git
+.gitignore
+.gitattributes
+
+# Documentation
+README.md
+LICENSE
+*.md
+
+# Development and IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Python artifacts
+__pycache__
+*.py[cod]
+*$py.class
+*.egg-info
+*.egg
+.Python
+.pytest_cache
+.ruff_cache
+.venv
+venv
+env
+dist
+build
+.coverage
+
+# JavaScript/Node artifacts
+node_modules
+npm-debug.log
+yarn-error.log
+.npm
+.next
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Test files
+tests
+test_*.py
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Runtime mounted volumes
+cookies
+
+# Docker files (if multi-stage build)
+Dockerfile
+docker-compose.yml
+.dockerignore

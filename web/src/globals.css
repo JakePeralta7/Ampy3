@@ -1,0 +1,43 @@
+@import "./design/tokens.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-bg-app text-fg antialiased;
+}
+
+/* Hide React Flow attribution */
+.react-flow__attribution {
+  display: none;
+}
+
+/* Dark mode for React Flow minimap - comprehensive styling */
+.react-flow__minimap {
+  background: hsl(var(--bg-inset));
+  border: 1px solid hsl(var(--border-default));
+}
+
+.react-flow__minimap svg {
+  background: hsl(var(--bg-inset));
+}
+
+.react-flow__minimap svg rect {
+  fill: hsl(var(--bg-inset));
+}
+
+.react-flow__minimap-mask {
+  fill: rgba(0, 0, 0, 0.3);
+}
+
+.react-flow__minimap-node {
+  fill: hsl(var(--bg-muted));
+  stroke: hsl(var(--border-strong));
+}

@@ -1,0 +1,72 @@
+:root,
+.light {
+  --bg-app: 210 20% 98%;
+  --bg-surface: 0 0% 100%;
+  --bg-muted: 210 17% 95%;
+  --bg-inset: 210 20% 92%;
+
+  --fg-default: 222 25% 12%;
+  --fg-muted: 215 16% 40%;
+  --fg-subtle: 215 14% 55%;
+  --fg-on-accent: 0 0% 100%;
+
+  --border-default: 215 16% 88%;
+  --border-strong: 215 14% 75%;
+  --border-focus: 224 67% 51%;
+
+  --accent-50: 220 50% 97%;
+  --accent-100: 220 55% 92%;
+  --accent-500: 224 67% 51%;
+  --accent-600: 226 70% 45%;
+  --accent-700: 228 70% 38%;
+  --accent-fg: 0 0% 100%;
+
+  --danger-500: 0 72% 51%;
+  --danger-fg: 0 0% 100%;
+  --success-500: 142 70% 40%;
+  --warn-500: 38 92% 50%;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.06);
+  --shadow-md: 0 4px 12px rgb(0 0 0 / 0.08);
+  --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.12);
+  --motion-fast: 120ms;
+  --motion-base: 180ms;
+}
+
+.dark {
+  --bg-app: 222 25% 7%;
+  --bg-surface: 222 22% 10%;
+  --bg-muted: 222 18% 14%;
+  --bg-inset: 222 18% 18%;
+
+  --fg-default: 210 20% 96%;
+  --fg-muted: 215 14% 70%;
+  --fg-subtle: 215 12% 55%;
+  --fg-on-accent: 0 0% 100%;
+
+  --border-default: 222 16% 22%;
+  --border-strong: 222 14% 32%;
+  --border-focus: 220 90% 65%;
+
+  --accent-50: 224 55% 14%;
+  --accent-100: 224 60% 20%;
+  --accent-500: 220 90% 60%;
+  --accent-600: 220 90% 65%;
+  --accent-700: 220 90% 72%;
+  --accent-fg: 222 25% 8%;
+
+  --danger-500: 0 70% 60%;
+  --danger-fg: 0 0% 100%;
+  --success-500: 142 60% 50%;
+  --warn-500: 38 92% 60%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-fast: 0ms;
+    --motion-base: 0ms;
+  }
+}

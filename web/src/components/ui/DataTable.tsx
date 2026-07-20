@@ -1,0 +1,212 @@
+import { ChevronDown, ChevronUp, Search, X } from "lucide-react";
+import type React from "react";
+import { useMemo, useState } from "react";
+
+export interface Column<T> {
+  id: string;
+  header: string;
+  cell: (item: T) => React.ReactNode;
+  sortable?: boolean;
+  sortValue?: (item: T) => string | number;
+  filterValue?: (item: T) => string;
+  filterable?: boolean;
+  className?: string;
+  headerClassName?: string;
+}
+
+interface DataTableProps<T> {
+  columns: Column<T>[];
+  data: T[];
+  keyExtractor: (item: T) => string | number;
+  onRowClick?: (item: T) => void;
+  rowClassName?: (item: T) => string | undefined;
+  loading?: boolean;
+  loadingRows?: number;
+}
+
+type SortDir = "asc" | "desc" | null;
+
+function rawValue<T>(item: T, col: Column<T>): string {
+  if (col.filterValue) return col.filterValue(item);
+  if (col.sortValue) return String(col.sortValue(item));
+  return String(item[col.id as keyof T] ?? "");
+}
+
+function SkeletonCell({ width }: { width?: string }) {
+  return (
+    <div className="h-4 bg-bg-muted rounded animate-pulse" style={{ width: width || "60%" }} />
+  );
+}
+
+function SkeletonRow({ columns }: { columns: Column<unknown>[] }) {
+  return (
+    <tr>
+      {columns.map((col) => (
+        <td key={col.id} className="px-4 py-3">
+          <SkeletonCell />
+        </td>
+      ))}
+    </tr>
+  );
+}
+
+export function DataTable<T>({
+  columns,
+  data,
+  keyExtractor,
+  onRowClick,
+  rowClassName,
+  loading = false,
+  loadingRows = 5,
+}: DataTableProps<T>) {
+  const [sortKey, setSortKey] = useState<string | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>(null);
+  const [filters, setFilters] = useState<Record<string, string>>({});
+
+  const handleSort = (col: Column<T>) => {
+    if (!col.sortable) return;
+    if (sortKey !== col.id) {
+      setSortKey(col.id);
+      setSortDir("asc");
+    } else if (sortDir === "asc") {
+      setSortDir("desc");
+    } else if (sortDir === "desc") {
+      setSortKey(null);
+      setSortDir(null);
+    }
+  };
+
+  const setFilter = (colId: string, value: string) => {
+    setFilters((prev) => {
+      if (value) return { ...prev, [colId]: value };
+      const next = { ...prev };
+      delete next[colId];
+      return next;
+    });
+  };
+
+  const clearFilters = () => setFilters({});
+  const hasActiveFilters = Object.keys(filters).length > 0;
+
+  const processed = useMemo(() => {
+    let result = data;
+
+    const activeFilters = Object.entries(filters).filter(([, v]) => v.trim());
+    if (activeFilters.length > 0) {
+      result = result.filter((item) =>
+        activeFilters.every(([colId, q]) => {
+          const col = columns.find((c) => c.id === colId);
+          if (!col) return true;
+          return rawValue(item, col).toLowerCase().includes(q.trim().toLowerCase());
+        }),
+      );
+    }
+
+    if (sortKey && sortDir) {
+      const col = columns.find((c) => c.id === sortKey);
+      if (col) {
+        result = [...result].sort((a, b) => {
+          const aVal = col.sortValue ? col.sortValue(a) : rawValue(a, col);
+          const bVal = col.sortValue ? col.sortValue(b) : rawValue(b, col);
+          if (aVal < bVal) return sortDir === "asc" ? -1 : 1;
+          if (aVal > bVal) return sortDir === "asc" ? 1 : -1;
+          return 0;
+        });
+      }
+    }
+
+    return result;
+  }, [data, filters, sortKey, sortDir, columns]);
+
+  return (
+    <div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-bg-muted sticky top-0">
+            <tr>
+              {columns.map((col) => (
+                <th
+                  key={col.id}
+                  onClick={() => handleSort(col)}
+                  className={`px-4 py-3 text-left font-medium text-fg ${
+                    col.sortable ? "cursor-pointer select-none hover:bg-bg-inset" : ""
+                  } ${col.headerClassName || ""}`}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    {col.header}
+                    {col.sortable &&
+                      sortKey === col.id &&
+                      sortDir &&
+                      (sortDir === "asc" ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}
+                  </span>
+                  {col.filterable && (
+                    <div className="relative mt-1.5" onClick={(e) => e.stopPropagation()}>
+                      <Search
+                        size={12}
+                        className="absolute left-2 top-1/2 -translate-y-1/2 text-fg-subtle"
+                      />
+                      <input
+                        type="text"
+                        value={filters[col.id] || ""}
+                        onChange={(e) => setFilter(col.id, e.target.value)}
+                        placeholder="Filter..."
+                        className="w-full pl-7 pr-6 py-1 text-xs border border-border rounded-sm bg-bg-surface text-fg focus:outline-none focus:ring-1 focus:ring-border-focus placeholder-fg-subtle"
+                      />
+                      {filters[col.id] && (
+                        <button
+                          onClick={() => setFilter(col.id, "")}
+                          className="absolute right-1 top-1/2 -translate-y-1/2 text-fg-subtle hover:text-fg-muted"
+                        >
+                          <X size={12} />
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {loading ? (
+              Array.from({ length: loadingRows }).map((_, i) => (
+                // biome-ignore lint/suspicious/noArrayIndexKey: skeleton rows have no stable identity
+                <SkeletonRow key={i} columns={columns as Column<unknown>[]} />
+              ))
+            ) : processed.length === 0 ? (
+              <tr>
+                <td colSpan={columns.length} className="px-4 py-8 text-center text-fg-muted">
+                  {hasActiveFilters ? "No results match your filters" : "No data"}
+                </td>
+              </tr>
+            ) : (
+              processed.map((item) => (
+                <tr
+                  key={keyExtractor(item)}
+                  onClick={() => onRowClick?.(item)}
+                  className={`${onRowClick ? "cursor-pointer" : ""} hover:bg-bg-muted transition-colors duration-fast ${rowClassName?.(item) || ""}`}
+                >
+                  {columns.map((col) => (
+                    <td key={col.id} className={`px-4 py-3 ${col.className || ""}`}>
+                      {col.cell(item)}
+                    </td>
+                  ))}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {hasActiveFilters && !loading && (
+        <div className="flex items-center gap-2 mt-2 text-xs text-fg-muted">
+          <span>
+            {processed.length} of {data.length} results
+          </span>
+          <button onClick={clearFilters} className="text-accent-500 hover:underline">
+            Clear filters
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}

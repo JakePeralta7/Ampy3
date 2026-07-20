@@ -1,0 +1,70 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=ampy3
+      - POSTGRES_PASSWORD=ampy3
+      - POSTGRES_DB=ampy3
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ampy3"]
+      interval: 10s
+      retries: 5
+
+  web:
+    build: .
+    ports:
+      - ${APP_PORT:-8000}:8000
+    depends_on:
+      valkey:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      - PLEX_HOST=${PLEX_HOST}
+      - PLEX_TOKEN=${PLEX_TOKEN}
+      - OLLAMA_HOST=${OLLAMA_HOST:-http://localhost:11434}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-gemma4-e4b-128:latest}
+      - OLLAMA_TIMEOUT=${OLLAMA_TIMEOUT:-120}
+      - YT_DLP_COOKIES=/cookies/cookies.txt
+      - DATABASE_URL=postgresql://ampy3:ampy3@postgres:5432/ampy3
+      - REQUIRE_AUTH=${REQUIRE_AUTH:-false}
+      - APP_URL=${APP_URL:-http://localhost:8000}
+      - SECRET_KEY=${SECRET_KEY:-}
+      - SESSION_TTL_HOURS=${SESSION_TTL_HOURS:-168}
+    volumes:
+      - ./cookies:/cookies:ro
+
+  worker:
+    build: .
+    command: sh -c "celery -A src.app.tasks worker --loglevel=info --concurrency=${CELERY_WORKER_CONCURRENCY:-1}"
+    depends_on:
+      valkey:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      - PLEX_HOST=${PLEX_HOST}
+      - PLEX_TOKEN=${PLEX_TOKEN}
+      - YT_DLP_COOKIES=/cookies/cookies.txt
+      - DATABASE_URL=postgresql://ampy3:ampy3@postgres:5432/ampy3
+      - CELERY_WORKER_CONCURRENCY=${CELERY_WORKER_CONCURRENCY:-1}
+    volumes:
+      - ./cookies:/cookies:ro
+
+  valkey:
+    image: valkey/valkey:7.2-alpine
+    command: valkey-server --save 60 1 --appendonly yes --appendfsync everysec --loglevel warning
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      retries: 5
+    volumes:
+      - valkey_data:/data
+
+volumes:
+  postgres_data:
+  valkey_data:

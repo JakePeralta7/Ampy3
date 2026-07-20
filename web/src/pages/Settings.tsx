@@ -1,0 +1,237 @@
+import { Brain, Download, Eye, EyeOff, Save, Server } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
+import { type AppSettings, getSettings, updateSettings } from "../api/settings";
+import { Button } from "../components/ui/Button";
+import { Card } from "../components/ui/Card";
+import { getErrorMessage } from "../lib/utils";
+
+function SettingField({
+  id,
+  label,
+  value,
+  onChange,
+  type = "text",
+  placeholder,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  type?: "text" | "password" | "number";
+  placeholder?: string;
+}) {
+  const [showPassword, setShowPassword] = useState(false);
+
+  return (
+    <div className="space-y-1.5">
+      <label htmlFor={id} className="block text-sm font-medium text-fg-muted">
+        {label}
+      </label>
+      <div className="relative">
+        <input
+          id={id}
+          type={type === "password" && !showPassword ? "password" : "text"}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          className="w-full rounded-md border border-border bg-bg-surface px-3 py-2 text-sm text-fg placeholder-fg-subtle focus:outline-none focus:ring-2 focus:ring-border-focus disabled:opacity-50 disabled:cursor-not-allowed"
+        />
+        {type === "password" && (
+          <button
+            type="button"
+            onClick={() => setShowPassword(!showPassword)}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-fg-subtle hover:text-fg-muted transition-colors duration-fast"
+            aria-label={showPassword ? "Hide token" : "Show token"}
+          >
+            {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SectionCard({
+  icon,
+  title,
+  children,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Card className="p-6 space-y-4">
+      <div className="flex items-center gap-2 text-lg font-semibold text-fg">
+        {icon}
+        {title}
+      </div>
+      {children}
+    </Card>
+  );
+}
+
+export function ConfigPage() {
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [original, setOriginal] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const setField = useCallback((key: string, val: string) => {
+    setValues((prev) => ({ ...prev, [key]: val }));
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    getSettings()
+      .then((data: AppSettings) => {
+        if (cancelled) return;
+        const flat: Record<string, string> = {
+          plex_host: data.plex_host,
+          plex_token: data.plex_token,
+          ollama_host: data.ollama_host,
+          ollama_model: data.ollama_model,
+          ollama_timeout: String(data.ollama_timeout),
+          yt_dlp_cookies: data.yt_dlp_cookies,
+          yt_dlp_timeout: String(data.yt_dlp_timeout),
+        };
+        setValues(flat);
+        setOriginal(flat);
+      })
+      .catch((err) => {
+        if (!cancelled) toast.error(getErrorMessage(err, "Failed to load settings"));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const hasChanges = Object.keys(values).some((k) => values[k] !== original[k]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const payload: Record<string, unknown> = {};
+      for (const key of Object.keys(values)) {
+        if (values[key] !== original[key]) {
+          if (key === "ollama_timeout" || key === "yt_dlp_timeout") {
+            payload[key] = Number(values[key]);
+          } else {
+            payload[key] = values[key];
+          }
+        }
+      }
+      const result = await updateSettings(payload);
+      const flat: Record<string, string> = {
+        plex_host: result.plex_host,
+        plex_token: result.plex_token,
+        ollama_host: result.ollama_host,
+        ollama_model: result.ollama_model,
+        ollama_timeout: String(result.ollama_timeout),
+        yt_dlp_cookies: result.yt_dlp_cookies,
+        yt_dlp_timeout: String(result.yt_dlp_timeout),
+      };
+      setValues(flat);
+      setOriginal(flat);
+      toast.success("Settings saved");
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to save settings"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="max-w-3xl p-8">
+        <div className="animate-pulse space-y-6">
+          <div className="h-8 w-48 bg-bg-muted rounded" />
+          <div className="h-64 bg-bg-muted rounded-lg" />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-3xl p-8 space-y-8">
+      <div className="flex items-center justify-between">
+        <Button onClick={handleSave} disabled={!hasChanges || saving} icon={<Save size={16} />}>
+          {saving ? "Saving..." : "Save"}
+        </Button>
+      </div>
+
+      <SectionCard
+        icon={<Server size={20} className="text-accent-500" />}
+        title="Plex Media Server"
+      >
+        <SettingField
+          id="plex_host"
+          label="Host URL"
+          value={values.plex_host ?? ""}
+          onChange={(v) => setField("plex_host", v)}
+          placeholder="http://plex.lan:32400"
+        />
+        <SettingField
+          id="plex_token"
+          label="Token"
+          type="password"
+          value={values.plex_token ?? ""}
+          onChange={(v) => setField("plex_token", v)}
+          placeholder="Plex API token"
+        />
+      </SectionCard>
+
+      <SectionCard icon={<Brain size={20} className="text-accent-500" />} title="Ollama">
+        <SettingField
+          id="ollama_host"
+          label="Host URL"
+          value={values.ollama_host ?? ""}
+          onChange={(v) => setField("ollama_host", v)}
+          placeholder="http://localhost:11434"
+        />
+        <SettingField
+          id="ollama_model"
+          label="Model"
+          value={values.ollama_model ?? ""}
+          onChange={(v) => setField("ollama_model", v)}
+          placeholder="gemma4-e4b-128:latest"
+        />
+        <SettingField
+          id="ollama_timeout"
+          label="Timeout (seconds)"
+          type="number"
+          value={values.ollama_timeout ?? ""}
+          onChange={(v) => setField("ollama_timeout", v)}
+        />
+      </SectionCard>
+
+      <SectionCard icon={<Download size={20} className="text-accent-500" />} title="yt-dlp">
+        <SettingField
+          id="yt_dlp_cookies"
+          label="Cookies file path"
+          value={values.yt_dlp_cookies ?? ""}
+          onChange={(v) => setField("yt_dlp_cookies", v)}
+          placeholder="/cookies/cookies.txt"
+        />
+        <SettingField
+          id="yt_dlp_timeout"
+          label="Timeout (seconds)"
+          type="number"
+          value={values.yt_dlp_timeout ?? ""}
+          onChange={(v) => setField("yt_dlp_timeout", v)}
+        />
+      </SectionCard>
+
+      {hasChanges && (
+        <p className="text-sm text-warn-500 text-center">
+          Changes apply immediately. Plex and Ollama connections will be reset with the new values.
+        </p>
+      )}
+    </div>
+  );
+}
