@@ -6,7 +6,7 @@ from typing import Any
 
 import httpx
 
-from src.app.core.plex.matching import _best_match, _extract_primary_artist, _normalize_album
+from src.app.core.matching import _best_match, _extract_primary_artist, _normalize_album
 from src.app.settings import settings
 
 logger = logging.getLogger(__name__)

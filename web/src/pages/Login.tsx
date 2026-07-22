@@ -1,4 +1,4 @@
-import { useSearchParams } from "react-router-dom";
+import { Navigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -11,10 +11,14 @@ const ERROR_MESSAGES: Record<string, string> = {
 };
 
 export function LoginPage() {
-  const { login } = useAuth();
+  const { login, requireAuth, loading } = useAuth();
   const [searchParams] = useSearchParams();
   const errorKey = searchParams.get("error");
   const errorMessage = errorKey ? ERROR_MESSAGES[errorKey] || "An error occurred." : null;
+
+  if (!loading && !requireAuth) {
+    return <Navigate to="/" replace />;
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-bg-app">

@@ -5,28 +5,36 @@ The engine executes nodes in dependency order and collects match candidates.
 """
 from __future__ import annotations
 
+import contextvars
 import logging
 import re
 from collections import deque
 from collections.abc import Callable, Coroutine
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
 
-from src.app.db import AsyncSessionLocal, SessionLocal
+from src.app.core.matching import _best_match, _match_titles, _normalize_album
 from src.app.core.models import TrackMetadata
-from src.app.core.plex.client import PlexClient
-from src.app.core.plex.matching import _best_match, _match_titles, _normalize_album
+from src.app.db import AsyncSessionLocal, SessionLocal
 from src.app.models import MatchRule
+
+if TYPE_CHECKING:
+    from src.app.core.targets.base import BaseTarget
 
 logger = logging.getLogger(__name__)
 
-# ─── Type Aliases ──────────────────────────────────────────────
+# ─── Type Aliases (imported from core.nodes) ────────────────────
 
-NodeConfig = dict[str, Any]
-NodeInputs = dict[str, Any]       # keyed by targetHandle
-NodeOutputs = dict[str, Any]      # keyed by sourceHandle
+from src.app.core.nodes.base import (  # noqa: E402, F401
+    NodeConfig,
+    NodeHandlerBase,
+    NodeHandlerProtocol,
+    NodeInputs,
+    NodeOutputs,
+)
 
+# Callable form is still used for simple function-based handlers.
 NodeHandler = Callable[
     [NodeConfig, TrackMetadata, NodeInputs],
     Coroutine[Any, Any, NodeOutputs],
@@ -34,19 +42,54 @@ NodeHandler = Callable[
 
 # ─── Handler Registry ─────────────────────────────────────────
 
-_handlers: dict[str, NodeHandler] = {}
+_handlers: dict[str, NodeHandler | NodeHandlerBase] = {}
 
 
-def register_node(node_type: str):
-    """Decorator to register a node handler by type."""
-    def decorator(fn: NodeHandler) -> NodeHandler:
+def register_node(node_type: str, handler: NodeHandler | NodeHandlerBase | None = None):
+    """Decorator or direct call to register a node handler by type.
+
+    Usage as decorator::
+
+        @register_node("search")
+        async def _handle_search(config, track, inputs): ...
+
+    Usage with a :class:`NodeHandlerBase` instance::
+
+        register_node("search", MySearchHandler())
+    """
+    if handler is not None:
+        _handlers[node_type] = handler
+        return handler
+
+    def decorator(fn: NodeHandler | NodeHandlerBase) -> NodeHandler | NodeHandlerBase:
         _handlers[node_type] = fn
         return fn
     return decorator
 
 
-def get_handler(node_type: str) -> NodeHandler | None:
+def get_handler(node_type: str) -> NodeHandler | NodeHandlerBase | None:
     return _handlers.get(node_type)
+
+
+# ─── Target Context ───────────────────────────────────────────
+
+current_target: contextvars.ContextVar[BaseTarget | None] = contextvars.ContextVar(
+    "current_target", default=None,
+)
+
+
+def get_current_target() -> BaseTarget:
+    """Get the sync target for the current execution context.
+
+    Node handlers call this instead of importing a specific target client.
+    Raises ``RuntimeError`` if no target is set.
+    """
+    target = current_target.get()
+    if target is None:
+        raise RuntimeError(
+            "No sync target available. Ensure NodeGraphExecutor receives a BaseTarget."
+        )
+    return target
 
 
 # ─── Graph Executor ────────────────────────────────────────────
@@ -60,8 +103,8 @@ class NodeGraphExecutor:
     - Collection of ``match_output`` emissions
     """
 
-    def __init__(self, plex_client: PlexClient):
-        self._plex = plex_client
+    def __init__(self, target: BaseTarget):
+        self._target = target
 
     async def execute(
         self,
@@ -75,6 +118,23 @@ class NodeGraphExecutor:
 
         if not nodes:
             return []
+
+        # Set the target context so node handlers can access it
+        token = current_target.set(self._target)
+        try:
+            return await self._execute_impl(canvas, track, nodes, edges, collect_trace=collect_trace)
+        finally:
+            current_target.reset(token)
+
+    async def _execute_impl(
+        self,
+        canvas: dict,
+        track: TrackMetadata,
+        nodes: list[dict],
+        edges: list[dict],
+        *,
+        collect_trace: bool = False,
+    ) -> list[dict]:
 
         node_map = {n["id"]: n for n in nodes}
 
@@ -178,8 +238,8 @@ class MatchEngine:
     within each rule).
     """
 
-    def __init__(self, plex_client: PlexClient):
-        self._executor = NodeGraphExecutor(plex_client)
+    def __init__(self, target: BaseTarget):
+        self._executor = NodeGraphExecutor(target)
 
     async def run(
         self,
@@ -456,51 +516,49 @@ async def _handle_threshold(config: NodeConfig, track: TrackMetadata, inputs: No
 
 @register_node("plex_search")
 async def _handle_plex_search(config: NodeConfig, track: TrackMetadata, inputs: NodeInputs) -> NodeOutputs:
-    from src.app.services import get_plex_client
+    target = get_current_target()
     data = inputs.get("in", {})
     search_type = config.get("search_type", "title_artist_album")
     max_results = config.get("max_results", 50)
-
-    plex = await get_plex_client()
 
     # Support both legacy and new search types
     if search_type in ("artist_tracks", "artist_only"):
         artist = data.get("artist_name", "")
         if not artist:
             return {"out": []}
-        results = await plex.search_artist_tracks(artist)
+        results = await target.search_artist_tracks(artist)
         return {"out": results[:max_results]}
 
     if search_type == "title_only":
         title = data.get("title", "")
         if not title:
             return {"out": []}
-        results = await plex.search_title_only(title)
+        results = await target.search_title_only(title)
         return {"out": results[:max_results]}
 
     if search_type == "album_only":
         album = data.get("album_name", "")
         if not album:
             return {"out": []}
-        results = await plex.search_library(album=album)
+        results = await target.search_library(album=album)
         return {"out": results[:max_results]}
 
     if search_type == "title_artist":
-        results = await plex.search_library(
+        results = await target.search_library(
             title=data.get("title", ""),
             artist=data.get("artist_name", ""),
         )
         return {"out": results[:max_results]}
 
     if search_type == "artist_album":
-        results = await plex.search_library(
+        results = await target.search_library(
             artist=data.get("artist_name", ""),
             album=data.get("album_name", ""),
         )
         return {"out": results[:max_results]}
 
     # Default: title_artist_album or library
-    results = await plex.search_library(
+    results = await target.search_library(
         title=data.get("title", ""),
         artist=data.get("artist_name", ""),
         album=data.get("album_name", ""),
@@ -512,7 +570,7 @@ async def _handle_plex_search(config: NodeConfig, track: TrackMetadata, inputs: 
 @register_node("search")
 async def _handle_search(config: NodeConfig, track: TrackMetadata, inputs: NodeInputs) -> NodeOutputs:
     """New simplified search node - uses checkbox config."""
-    from src.app.services import get_plex_client
+    target = get_current_target()
 
     # Get data from edge input, or fall back to track data if no edge connected
     data = inputs.get("in", {})
@@ -538,8 +596,6 @@ async def _handle_search(config: NodeConfig, track: TrackMetadata, inputs: NodeI
 
     max_results = config.get("max_results", 50)
 
-    plex = await get_plex_client()
-
     # Build search parameters based on checkboxes
     title = data.get("title", "") if search_title else ""
     artist = data.get("artist_name", "") if search_artist else ""
@@ -557,26 +613,26 @@ async def _handle_search(config: NodeConfig, track: TrackMetadata, inputs: NodeI
     if search_title and not search_artist and not search_album:
         if not title:
             return {"out": []}
-        results = await plex.search_title_only(title)
+        results = await target.search_title_only(title)
         logger.info(f"[SEARCH] Title-only search returned {len(results)} results")
         return {"out": results[:max_results]}
 
     if search_artist and not search_title and not search_album:
         if not artist:
             return {"out": []}
-        results = await plex.search_artist_tracks(artist)
+        results = await target.search_artist_tracks(artist)
         logger.info(f"[SEARCH] Artist-only search returned {len(results)} results")
         return {"out": results[:max_results]}
 
     if search_album and not search_title and not search_artist:
         if not album:
             return {"out": []}
-        results = await plex.search_library(album=album)
+        results = await target.search_library(album=album)
         logger.info(f"[SEARCH] Album-only search returned {len(results)} results")
         return {"out": results[:max_results]}
 
     # For multiple fields checked, use library search
-    results = await plex.search_library(title=title, artist=artist, album=album)
+    results = await target.search_library(title=title, artist=artist, album=album)
     logger.info(f"[SEARCH] Multi-field search returned {len(results) if results else 0} results")
     return {"out": results[:max_results] if results else []}
 
@@ -690,7 +746,7 @@ async def _handle_compare(config: NodeConfig, track: TrackMetadata, inputs: Node
     - threshold: minimum similarity score (0.0-1.0)
     - weights: dict of field weights {title: 50, artist_name: 25, album_name: 25}
     """
-    from src.app.core.plex.matching import _artist_similarity, _match_titles, _normalize_album
+    from src.app.core.matching import _artist_similarity, _match_titles, _normalize_album
 
     # Accept input from any handle: candidates (explicit edge), in (implicit), or first available input
     candidates = inputs.get("candidates") or inputs.get("in") or inputs.get("out") or []

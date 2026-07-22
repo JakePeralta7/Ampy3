@@ -10,6 +10,7 @@ import { MatchRulesPage } from "./pages/MatchRules";
 import { RuleProgramPage } from "./pages/RuleProgram";
 import { ConfigPage } from "./pages/Settings";
 import { SetupPage } from "./pages/Setup";
+import { SyncsPage } from "./pages/Syncs";
 
 export const routes: RouteObject[] = [
   {
@@ -30,6 +31,16 @@ export const routes: RouteObject[] = [
       <ProtectedRoute>
         <RequireServer>
           <HomePage />
+        </RequireServer>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/syncs",
+    element: (
+      <ProtectedRoute>
+        <RequireServer>
+          <SyncsPage />
         </RequireServer>
       </ProtectedRoute>
     ),

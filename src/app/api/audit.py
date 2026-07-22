@@ -2,8 +2,9 @@
 
 import logging
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
+from src.app.auth.dependencies import get_current_user
 from src.app.db import AsyncSessionLocal
 from src.app.models import AuditLog
 from src.app.schemas.audit import AuditLogListResponse, AuditLogOut
@@ -18,6 +19,7 @@ async def list_audit_logs(
     limit: int = Query(50, ge=1, le=200, description="Number of logs to return"),
     offset: int = Query(0, ge=0, description="Number of logs to skip"),
     event_type: str | None = Query(None, description="Filter by event type"),
+    _user: dict = Depends(get_current_user),  # noqa: B008
 ):
     """List audit log entries with optional filtering and pagination."""
     from sqlalchemy import desc, select

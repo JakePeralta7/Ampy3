@@ -30,7 +30,7 @@ export function ScheduleForm({
 }: ScheduleFormProps) {
   const [source, setSource] = useState("youtube_music");
   const [sourceUrl, setSourceUrl] = useState("");
-  const [plexPlaylistName, setPlexPlaylistName] = useState("");
+  const [targetPlaylistName, setTargetPlaylistName] = useState("");
   const [scheduleInterval, setScheduleInterval] = useState("daily");
   const [replaceExisting, setReplaceExisting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -38,7 +38,7 @@ export function ScheduleForm({
   const resetForm = useCallback(() => {
     setSource("youtube_music");
     setSourceUrl("");
-    setPlexPlaylistName("");
+    setTargetPlaylistName("");
     setScheduleInterval("daily");
     setReplaceExisting(false);
     setFormError(null);
@@ -48,7 +48,7 @@ export function ScheduleForm({
     if (editingSync) {
       setSource(editingSync.source);
       setSourceUrl(editingSync.source_url);
-      setPlexPlaylistName(editingSync.plex_playlist_name);
+      setTargetPlaylistName(editingSync.target_playlist_name);
       setScheduleInterval(editingSync.schedule_interval);
       setReplaceExisting(editingSync.replace_existing);
     } else {
@@ -64,7 +64,7 @@ export function ScheduleForm({
       setFormError("Playlist URL is required");
       return;
     }
-    if (!plexPlaylistName.trim()) {
+    if (!targetPlaylistName.trim()) {
       setFormError("Plex playlist name is required");
       return;
     }
@@ -73,7 +73,7 @@ export function ScheduleForm({
       const input: CreateScheduledSyncInput = {
         source,
         source_url: sourceUrl.trim(),
-        plex_playlist_name: plexPlaylistName.trim(),
+        target_playlist_name: targetPlaylistName.trim(),
         schedule_interval: scheduleInterval,
         replace_existing: replaceExisting,
       };
@@ -133,8 +133,8 @@ export function ScheduleForm({
           </label>
           <input
             type="text"
-            value={plexPlaylistName}
-            onChange={(e) => setPlexPlaylistName(e.target.value)}
+            value={targetPlaylistName}
+            onChange={(e) => setTargetPlaylistName(e.target.value)}
             placeholder="e.g., Synced Playlist"
             className="w-full px-3 py-2 text-sm border border-border rounded-md bg-bg-surface text-fg placeholder-fg-subtle disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-border-focus"
             disabled={isLoading}

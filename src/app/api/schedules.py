@@ -7,9 +7,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.app.auth.dependencies import get_current_user
 from src.app.db import get_async_session
 from src.app.models import PlaylistSourceEnum, ScheduledPlaylistSync, ScheduleIntervalEnum
 from src.app.schemas.schedules import (
+    BulkDeleteInput,
+    BulkResponse,
+    BulkSyncNowInput,
+    BulkToggleActiveInput,
     CreateScheduledSyncInput,
     ScheduledSyncOut,
     SchedulerReloadResponse,
@@ -28,8 +33,8 @@ def _sync_to_out(model: ScheduledPlaylistSync) -> ScheduledSyncOut:
         id=model.id,
         source=model.source,
         source_url=model.source_url,
-        plex_playlist_name=model.plex_playlist_name,
-        plex_playlist_id=model.plex_playlist_id,
+        target_playlist_name=model.target_playlist_name,
+        target_playlist_id=model.target_playlist_id,
         schedule_interval=model.schedule_interval,
         is_active=model.is_active,
         replace_existing=model.replace_existing,
@@ -61,6 +66,7 @@ def _calculate_next_sync(interval: str) -> datetime:
 async def create_scheduled_sync(
     body: CreateScheduledSyncInput,
     db: AsyncSession = Depends(get_async_session),
+    _user: dict = Depends(get_current_user),  # noqa: B008
 ):
     """Create a new scheduled playlist sync."""
     if body.source not in [e.value for e in PlaylistSourceEnum]:
@@ -77,7 +83,7 @@ async def create_scheduled_sync(
     db_sync = ScheduledPlaylistSync(
         source=body.source,
         source_url=body.source_url,
-        plex_playlist_name=body.plex_playlist_name,
+        target_playlist_name=body.target_playlist_name,
         schedule_interval=body.schedule_interval,
         replace_existing=body.replace_existing,
         next_sync_at=_calculate_next_sync(body.schedule_interval),
@@ -94,7 +100,7 @@ async def create_scheduled_sync(
         event_type="schedule.created",
         resource_type="schedule",
         resource_id=str(db_sync.id),
-        summary=f"Schedule created — {body.source} → {db_sync.plex_playlist_name}, every {body.schedule_interval}",
+        summary=f"Schedule created — {body.source} → {db_sync.target_playlist_name}, every {body.schedule_interval}",
     )
 
     result = _sync_to_out(db_sync)
@@ -105,6 +111,7 @@ async def create_scheduled_sync(
 async def list_scheduled_syncs(
     db: AsyncSession = Depends(get_async_session),
     active_only: bool = Query(False, description="Filter by active schedules only"),
+    _user: dict = Depends(get_current_user),  # noqa: B008
 ):
     """List all scheduled syncs, optionally filtered to active only."""
     query = select(ScheduledPlaylistSync)
@@ -119,6 +126,7 @@ async def list_scheduled_syncs(
 async def get_scheduled_sync(
     sync_id: int,
     db: AsyncSession = Depends(get_async_session),
+    _user: dict = Depends(get_current_user),  # noqa: B008
 ):
     """Get a specific scheduled sync by ID."""
     result = await db.execute(
@@ -138,6 +146,7 @@ async def update_scheduled_sync(
     sync_id: int,
     body: UpdateScheduledSyncInput,
     db: AsyncSession = Depends(get_async_session),
+    _user: dict = Depends(get_current_user),  # noqa: B008
 ):
     """Update a scheduled sync's configuration."""
     result = await db.execute(
@@ -169,7 +178,7 @@ async def update_scheduled_sync(
         event_type="schedule.updated",
         resource_type="schedule",
         resource_id=str(sync_id),
-        summary=f"Schedule '{sync.plex_playlist_name}' updated — changed: {', '.join(changed)}",
+        summary=f"Schedule '{sync.target_playlist_name}' updated — changed: {', '.join(changed)}",
     )
 
     return _sync_to_out(sync)
@@ -179,6 +188,7 @@ async def update_scheduled_sync(
 async def delete_scheduled_sync(
     sync_id: int,
     db: AsyncSession = Depends(get_async_session),
+    _user: dict = Depends(get_current_user),  # noqa: B008
 ):
     """Delete a scheduled sync."""
     result = await db.execute(
@@ -197,10 +207,114 @@ async def delete_scheduled_sync(
         event_type="schedule.deleted",
         resource_type="schedule",
         resource_id=str(sync_id),
-        summary=f"Schedule '{sync.plex_playlist_name}' deleted",
+        summary=f"Schedule '{sync.target_playlist_name}' deleted",
     )
 
     return {"message": f"Scheduled sync with ID {sync_id} deleted successfully"}
+
+
+# ─── Bulk actions ────────────────────────────────────────────────
+# These must be defined before /{sync_id} routes.
+
+
+@router.post("/bulk/sync-now", response_model=BulkResponse)
+async def bulk_sync_now(
+    body: BulkSyncNowInput,
+    db: AsyncSession = Depends(get_async_session),
+    _user: dict = Depends(get_current_user),  # noqa: B008
+):
+    """Trigger an immediate sync for multiple scheduled syncs."""
+    from src.app.tasks import scheduled_sync_task
+
+    result = await db.execute(
+        select(ScheduledPlaylistSync).where(ScheduledPlaylistSync.id.in_(body.ids)),
+    )
+    syncs = {s.id: s for s in result.scalars().all()}
+
+    found_ids = list(syncs.keys())
+    if not found_ids:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No matching schedules found for the provided IDs",
+        )
+
+    task_ids = []
+    for sync_id in found_ids:
+        task = scheduled_sync_task.delay(sync_id)
+        task_ids.append(task.id)
+
+    await log_event(
+        event_type="sync.bulk_triggered",
+        resource_type="schedule",
+        summary=f"Bulk sync triggered for {len(found_ids)} schedule(s): {', '.join(s.target_playlist_name for s in syncs.values())}",
+    )
+
+    return BulkResponse(processed=len(found_ids), task_ids=task_ids)
+
+
+@router.post("/bulk/toggle-active", response_model=BulkResponse)
+async def bulk_toggle_active(
+    body: BulkToggleActiveInput,
+    db: AsyncSession = Depends(get_async_session),
+    _user: dict = Depends(get_current_user),  # noqa: B008
+):
+    """Pause or resume multiple scheduled syncs."""
+    result = await db.execute(
+        select(ScheduledPlaylistSync).where(ScheduledPlaylistSync.id.in_(body.ids)),
+    )
+    syncs = result.scalars().all()
+
+    if not syncs:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No matching schedules found for the provided IDs",
+        )
+
+    for sync in syncs:
+        sync.is_active = body.is_active
+    await db.commit()
+
+    names = [s.target_playlist_name for s in syncs]
+    action = "resumed" if body.is_active else "paused"
+    await log_event(
+        event_type="schedule.bulk_updated",
+        resource_type="schedule",
+        summary=f"Bulk {action} {len(syncs)} schedule(s): {', '.join(names)}",
+    )
+
+    return BulkResponse(processed=len(syncs))
+
+
+@router.post("/bulk/delete", response_model=BulkResponse)
+async def bulk_delete(
+    body: BulkDeleteInput,
+    db: AsyncSession = Depends(get_async_session),
+    _user: dict = Depends(get_current_user),  # noqa: B008
+):
+    """Delete multiple scheduled syncs."""
+    result = await db.execute(
+        select(ScheduledPlaylistSync).where(ScheduledPlaylistSync.id.in_(body.ids)),
+    )
+    syncs = result.scalars().all()
+
+    if not syncs:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No matching schedules found for the provided IDs",
+        )
+
+    names = [s.target_playlist_name for s in syncs]
+    for sync in syncs:
+        await db.delete(sync)
+    await db.commit()
+
+    await log_event(
+        event_type="schedule.bulk_deleted",
+        resource_type="schedule",
+        summary=f"Bulk deleted {len(syncs)} schedule(s): {', '.join(names)}",
+    )
+
+    return BulkResponse(processed=len(syncs))
 
 
 # ─── Actions ─────────────────────────────────────────────────────
@@ -210,6 +324,7 @@ async def delete_scheduled_sync(
 async def trigger_sync_now(
     sync_id: int,
     db: AsyncSession = Depends(get_async_session),
+    _user: dict = Depends(get_current_user),  # noqa: B008
 ):
     """Manually trigger an immediate sync for a scheduled sync."""
     result = await db.execute(
@@ -229,17 +344,19 @@ async def trigger_sync_now(
         event_type="sync.manually_triggered",
         resource_type="schedule",
         resource_id=str(sync_id),
-        summary=f"Manual sync triggered for '{sync.plex_playlist_name}'",
+        summary=f"Manual sync triggered for '{sync.target_playlist_name}'",
     )
 
     return SyncNowResponse(
         task_id=task.id,
-        message=f"Sync triggered for {sync.plex_playlist_name}",
+        message=f"Sync triggered for {sync.target_playlist_name}",
     )
 
 
 @router.post("/scheduler/reload", response_model=SchedulerReloadResponse)
-async def reload_scheduler():
+async def reload_scheduler(
+    _user: dict = Depends(get_current_user),  # noqa: B008
+):
     """Reload APScheduler with the latest schedule configuration."""
     from src.app.services.scheduler import SchedulerService
 

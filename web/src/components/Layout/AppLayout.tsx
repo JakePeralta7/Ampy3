@@ -8,7 +8,8 @@ import { ErrorBoundary } from "../ui/ErrorBoundary";
 import { Nav } from "./Nav";
 
 const paletteItems = [
-  { to: "/", label: "Playlists", icon: Music2 },
+  { to: "/", label: "Dashboard", icon: Music2 },
+  { to: "/syncs", label: "Syncs", icon: Music2 },
   { to: "/chat", label: "Chat", icon: MessageSquare },
   { to: "/audit", label: "Audit Log", icon: ScrollText },
   { to: "/settings/config", label: "Settings", icon: Cog },

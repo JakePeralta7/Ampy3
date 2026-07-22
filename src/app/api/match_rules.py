@@ -2,7 +2,9 @@
 
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+
+from src.app.auth.dependencies import get_current_user
 
 from src.app.core.models import TrackMetadata
 from src.app.core.services.matcher import MatchEngine, get_active_rules
@@ -19,7 +21,7 @@ from src.app.schemas.match_rules import (
     TestRequest,
     _model_to_out,
 )
-from src.app.services import get_plex_client
+from src.app.services import get_sync_target
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +29,9 @@ router = APIRouter(prefix="/api/v1/match-rules", tags=["match-rules"])
 
 
 @router.get("", response_model=list[MatchRuleOut])
-async def list_rules():
+async def list_rules(
+    _user: dict = Depends(get_current_user),  # noqa: B008
+):
     """List all match rules ordered by priority."""
     from sqlalchemy import select
 
@@ -43,7 +47,10 @@ async def list_rules():
 
 
 @router.get("/{rule_id}", response_model=MatchRuleOut)
-async def get_rule(rule_id: int):
+async def get_rule(
+    rule_id: int,
+    _user: dict = Depends(get_current_user),  # noqa: B008
+):
     """Get a specific match rule by ID."""
     from sqlalchemy import select
 
@@ -63,7 +70,10 @@ async def get_rule(rule_id: int):
 
 
 @router.post("", response_model=MatchRuleOut, status_code=201)
-async def create_rule(body: MatchRuleCreate):
+async def create_rule(
+    body: MatchRuleCreate,
+    _user: dict = Depends(get_current_user),  # noqa: B008
+):
     """Create a new match rule with auto-assigned priority."""
     from sqlalchemy import func, select
 
@@ -90,7 +100,10 @@ async def create_rule(body: MatchRuleCreate):
 
 
 @router.put("/reorder", response_model=list[MatchRuleOut])
-async def reorder_rules(body: list[ReorderInput]):
+async def reorder_rules(
+    body: list[ReorderInput],
+    _user: dict = Depends(get_current_user),  # noqa: B008
+):
     """Reorder match rules by updating their priorities.
 
     Default rules keep their original priorities. Non-default rules are assigned
@@ -130,7 +143,10 @@ async def reorder_rules(body: list[ReorderInput]):
 
 
 @router.post("/test", response_model=MatchRuleTestResponse)
-async def test_rules(body: TestRequest):
+async def test_rules(
+    body: TestRequest,
+    _user: dict = Depends(get_current_user),  # noqa: B008
+):
     """Test match rules against a track to preview matching behavior."""
     try:
         track = TrackMetadata(
@@ -141,7 +157,7 @@ async def test_rules(body: TestRequest):
             source_id=body.track.source_id,
         )
 
-        plex_client = await get_plex_client()
+        plex_client = await get_sync_target()
         engine = MatchEngine(plex_client)
 
         traces = await engine.trace(track, rule_ids=body.rule_ids)
@@ -177,7 +193,11 @@ async def test_rules(body: TestRequest):
 
 
 @router.put("/{rule_id}", response_model=MatchRuleOut)
-async def update_rule(rule_id: int, body: MatchRuleUpdate):
+async def update_rule(
+    rule_id: int,
+    body: MatchRuleUpdate,
+    _user: dict = Depends(get_current_user),  # noqa: B008
+):
     """Update a match rule's name, active state, or canvas."""
     from sqlalchemy import select
 
@@ -219,7 +239,10 @@ async def update_rule(rule_id: int, body: MatchRuleUpdate):
 
 
 @router.delete("/{rule_id}", response_model=MatchRuleDeleteResponse)
-async def delete_rule(rule_id: int):
+async def delete_rule(
+    rule_id: int,
+    _user: dict = Depends(get_current_user),  # noqa: B008
+):
     """Delete a match rule (default rules cannot be deleted)."""
     from sqlalchemy import select
 

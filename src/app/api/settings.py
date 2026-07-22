@@ -3,7 +3,9 @@
 import logging
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+
+from src.app.auth.dependencies import get_current_user
 
 from src.app.db import AsyncSessionLocal
 from src.app.models import Config
@@ -44,7 +46,9 @@ def _build_settings_out(overrides: dict[str, str]) -> SettingsOut:
 
 
 @router.get("/", response_model=SettingsOut)
-async def get_settings():
+async def get_settings(
+    _user: dict = Depends(get_current_user),  # noqa: B008
+):
     """Return current settings (env defaults merged with DB overrides)."""
     from sqlalchemy import select
 
@@ -57,7 +61,10 @@ async def get_settings():
 
 
 @router.put("/", response_model=SettingsOut)
-async def put_settings(body: SettingsUpdate):
+async def put_settings(
+    body: SettingsUpdate,
+    _user: dict = Depends(get_current_user),  # noqa: B008
+):
     """Update settings and persist to database."""
     from sqlalchemy import select
 

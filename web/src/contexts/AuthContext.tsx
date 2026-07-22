@@ -10,6 +10,7 @@ export interface AuthUser {
 
 interface AuthContextValue {
   user: AuthUser | null;
+  requireAuth: boolean;
   loading: boolean;
   login: () => void;
   logout: () => Promise<void>;
@@ -17,6 +18,7 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue>({
   user: null,
+  requireAuth: true,
   loading: true,
   login: () => {},
   logout: async () => {},
@@ -28,6 +30,7 @@ export function useAuth() {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [requireAuth, setRequireAuth] = useState(true);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -36,7 +39,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (res.ok) return res.json();
         throw new Error("unauthenticated");
       })
-      .then((data) => setUser(data))
+      .then((data) => {
+        setUser(data);
+        setRequireAuth(data.require_auth ?? true);
+      })
       .catch(() => setUser(null))
       .finally(() => setLoading(false));
   }, []);
@@ -56,6 +62,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>{children}</AuthContext.Provider>
+    <AuthContext.Provider value={{ user, requireAuth, loading, login, logout }}>{children}</AuthContext.Provider>
   );
 }

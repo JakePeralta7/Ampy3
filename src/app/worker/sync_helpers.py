@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import delete, insert, select
 
 from src.app.db import SessionLocal
-from src.app.models import PlaylistTrack, ScheduledPlaylistSync, ScheduleIntervalEnum
+from src.app.models import PlaylistTrack, ScheduledPlaylistSync, ScheduleIntervalEnum, SyncRun, SyncRunTrack
 
 logger = logging.getLogger(__name__)
 
@@ -80,13 +80,13 @@ def _save_sync_results(
         if sync_record:
             sync_record.matched_count = stats.get("matched", 0)
             sync_record.failed_count = stats.get("failed", 0)
-            sync_record.plex_playlist_id = stats.get("plex_playlist_id")
+            sync_record.target_playlist_id = stats.get("target_playlist_id")
         else:
             sync_record = ScheduledPlaylistSync(
                 source=source,
                 source_url=playlist_url,
-                plex_playlist_name=playlist_title,
-                plex_playlist_id=stats.get("plex_playlist_id"),
+                target_playlist_name=playlist_title,
+                target_playlist_id=stats.get("target_playlist_id"),
                 schedule_interval="once",
                 is_active=False,
                 matched_count=stats.get("matched", 0),
@@ -95,6 +95,35 @@ def _save_sync_results(
             )
             db.add(sync_record)
             db.flush()
+
+        # Persist sync run history before replacing current tracks
+        run = SyncRun(
+            sync_id=sync_record.id,
+            matched_count=stats.get("matched", 0),
+            failed_count=stats.get("failed", 0),
+        )
+        db.add(run)
+        db.flush()
+
+        if track_rows:
+            run_track_rows = []
+            for row_data in track_rows:
+                run_track_rows.append({
+                    "run_id": run.id,
+                    "position": row_data.get("position", 0),
+                    "source_title": row_data.get("source_title"),
+                    "source_artist": row_data.get("source_artist"),
+                    "source_album": row_data.get("source_album"),
+                    "source_duration_ms": row_data.get("source_duration_ms"),
+                    "source_id": row_data.get("source_id"),
+                    "match_item_id": row_data.get("match_item_id"),
+                    "match_title": row_data.get("match_title"),
+                    "match_artist": row_data.get("match_artist"),
+                    "match_album": row_data.get("match_album"),
+                    "match_duration": row_data.get("match_duration"),
+                    "match_rule_id": row_data.get("match_rule_id"),
+                })
+            db.execute(insert(SyncRunTrack), run_track_rows)
 
         # Replace playlist tracks with bulk insert
         db.execute(delete(PlaylistTrack).where(PlaylistTrack.sync_id == sync_record.id))

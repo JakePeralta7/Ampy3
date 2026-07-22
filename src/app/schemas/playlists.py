@@ -87,3 +87,41 @@ class RematchTrackResponse(BaseModel):
     matched: bool
     message: str
     track: dict | None = None
+
+
+class UnmatchedTrackOut(BaseModel):
+    """An unmatched track from a recent sync."""
+    sync_id: int
+    sync_name: str
+    source_title: str | None = None
+    source_artist: str | None = None
+    source_album: str | None = None
+    source_duration_ms: int | None = None
+
+
+class SyncRunOut(BaseModel):
+    """A single sync run record."""
+    id: int
+    sync_id: int
+    matched_count: int
+    failed_count: int
+    created_at: str | None = None
+
+
+class SyncDiffItem(BaseModel):
+    """A single track in a sync diff."""
+    source_title: str | None = None
+    source_artist: str | None = None
+    source_album: str | None = None
+    match_item_id: str | None = None
+    match_title: str | None = None
+    match_artist: str | None = None
+
+
+class SyncDiffResponse(BaseModel):
+    """Diff between two sync runs."""
+    added: list[SyncDiffItem]
+    removed: list[SyncDiffItem]
+    unchanged: list[SyncDiffItem]
+    from_run_id: int
+    to_run_id: int

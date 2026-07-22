@@ -2,12 +2,15 @@
 
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
+
+from src.app.auth.dependencies import get_current_user
 
 from src.app.core.models import TrackMetadata
 from src.app.core.services.matcher import MatchEngine, get_active_rules
+from src.app.core.sources.registry import SourceRegistry
 from src.app.db import AsyncSessionLocal
-from src.app.models import PlaylistTrack, ScheduledPlaylistSync
+from src.app.models import PlaylistTrack, ScheduledPlaylistSync, SyncRun, SyncRunTrack
 from src.app.schemas.playlists import (
     PlaylistSearchResponse,
     PlaylistSyncRequest,
@@ -15,11 +18,15 @@ from src.app.schemas.playlists import (
     PlaylistTracksResponse,
     RematchTrackInput,
     RematchTrackResponse,
+    SyncDiffItem,
+    SyncDiffResponse,
+    SyncRunOut,
     TrackDetail,
     TrackMatch,
     TrackSource,
+    UnmatchedTrackOut,
 )
-from src.app.services import get_plex_client
+from src.app.services import get_plex_client, get_sync_target
 from src.app.services.audit import log_event
 from src.app.tasks import sync_playlists_task
 
@@ -28,11 +35,185 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/playlists", tags=["playlists"])
 
 
+# ─── Sources ────────────────────────────────────────────────────
+
+
+@router.get("/sources")
+async def list_sources(
+    _user: dict = Depends(get_current_user),  # noqa: B008
+):
+    """List all available playlist source adapters."""
+    return SourceRegistry.list_sources()
+
+
 # ─── Listing & Search ────────────────────────────────────────────
 
 
+@router.get("/unmatched-tracks", response_model=list[UnmatchedTrackOut])
+async def get_unmatched_tracks(
+    limit: int = Query(default=50, ge=1, le=200),
+    _user: dict = Depends(get_current_user),  # noqa: B008
+):
+    """Get unmatched tracks from recent syncs for use in match rule testing."""
+    from sqlalchemy import select
+
+    async with AsyncSessionLocal() as session:
+        stmt = (
+            select(PlaylistTrack, ScheduledPlaylistSync.target_playlist_name)
+            .join(
+                ScheduledPlaylistSync,
+                PlaylistTrack.sync_id == ScheduledPlaylistSync.id,
+            )
+            .where(PlaylistTrack.match_item_id.is_(None))
+            .order_by(ScheduledPlaylistSync.last_synced_at.desc().nullslast(), PlaylistTrack.position)
+            .limit(limit)
+        )
+        result = await session.execute(stmt)
+        rows = result.all()
+
+        return [
+            UnmatchedTrackOut(
+                sync_id=track.sync_id,
+                sync_name=sync_name,
+                source_title=track.source_title,
+                source_artist=track.source_artist,
+                source_album=track.source_album,
+                source_duration_ms=track.source_duration_ms,
+            )
+            for track, sync_name in rows
+        ]
+
+
+@router.get("/by-sync/{sync_id}/history", response_model=list[SyncRunOut])
+async def get_sync_history(
+    sync_id: int,
+    _user: dict = Depends(get_current_user),  # noqa: B008
+):
+    """Get sync run history for a scheduled sync."""
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
+
+    async with AsyncSessionLocal() as session:
+        # Verify the sync exists
+        sync_stmt = select(ScheduledPlaylistSync).where(ScheduledPlaylistSync.id == sync_id)
+        sync_result = await session.execute(sync_stmt)
+        if not sync_result.scalar_one_or_none():
+            raise HTTPException(status_code=404, detail=f"Sync {sync_id} not found")
+
+        stmt = (
+            select(SyncRun)
+            .where(SyncRun.sync_id == sync_id)
+            .options(selectinload(SyncRun.tracks))
+            .order_by(SyncRun.created_at.desc())
+        )
+        result = await session.execute(stmt)
+        runs = result.scalars().all()
+
+        return [
+            SyncRunOut(
+                id=run.id,
+                sync_id=run.sync_id,
+                matched_count=run.matched_count,
+                failed_count=run.failed_count,
+                created_at=run.created_at.isoformat() if run.created_at else None,
+            )
+            for run in runs
+        ]
+
+
+@router.get("/by-sync/{sync_id}/diff", response_model=SyncDiffResponse)
+async def get_sync_diff(
+    sync_id: int,
+    from_run: int = Query(..., description="Previous run ID to diff from"),
+    to_run: int = Query(..., description="Current run ID to diff to"),
+    _user: dict = Depends(get_current_user),  # noqa: B008
+):
+    """Compute the diff between two sync runs."""
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
+
+    async with AsyncSessionLocal() as session:
+        # Verify sync exists
+        sync_stmt = select(ScheduledPlaylistSync).where(ScheduledPlaylistSync.id == sync_id)
+        sync_result = await session.execute(sync_stmt)
+        if not sync_result.scalar_one_or_none():
+            raise HTTPException(status_code=404, detail=f"Sync {sync_id} not found")
+
+        # Load both runs with tracks
+        stmt = (
+            select(SyncRun)
+            .where(SyncRun.id.in_([from_run, to_run]))
+            .options(selectinload(SyncRun.tracks))
+        )
+        result = await session.execute(stmt)
+        runs = {r.id: r for r in result.scalars().all()}
+
+        if from_run not in runs or to_run not in runs:
+            raise HTTPException(
+                status_code=404,
+                detail="One or both run IDs not found for this sync",
+            )
+
+        old_run = runs[from_run]
+        new_run = runs[to_run]
+
+        def track_key(t: SyncRunTrack) -> tuple[str | None, str | None]:
+            return (t.source_title, t.source_artist)
+
+        old_keys = {track_key(t): t for t in old_run.tracks}
+        new_keys = {track_key(t): t for t in new_run.tracks}
+
+        added: list[SyncDiffItem] = []
+        removed: list[SyncDiffItem] = []
+        unchanged: list[SyncDiffItem] = []
+
+        for key, track in new_keys.items():
+            if key in old_keys:
+                old_track = old_keys[key]
+                was_matched = old_track.match_item_id is not None
+                is_matched = track.match_item_id is not None
+                unchanged.append(SyncDiffItem(
+                    source_title=track.source_title,
+                    source_artist=track.source_artist,
+                    source_album=track.source_album,
+                    match_item_id=track.match_item_id,
+                    match_title=track.match_title,
+                    match_artist=track.match_artist,
+                ))
+            else:
+                added.append(SyncDiffItem(
+                    source_title=track.source_title,
+                    source_artist=track.source_artist,
+                    source_album=track.source_album,
+                    match_item_id=track.match_item_id,
+                    match_title=track.match_title,
+                    match_artist=track.match_artist,
+                ))
+
+        for key, track in old_keys.items():
+            if key not in new_keys:
+                removed.append(SyncDiffItem(
+                    source_title=track.source_title,
+                    source_artist=track.source_artist,
+                    source_album=track.source_album,
+                    match_item_id=track.match_item_id,
+                    match_title=track.match_title,
+                    match_artist=track.match_artist,
+                ))
+
+        return SyncDiffResponse(
+            added=added,
+            removed=removed,
+            unchanged=unchanged,
+            from_run_id=from_run,
+            to_run_id=to_run,
+        )
+
+
 @router.get("/")
-async def list_user_playlists():
+async def list_user_playlists(
+    _user: dict = Depends(get_current_user),  # noqa: B008
+):
     """List all playlists the user owns in Plex."""
     try:
         plex_client = await get_plex_client()
@@ -45,7 +226,10 @@ async def list_user_playlists():
 
 
 @router.post("/search", response_model=PlaylistSearchResponse)
-async def search_playlists(query: str):
+async def search_playlists(
+    query: str,
+    _user: dict = Depends(get_current_user),  # noqa: B008
+):
     """Search Plex playlists by title or keywords."""
     try:
         plex_client = await get_plex_client()
@@ -64,7 +248,10 @@ async def search_playlists(query: str):
 
 
 @router.post("/sync", response_model=PlaylistSyncResponse)
-async def trigger_playlist_sync(sync_request: PlaylistSyncRequest):
+async def trigger_playlist_sync(
+    sync_request: PlaylistSyncRequest,
+    _user: dict = Depends(get_current_user),  # noqa: B008
+):
     """Initiate a background sync job for a playlist."""
     try:
         if sync_request.source == "youtube_music" and "music.youtube.com" not in sync_request.playlist_url:
@@ -104,7 +291,10 @@ async def trigger_playlist_sync(sync_request: PlaylistSyncRequest):
 
 
 @router.get("/status/{task_id}")
-async def get_sync_status(task_id: str):
+async def get_sync_status(
+    task_id: str,
+    _user: dict = Depends(get_current_user),  # noqa: B008
+):
     """Poll the Celery backend for sync job status and result."""
     from src.app.tasks import get_sync_status_task
 
@@ -115,7 +305,10 @@ async def get_sync_status(task_id: str):
 
 
 @router.get("/{playlist_id}/tracks", response_model=PlaylistTracksResponse)
-async def get_playlist_tracks(playlist_id: str):
+async def get_playlist_tracks(
+    playlist_id: str,
+    _user: dict = Depends(get_current_user),  # noqa: B008
+):
     """Get all tracks for a playlist with match status details."""
     try:
         plex_client = await get_plex_client()
@@ -127,7 +320,7 @@ async def get_playlist_tracks(playlist_id: str):
 
             stmt = (
                 select(ScheduledPlaylistSync)
-                .where(ScheduledPlaylistSync.plex_playlist_id == playlist_id)
+                .where(ScheduledPlaylistSync.target_playlist_id == playlist_id)
                 .options(selectinload(ScheduledPlaylistSync.tracks))
             )
             result = await session.execute(stmt)
@@ -135,8 +328,8 @@ async def get_playlist_tracks(playlist_id: str):
 
             if sync_record and len(sync_record.tracks) > 0:
                 all_rows: list[PlaylistTrack] = list(sync_record.tracks)
-                matched_rows = [r for r in all_rows if r.match_plex_id is not None]
-                unmatched_rows = [r for r in all_rows if r.match_plex_id is None]
+                matched_rows = [r for r in all_rows if r.match_item_id is not None]
+                unmatched_rows = [r for r in all_rows if r.match_item_id is None]
                 matched_count = len(matched_rows)
                 failed_count = len(unmatched_rows)
             else:
@@ -146,7 +339,7 @@ async def get_playlist_tracks(playlist_id: str):
                 failed_count = len(plex_tracks)
 
             matched_by_id: dict[str, PlaylistTrack] = {
-                r.match_plex_id: r for r in matched_rows if r.match_plex_id
+                r.match_item_id: r for r in matched_rows if r.match_item_id
             }
 
             track_details: list[TrackDetail] = []
@@ -178,7 +371,7 @@ async def get_playlist_tracks(playlist_id: str):
                 formatted_matched = []
                 for r in matched_rows:
                     formatted_matched.append({
-                        "plex_id": r.match_plex_id,
+                        "plex_id": r.match_item_id,
                         "title": r.match_title or r.source_title or "Unknown",
                         "artist_name": r.match_artist or r.source_artist or "Unknown",
                         "album_name": r.match_album or r.source_album or "Unknown",
@@ -195,7 +388,7 @@ async def get_playlist_tracks(playlist_id: str):
                             source_id=r.source_id,
                         ),
                         match=TrackMatch(
-                            plex_id=r.match_plex_id,
+                            plex_id=r.match_item_id,
                             title=r.match_title,
                             artist_name=r.match_artist,
                             album_name=r.match_album,
@@ -255,7 +448,10 @@ async def get_playlist_tracks(playlist_id: str):
 
 
 @router.get("/by-sync/{sync_id}/tracks", response_model=PlaylistTracksResponse)
-async def get_sync_tracks(sync_id: int):
+async def get_sync_tracks(
+    sync_id: int,
+    _user: dict = Depends(get_current_user),  # noqa: B008
+):
     """Get all tracks for a sync record by sync ID."""
     try:
         from sqlalchemy import select
@@ -274,8 +470,8 @@ async def get_sync_tracks(sync_id: int):
                 raise HTTPException(status_code=404, detail=f"Sync {sync_id} not found")
 
             all_rows: list[PlaylistTrack] = list(sync_record.tracks)
-            matched_rows = [r for r in all_rows if r.match_plex_id is not None]
-            unmatched_rows = [r for r in all_rows if r.match_plex_id is None]
+            matched_rows = [r for r in all_rows if r.match_item_id is not None]
+            unmatched_rows = [r for r in all_rows if r.match_item_id is None]
             matched_count = len(matched_rows)
             failed_count = len(unmatched_rows)
 
@@ -284,7 +480,7 @@ async def get_sync_tracks(sync_id: int):
             formatted_matched = []
             for r in matched_rows:
                 formatted_matched.append({
-                    "plex_id": r.match_plex_id,
+                    "plex_id": r.match_item_id,
                     "title": r.match_title or r.source_title or "Unknown",
                     "artist_name": r.match_artist or r.source_artist or "Unknown",
                     "album_name": r.match_album or r.source_album or "Unknown",
@@ -301,7 +497,7 @@ async def get_sync_tracks(sync_id: int):
                         source_id=r.source_id,
                     ),
                     match=TrackMatch(
-                        plex_id=r.match_plex_id,
+                        plex_id=r.match_item_id,
                         title=r.match_title,
                         artist_name=r.match_artist,
                         album_name=r.match_album,
@@ -338,7 +534,7 @@ async def get_sync_tracks(sync_id: int):
             match_percentage = int(matched_count / total_tracks * 100) if total_tracks > 0 else 0
 
             return PlaylistTracksResponse(
-                playlist_id=sync_record.plex_playlist_id or str(sync_id),
+                playlist_id=sync_record.target_playlist_id or str(sync_id),
                 source=sync_record.source,
                 tracks=formatted_matched + formatted_unmatched,
                 matched_tracks=formatted_matched,
@@ -362,10 +558,14 @@ async def get_sync_tracks(sync_id: int):
 
 
 @router.post("/by-sync/{sync_id}/rematch-track", response_model=RematchTrackResponse)
-async def rematch_sync_track(sync_id: int, body: RematchTrackInput):
+async def rematch_sync_track(
+    sync_id: int,
+    body: RematchTrackInput,
+    _user: dict = Depends(get_current_user),  # noqa: B008
+):
     """Rematch a track via sync ID, updating the DB and Plex playlist."""
     try:
-        plex_client = await get_plex_client()
+        target = await get_sync_target()
 
         async with AsyncSessionLocal() as session:
             from sqlalchemy import select
@@ -392,7 +592,7 @@ async def rematch_sync_track(sync_id: int, body: RematchTrackInput):
             try:
                 rules = await get_active_rules()
                 if rules:
-                    engine = MatchEngine(plex_client)
+                    engine = MatchEngine(target)
                     matches = await engine.run(track)
                     if matches:
                         match = matches[0]
@@ -400,7 +600,7 @@ async def rematch_sync_track(sync_id: int, body: RematchTrackInput):
                 logger.warning("MatchEngine failed during rematch, falling back to direct search")
 
             if not match:
-                hits = await plex_client.search_library(
+                hits = await target.search_library(
                     title=body.title,
                     artist=body.artist_name,
                     album=body.album_name,
@@ -413,12 +613,12 @@ async def rematch_sync_track(sync_id: int, body: RematchTrackInput):
 
             plex_id = match.get("plex_id")
 
-            if plex_id and sync_record.plex_playlist_id:
-                await plex_client.add_items_to_playlist(sync_record.plex_playlist_id, [plex_id])
+            if plex_id and sync_record.target_playlist_id:
+                await target.add_items_to_playlist(sync_record.target_playlist_id, [plex_id])
 
             track_stmt = select(PlaylistTrack).where(
                 PlaylistTrack.sync_id == sync_id,
-                PlaylistTrack.match_plex_id.is_(None),
+                PlaylistTrack.match_item_id.is_(None),
                 PlaylistTrack.source_title == body.title,
             )
             if body.artist_name:
@@ -426,7 +626,7 @@ async def rematch_sync_track(sync_id: int, body: RematchTrackInput):
             track_stmt = track_stmt.limit(1)
             result = await session.execute(track_stmt)
             if db_row := result.scalars().first():
-                db_row.match_plex_id = plex_id
+                db_row.match_item_id = plex_id
                 db_row.match_title = match.get("title")
                 db_row.match_artist = match.get("artist_name")
                 db_row.match_album = match.get("album_name")
@@ -461,10 +661,14 @@ async def rematch_sync_track(sync_id: int, body: RematchTrackInput):
 
 
 @router.post("/{playlist_id}/rematch-track", response_model=RematchTrackResponse)
-async def rematch_track(playlist_id: str, body: RematchTrackInput):
+async def rematch_track(
+    playlist_id: str,
+    body: RematchTrackInput,
+    _user: dict = Depends(get_current_user),  # noqa: B008
+):
     """Rematch a track via playlist ID, updating the DB and Plex playlist."""
     try:
-        plex_client = await get_plex_client()
+        target = await get_sync_target()
 
         track = TrackMetadata(
             title=body.title,
@@ -476,7 +680,7 @@ async def rematch_track(playlist_id: str, body: RematchTrackInput):
         try:
             rules = await get_active_rules()
             if rules:
-                engine = MatchEngine(plex_client)
+                engine = MatchEngine(target)
                 matches = await engine.run(track)
                 if matches:
                     match = matches[0]
@@ -484,7 +688,7 @@ async def rematch_track(playlist_id: str, body: RematchTrackInput):
             logger.warning("MatchEngine failed during rematch, falling back to direct search")
 
         if not match:
-            hits = await plex_client.search_library(
+            hits = await target.search_library(
                 title=body.title,
                 artist=body.artist_name,
                 album=body.album_name,
@@ -497,13 +701,13 @@ async def rematch_track(playlist_id: str, body: RematchTrackInput):
 
         plex_id = match.get("plex_id")
         if plex_id:
-            await plex_client.add_items_to_playlist(playlist_id, [plex_id])
+            await target.add_items_to_playlist(playlist_id, [plex_id])
 
         async with AsyncSessionLocal() as session:
             from sqlalchemy import select
 
             sync_stmt = select(ScheduledPlaylistSync).where(
-                ScheduledPlaylistSync.plex_playlist_id == playlist_id
+                ScheduledPlaylistSync.target_playlist_id == playlist_id
             )
             sync_result = await session.execute(sync_stmt)
             sync_record = sync_result.scalars().first()
@@ -511,7 +715,7 @@ async def rematch_track(playlist_id: str, body: RematchTrackInput):
             if sync_record:
                 track_stmt = select(PlaylistTrack).where(
                     PlaylistTrack.sync_id == sync_record.id,
-                    PlaylistTrack.match_plex_id.is_(None),
+                    PlaylistTrack.match_item_id.is_(None),
                     PlaylistTrack.source_title == body.title,
                 )
                 if body.artist_name:
@@ -519,7 +723,7 @@ async def rematch_track(playlist_id: str, body: RematchTrackInput):
                 track_stmt = track_stmt.limit(1)
                 result = await session.execute(track_stmt)
                 if db_row := result.scalars().first():
-                    db_row.match_plex_id = plex_id
+                    db_row.match_item_id = plex_id
                     db_row.match_title = match.get("title")
                     db_row.match_artist = match.get("artist_name")
                     db_row.match_album = match.get("album_name")

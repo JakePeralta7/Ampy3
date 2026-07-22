@@ -18,7 +18,8 @@ import { useChatSessions } from "../../contexts/ChatSessionContext";
 const COLLAPSE_KEY = "ampy3:sidebar-collapsed";
 
 const links = [
-  { path: "/", label: "Playlists", icon: Music2 },
+  { path: "/", label: "Dashboard", icon: Music2 },
+  { path: "/syncs", label: "Syncs", icon: Music2 },
   { path: "/chat", label: "Chat", icon: MessageSquare },
   { path: "/audit", label: "Audit Log", icon: ScrollText },
   {
@@ -35,7 +36,7 @@ const links = [
 export function Nav() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user, logout, requireAuth } = useAuth();
   const { sessions: chatSessions } = useChatSessions();
   const [collapsed, setCollapsed] = useState(() => {
     try {
@@ -159,7 +160,7 @@ export function Nav() {
       <div className="flex-1" />
 
       {/* User info + logout */}
-      {user && (
+      {user && requireAuth && (
         <div className="px-2 mb-2">
           {collapsed ? (
             <button

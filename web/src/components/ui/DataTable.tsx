@@ -1,6 +1,6 @@
-import { ChevronDown, ChevronUp, Search, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Filter, X } from "lucide-react";
 import type React from "react";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 export interface Column<T> {
   id: string;
@@ -62,6 +62,15 @@ export function DataTable<T>({
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>(null);
   const [filters, setFilters] = useState<Record<string, string>>({});
+  const [filtersVisible, setFiltersVisible] = useState(() =>
+    Object.values(filters).some((v) => v.trim()),
+  );
+
+  const hasActiveFilters = Object.keys(filters).some((k) => filters[k]?.trim());
+
+  useEffect(() => {
+    if (hasActiveFilters) setFiltersVisible(true);
+  }, [hasActiveFilters]);
 
   const handleSort = (col: Column<T>) => {
     if (!col.sortable) return;
@@ -85,8 +94,10 @@ export function DataTable<T>({
     });
   };
 
-  const clearFilters = () => setFilters({});
-  const hasActiveFilters = Object.keys(filters).length > 0;
+  const clearFilters = useCallback(() => {
+    setFilters({});
+    setFiltersVisible(false);
+  }, []);
 
   const processed = useMemo(() => {
     let result = data;
@@ -138,33 +149,53 @@ export function DataTable<T>({
                       sortKey === col.id &&
                       sortDir &&
                       (sortDir === "asc" ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}
+                    {col.filterable && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setFiltersVisible((v) => !v);
+                        }}
+                        className={`p-0.5 rounded transition-colors ${
+                          filters[col.id]?.trim()
+                            ? "text-accent-500 bg-accent-500/10"
+                            : "text-fg-subtle hover:text-fg-muted"
+                        }`}
+                        title={filtersVisible ? "Hide filters" : "Show filters"}
+                      >
+                        <Filter size={12} />
+                      </button>
+                    )}
                   </span>
-                  {col.filterable && (
-                    <div className="relative mt-1.5" onClick={(e) => e.stopPropagation()}>
-                      <Search
-                        size={12}
-                        className="absolute left-2 top-1/2 -translate-y-1/2 text-fg-subtle"
-                      />
-                      <input
-                        type="text"
-                        value={filters[col.id] || ""}
-                        onChange={(e) => setFilter(col.id, e.target.value)}
-                        placeholder="Filter..."
-                        className="w-full pl-7 pr-6 py-1 text-xs border border-border rounded-sm bg-bg-surface text-fg focus:outline-none focus:ring-1 focus:ring-border-focus placeholder-fg-subtle"
-                      />
-                      {filters[col.id] && (
-                        <button
-                          onClick={() => setFilter(col.id, "")}
-                          className="absolute right-1 top-1/2 -translate-y-1/2 text-fg-subtle hover:text-fg-muted"
-                        >
-                          <X size={12} />
-                        </button>
-                      )}
-                    </div>
-                  )}
                 </th>
               ))}
             </tr>
+            {filtersVisible && (
+              <tr>
+                {columns.map((col) => (
+                  <th key={col.id} className="px-4 py-2 text-left font-normal">
+                    {col.filterable ? (
+                      <div className="relative" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="text"
+                          value={filters[col.id] || ""}
+                          onChange={(e) => setFilter(col.id, e.target.value)}
+                          placeholder={`Filter ${col.header.toLowerCase()}...`}
+                          className="w-full px-2.5 py-1.5 text-xs border border-border/60 rounded-md bg-bg-inset text-fg focus:outline-none focus:ring-1 focus:ring-accent-500/40 focus:border-accent-500/60 placeholder-fg-subtle transition-colors"
+                        />
+                        {filters[col.id] && (
+                          <button
+                            onClick={() => setFilter(col.id, "")}
+                            className="absolute right-1.5 top-1/2 -translate-y-1/2 text-fg-subtle hover:text-fg-muted"
+                          >
+                            <X size={12} />
+                          </button>
+                        )}
+                      </div>
+                    ) : null}
+                  </th>
+                ))}
+              </tr>
+            )}
           </thead>
           <tbody className="divide-y divide-border">
             {loading ? (

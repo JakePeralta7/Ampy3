@@ -3,10 +3,10 @@
 import asyncio
 import logging
 
-from src.app.core.services.orchestrator import SyncOrchestrator
 from src.app.core.services.matcher import get_active_rules_sync
-from src.app.core.sources.ytmusic import YouTubeMusicSource
-from src.app.services import get_plex_client
+from src.app.core.services.orchestrator import SyncOrchestrator
+from src.app.core.sources.registry import SourceRegistry
+from src.app.services import get_sync_target
 from src.app.services.audit import log_event_sync
 from src.app.worker.app import celery_app
 from src.app.worker.sync_helpers import _run_async, _save_sync_results
@@ -50,15 +50,15 @@ def sync_playlists_task(self, playlist_url: str, source: str = "youtube_music", 
 
 
 async def _async_sync_task(playlist_url: str, source: str, replace_existing: bool, schedule_id: int | None = None, rules=None) -> dict:
-    if source == "youtube_music":
-        yt_source = YouTubeMusicSource()
-        playlist_metadata = await yt_source.get_playlist(playlist_url)
-    else:
-        raise ValueError(f"Unsupported source: {source}")
+    # Resolve source adapter via registry
+    source_cls = SourceRegistry.get(source)
+    source_adapter = source_cls()
+    playlist_metadata = await source_adapter.get_playlist(playlist_url)
 
     logger.info(f"Fetched playlist '{playlist_metadata.title}' with {len(playlist_metadata.tracks)} tracks")
 
-    orchestrator = SyncOrchestrator(await get_plex_client())
+    target = await get_sync_target()
+    orchestrator = SyncOrchestrator(target=target)
 
     stats = await orchestrator.sync_playlist(
         playlist=playlist_metadata,

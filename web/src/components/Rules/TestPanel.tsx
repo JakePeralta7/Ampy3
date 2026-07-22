@@ -7,11 +7,14 @@ import {
   EyeOff,
   GitCompare,
   ListTree,
+  Music,
   Play,
   Search,
+  X,
   XCircle,
 } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { playlistsAPI, type UnmatchedTrack } from "../../api/playlists";
 import { matchRulesAPI, type TestResponse, type TrackTestInput } from "../../api/rules";
 import { Button } from "../ui/Button";
 
@@ -29,6 +32,11 @@ export function TestPanel({ ruleId, onTestResult }: TestPanelProps) {
   const [error, setError] = useState<string | null>(null);
   const [expandedTraces, setExpandedTraces] = useState<Set<number>>(new Set());
   const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set());
+
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerTracks, setPickerTracks] = useState<UnmatchedTrack[]>([]);
+  const [pickerLoading, setPickerLoading] = useState(false);
+  const [pickerSearch, setPickerSearch] = useState("");
 
   const toggleStep = useCallback((stepKey: string) => {
     setExpandedSteps((prev) => {
@@ -81,6 +89,42 @@ export function TestPanel({ ruleId, onTestResult }: TestPanelProps) {
     setError(null);
     setExpandedTraces(new Set());
   }, []);
+
+  const openPicker = useCallback(async () => {
+    setPickerOpen(true);
+    setPickerSearch("");
+    if (pickerTracks.length === 0) {
+      setPickerLoading(true);
+      try {
+        const tracks = await playlistsAPI.getUnmatchedTracks(100);
+        setPickerTracks(tracks);
+      } catch {
+        setPickerTracks([]);
+      } finally {
+        setPickerLoading(false);
+      }
+    }
+  }, [pickerTracks.length]);
+
+  const selectFromPicker = useCallback(
+    (track: UnmatchedTrack) => {
+      setTitle(track.source_title || "");
+      setArtist(track.source_artist || "");
+      setAlbum(track.source_album || "");
+      setPickerOpen(false);
+      setPickerSearch("");
+    },
+    [],
+  );
+
+  const filteredPickerTracks = pickerSearch
+    ? pickerTracks.filter(
+        (t) =>
+          (t.source_title?.toLowerCase().includes(pickerSearch.toLowerCase()) ?? false) ||
+          (t.source_artist?.toLowerCase().includes(pickerSearch.toLowerCase()) ?? false) ||
+          (t.sync_name?.toLowerCase().includes(pickerSearch.toLowerCase()) ?? false),
+      )
+    : pickerTracks;
 
   const matchedCount = result?.matches?.filter((m) => m.matched).length ?? 0;
   const totalRules = result?.matches?.length ?? 0;
@@ -164,6 +208,76 @@ export function TestPanel({ ruleId, onTestResult }: TestPanelProps) {
             {loading ? "Testing..." : "Run Test"}
           </Button>
         </div>
+
+        {/* Pick from sync button */}
+        <div className="mt-2">
+          <Button variant="ghost" size="xs" icon={<Music size={12} />} onClick={openPicker}>
+            Pick from unmatched tracks
+          </Button>
+        </div>
+
+        {/* Unmatched track picker */}
+        {pickerOpen && (
+          <div className="mt-2 border border-border rounded-lg bg-bg-surface overflow-hidden">
+            <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-bg-muted">
+              <span className="text-xs font-medium text-fg-muted">Unmatched Tracks</span>
+              <button
+                onClick={() => setPickerOpen(false)}
+                className="text-fg-subtle hover:text-fg-muted"
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <div className="px-3 py-2 border-b border-border">
+              <div className="relative">
+                <Search
+                  size={12}
+                  className="absolute left-2 top-1/2 -translate-y-1/2 text-fg-subtle"
+                />
+                <input
+                  type="text"
+                  value={pickerSearch}
+                  onChange={(e) => setPickerSearch(e.target.value)}
+                  placeholder="Filter tracks..."
+                  className="w-full pl-7 pr-2 py-1.5 text-xs bg-bg-surface border border-border rounded-sm focus:outline-none focus:ring-1 focus:ring-border-focus placeholder-fg-subtle"
+                  autoFocus
+                />
+              </div>
+            </div>
+            <div className="max-h-60 overflow-y-auto">
+              {pickerLoading ? (
+                <div className="px-3 py-4 text-center text-xs text-fg-muted">
+                  Loading unmatched tracks...
+                </div>
+              ) : filteredPickerTracks.length === 0 ? (
+                <div className="px-3 py-4 text-center text-xs text-fg-muted">
+                  {pickerTracks.length === 0
+                    ? "No unmatched tracks found"
+                    : "No tracks match your filter"}
+                </div>
+              ) : (
+                filteredPickerTracks.map((track, idx) => (
+                  <button
+                    key={`${track.sync_id}-${idx}`}
+                    onClick={() => selectFromPicker(track)}
+                    className="w-full px-3 py-2 text-left hover:bg-bg-muted transition-colors duration-fast border-b border-border last:border-0"
+                  >
+                    <div className="text-xs font-medium text-fg truncate">
+                      {track.source_title || "Unknown"}
+                    </div>
+                    <div className="text-xs text-fg-muted truncate">
+                      {track.source_artist || "Unknown"}
+                      {track.source_album ? ` — ${track.source_album}` : ""}
+                    </div>
+                    <div className="text-xs text-fg-subtle mt-0.5 truncate">
+                      {track.sync_name}
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Error */}
         {error && (
@@ -399,7 +513,8 @@ export function TestPanel({ ruleId, onTestResult }: TestPanelProps) {
         {!hasResults && !error && (
           <div className="mt-2 text-center py-4">
             <p className="text-xs text-fg-subtle">
-              Enter a track title{ruleId ? "" : " to test all active rules"} and press{" "}
+              Enter a track title{ruleId ? "" : " to test all active rules"} or pick from unmatched
+              tracks, then press{" "}
               <kbd className="px-1 py-0.5 bg-bg-muted rounded-sm text-fg-muted font-mono">
                 Enter
               </kbd>

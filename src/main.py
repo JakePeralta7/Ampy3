@@ -1,6 +1,5 @@
 """Main entry point for the Ampy3 API."""
 import logging
-import secrets
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -10,7 +9,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from src.app.api import register_routers
-from src.app.auth.tokens import verify_session
+from src.app.auth.tokens import purge_expired_sessions, verify_session
 from src.app.db import init_db
 from src.app.llm.ollama import health_check as ollama_health_check
 from src.app.services import get_plex_client
@@ -18,6 +17,7 @@ from src.app.services.scheduler import SchedulerService
 from src.app.settings import settings
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 PUBLIC_PATHS = {
     "/api/auth/plex/login",
@@ -32,13 +32,13 @@ SESSION_COOKIE = "ampy3_session"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Auto-generate secret key if not set
+    # Require SECRET_KEY when auth is enabled
     if settings.require_auth and not settings.secret_key:
-        settings.secret_key = secrets.token_hex(32)
-        logger.warning(
-            "SECRET_KEY not set — generated a random key. "
-            "Sessions will be invalidated on restart. Set SECRET_KEY in .env for persistence."
+        msg = (
+            "SECRET_KEY must be set when REQUIRE_AUTH=true. "
+            "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\""
         )
+        raise RuntimeError(msg)
 
     logger.info("Starting Ampy3 API...")
 
@@ -49,10 +49,19 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("Could not initialize database on startup: %s", e)
 
+    # Purge expired sessions on startup
+    try:
+        await purge_expired_sessions()
+    except Exception as e:
+        logger.warning("Could not purge expired sessions: %s", e)
+
     try:
         plex_client = await get_plex_client()
-        await plex_client.get_section("dummy-id")
-        logger.info("Plex Client initialized successfully.")
+        sections = await plex_client.get_sections()
+        if not sections:
+            logger.warning("Plex Client started but returned no library sections.")
+        else:
+            logger.info("Plex Client initialized successfully (%d sections).", len(sections))
     except Exception as e:
         logger.warning("Could not initialize PlexClient on startup: %s", e)
 
@@ -123,7 +132,12 @@ app = FastAPI(
 
 # ── CORS ────────────────────────────────────────────────────────────────
 
-cors_origins = [settings.app_url] if settings.require_auth and settings.app_url else ["*"]
+if settings.require_auth:
+    if not settings.app_url:
+        raise RuntimeError("APP_URL must be set when REQUIRE_AUTH=true")
+    cors_origins = [settings.app_url]
+else:
+    cors_origins = ["*"]
 
 app.add_middleware(
     CORSMiddleware,
@@ -164,7 +178,7 @@ async def session_middleware(request: Request, call_next):
     if not token:
         return JSONResponse(status_code=401, content={"detail": "unauthenticated"})
 
-    user = verify_session(token, settings.secret_key)
+    user = await verify_session(token, settings.secret_key)
     if user is None:
         return JSONResponse(status_code=401, content={"detail": "unauthenticated"})
 
@@ -190,4 +204,7 @@ if web_dist_path.exists():
         file_path = web_dist_path / path
         if file_path.is_file():
             return FileResponse(file_path)
-        return FileResponse(web_dist_path / "index.html")
+        return FileResponse(
+            web_dist_path / "index.html",
+            headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+        )

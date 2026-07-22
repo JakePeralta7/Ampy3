@@ -2,19 +2,22 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from typing import TYPE_CHECKING
 
 from src.app.core.models import PlaylistMetadata, TrackMetadata
-from src.app.core.plex.client import PlexClient
 from src.app.core.services.matcher import MatchEngine, get_active_rules
 from src.app.models import MatchRule
+
+if TYPE_CHECKING:
+    from src.app.core.targets.base import BaseTarget
 
 logger = logging.getLogger(__name__)
 
 
 class SyncOrchestrator:
-    def __init__(self, plex_client: PlexClient):
-        self._plex = plex_client
-        self._match_engine = MatchEngine(plex_client)
+    def __init__(self, target: BaseTarget):
+        self._target = target
+        self._match_engine = MatchEngine(target)
 
     async def sync_playlist(self, playlist: PlaylistMetadata, replace_existing: bool = False, rules: list[MatchRule] | None = None) -> dict:
         if rules is None:
@@ -27,7 +30,7 @@ class SyncOrchestrator:
         stats = {
             "playlist": playlist.title,
             "source_id": playlist.source_id,
-            "plex_playlist_id": None,
+            "target_playlist_id": None,
             "total_tracks": len(playlist.tracks),
             "matched": 0,
             "failed": 0,
@@ -38,10 +41,10 @@ class SyncOrchestrator:
             "failed_tracks": [],
         }
 
-        existing = await self._plex.get_plist_by_name(playlist.title)
+        existing = await self._target.get_playlist_by_name(playlist.title)
         if existing and replace_existing:
             try:
-                await self._plex.delete_plist(existing["rating_key"])
+                await self._target.delete_playlist(existing["rating_key"])
                 logger.info("Deleted existing playlist '%s' for replacement", playlist.title)
                 existing = None
             except Exception as e:
@@ -72,7 +75,7 @@ class SyncOrchestrator:
             }
             if result and result.get("found", False):
                 hit = result["match"]
-                row["match_plex_id"] = hit.get("plex_id")
+                row["match_item_id"] = hit.get("plex_id")
                 row["match_title"] = hit.get("title")
                 row["match_artist"] = hit.get("artist_name")
                 row["match_album"] = hit.get("album_name")
@@ -99,24 +102,24 @@ class SyncOrchestrator:
         if matched_results:
             try:
                 if existing and not replace_existing:
-                    success = await self._plex.update_plist_in_place(
+                    success = await self._target.update_playlist(
                         existing["rating_key"],
                         [t["match"] for t in matched_results],
                     )
                     if success:
-                        stats["plex_playlist_id"] = existing["rating_key"]
+                        stats["target_playlist_id"] = existing["rating_key"]
                         stats["updated"] = len(matched_results)
                 else:
-                    playlist_id = await self._plex.create_plist_from_results(
+                    playlist_id = await self._target.create_playlist(
                         title=playlist.title,
                         items=[t["match"] for t in matched_results],
                         custom_metadata={"source_playlist_id": playlist.source_id},
                     )
                     if playlist_id:
-                        stats["plex_playlist_id"] = playlist_id
+                        stats["target_playlist_id"] = playlist_id
                         stats["added"] = len(matched_results)
             except Exception as e:
-                stats["errors"].append(f"Failed to create/update Plex playlist: {e}")
+                stats["errors"].append(f"Failed to create/update playlist: {e}")
 
         return stats
 
