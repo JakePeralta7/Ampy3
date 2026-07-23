@@ -17,8 +17,9 @@ export function SetupPage() {
   const navigate = useNavigate();
   const [servers, setServers] = useState<PlexServer[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [needsToken, setNeedsToken] = useState(false);
   const [customUrl, setCustomUrl] = useState("");
+  const [plexToken, setPlexToken] = useState("");
   const [saving, setSaving] = useState(false);
 
   const [query, setQuery] = useState("");
@@ -29,8 +30,11 @@ export function SetupPage() {
 
   useEffect(() => {
     apiGet<{ servers: PlexServer[] }>("/plex/servers")
-      .then((data) => setServers(data.servers))
-      .catch((err) => setError(err.message))
+      .then((data) => {
+        setServers(data.servers);
+        if (data.servers.length === 0) setNeedsToken(true);
+      })
+      .catch(() => setNeedsToken(true))
       .finally(() => setLoading(false));
   }, []);
 
@@ -77,7 +81,11 @@ export function SetupPage() {
     if (!customUrl.trim()) return;
     setSaving(true);
     try {
-      await apiPost("/plex/server", { server_url: customUrl.trim() });
+      const body: { server_url: string; plex_token?: string } = {
+        server_url: customUrl.trim(),
+      };
+      if (plexToken.trim()) body.plex_token = plexToken.trim();
+      await apiPost("/plex/server", body);
       toast.success("Plex server connected");
       navigate("/", { replace: true });
     } catch (err) {
@@ -107,89 +115,122 @@ export function SetupPage() {
 
           <h1 className="text-xl font-semibold text-fg mb-1 text-center">Connect to Plex</h1>
           <p className="text-sm text-fg-muted mb-8 text-center">
-            Select your Plex Media Server to get started.
+            {needsToken
+              ? "Enter your Plex token and server URL to get started."
+              : "Select your Plex Media Server to get started."}
           </p>
 
-          {error && (
-            <div className="mb-6 px-4 py-3 rounded-md bg-red-50 border border-red-200 text-red-700 text-sm">
-              {error}
-            </div>
-          )}
-
-          {servers.length > 0 && (
-            <div className="mb-6" ref={dropdownRef}>
-              <label className="block text-xs font-medium text-fg-muted mb-1.5">Plex Server</label>
-              <div className="relative">
+          {needsToken ? (
+            <form onSubmit={handleCustomSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-fg-muted mb-1.5">
+                  Server URL
+                </label>
                 <input
-                  ref={inputRef}
-                  type="text"
-                  value={query}
-                  onChange={(e) => {
-                    setQuery(e.target.value);
-                    setSelected(null);
-                    setOpen(true);
-                  }}
-                  onFocus={() => setOpen(true)}
-                  placeholder="Search servers..."
-                  disabled={saving}
-                  className="w-full px-3 py-2 rounded-md border border-border bg-bg-surface text-fg text-sm placeholder:text-fg-subtle focus:outline-none focus:ring-2 focus:ring-accent-500 disabled:opacity-50"
+                  type="url"
+                  value={customUrl}
+                  onChange={(e) => setCustomUrl(e.target.value)}
+                  placeholder="http://192.168.1.100:32400"
+                  className="w-full px-3 py-2 rounded-md border border-border bg-bg-surface text-fg text-sm placeholder:text-fg-subtle focus:outline-none focus:ring-2 focus:ring-accent-500"
+                  required
                 />
-                {open && filtered.length > 0 && (
-                  <div className="absolute z-10 mt-1 w-full max-h-60 overflow-auto rounded-md border border-border bg-bg-surface shadow-lg">
-                    {filtered.map((server) => (
-                      <button
-                        key={server.machine_identifier}
-                        type="button"
-                        disabled={saving}
-                        onClick={() => handleSelectServer(server)}
-                        className={`w-full flex items-center justify-between px-3 py-2 text-left text-sm hover:bg-bg-muted transition-colors disabled:opacity-50 cursor-pointer ${
-                          selected?.machine_identifier === server.machine_identifier
-                            ? "bg-accent-500/10"
-                            : ""
-                        }`}
-                      >
-                        <span className="font-medium text-fg">{server.name}</span>
-                        <span className="text-xs text-fg-muted">
-                          {server.protocol}://{server.host}:{server.port}
-                          {server.local && <span className="ml-1 text-accent-500">local</span>}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {open && query && filtered.length === 0 && (
-                  <div className="absolute z-10 mt-1 w-full rounded-md border border-border bg-bg-surface shadow-lg px-3 py-2 text-sm text-fg-muted">
-                    No servers match "{query}"
-                  </div>
-                )}
               </div>
-            </div>
-          )}
-
-          {servers.length === 0 && !error && (
-            <p className="text-sm text-fg-muted text-center mb-6">
-              No servers found. Enter your server URL manually below.
-            </p>
-          )}
-
-          <div className="border-t border-border pt-6">
-            <p className="text-xs text-fg-muted mb-3 text-center">
-              Or enter your server URL manually
-            </p>
-            <form onSubmit={handleCustomSubmit} className="flex gap-2">
-              <input
-                type="url"
-                value={customUrl}
-                onChange={(e) => setCustomUrl(e.target.value)}
-                placeholder="http://192.168.1.100:32400"
-                className="flex-1 px-3 py-2 rounded-md border border-border bg-bg-surface text-fg text-sm placeholder:text-fg-subtle focus:outline-none focus:ring-2 focus:ring-accent-500"
-                required
-              />
-              <Button type="submit" loading={saving} size="sm">
+              <div>
+                <label className="block text-xs font-medium text-fg-muted mb-1.5">
+                  Plex Token
+                </label>
+                <input
+                  type="text"
+                  value={plexToken}
+                  onChange={(e) => setPlexToken(e.target.value)}
+                  placeholder="Find it at plex.tv → Account → Authorized Devices"
+                  className="w-full px-3 py-2 rounded-md border border-border bg-bg-surface text-fg text-sm placeholder:text-fg-subtle focus:outline-none focus:ring-2 focus:ring-accent-500"
+                  required
+                />
+                <p className="mt-1.5 text-xs text-fg-subtle">
+                  Settings → Authorized Devices → copy the token string
+                </p>
+              </div>
+              <Button type="submit" loading={saving} className="w-full">
                 Connect
               </Button>
             </form>
-          </div>
+          ) : (
+            <>
+              {servers.length > 0 && (
+                <div className="mb-6" ref={dropdownRef}>
+                  <label className="block text-xs font-medium text-fg-muted mb-1.5">
+                    Plex Server
+                  </label>
+                  <div className="relative">
+                    <input
+                      ref={inputRef}
+                      type="text"
+                      value={query}
+                      onChange={(e) => {
+                        setQuery(e.target.value);
+                        setSelected(null);
+                        setOpen(true);
+                      }}
+                      onFocus={() => setOpen(true)}
+                      placeholder="Search servers..."
+                      disabled={saving}
+                      className="w-full px-3 py-2 rounded-md border border-border bg-bg-surface text-fg text-sm placeholder:text-fg-subtle focus:outline-none focus:ring-2 focus:ring-accent-500 disabled:opacity-50"
+                    />
+                    {open && filtered.length > 0 && (
+                      <div className="absolute z-10 mt-1 w-full max-h-60 overflow-auto rounded-md border border-border bg-bg-surface shadow-lg">
+                        {filtered.map((server) => (
+                          <button
+                            key={server.machine_identifier}
+                            type="button"
+                            disabled={saving}
+                            onClick={() => handleSelectServer(server)}
+                            className={`w-full flex items-center justify-between px-3 py-2 text-left text-sm hover:bg-bg-muted transition-colors disabled:opacity-50 cursor-pointer ${
+                              selected?.machine_identifier === server.machine_identifier
+                                ? "bg-accent-500/10"
+                                : ""
+                            }`}
+                          >
+                            <span className="font-medium text-fg">{server.name}</span>
+                            <span className="text-xs text-fg-muted">
+                              {server.protocol}://{server.host}:{server.port}
+                              {server.local && (
+                                <span className="ml-1 text-accent-500">local</span>
+                              )}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {open && query && filtered.length === 0 && (
+                      <div className="absolute z-10 mt-1 w-full rounded-md border border-border bg-bg-surface shadow-lg px-3 py-2 text-sm text-fg-muted">
+                        No servers match &quot;{query}&quot;
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className="border-t border-border pt-6">
+                <p className="text-xs text-fg-muted mb-3 text-center">
+                  Or enter your server URL manually
+                </p>
+                <form onSubmit={handleCustomSubmit} className="flex gap-2">
+                  <input
+                    type="url"
+                    value={customUrl}
+                    onChange={(e) => setCustomUrl(e.target.value)}
+                    placeholder="http://192.168.1.100:32400"
+                    className="flex-1 px-3 py-2 rounded-md border border-border bg-bg-surface text-fg text-sm placeholder:text-fg-subtle focus:outline-none focus:ring-2 focus:ring-accent-500"
+                    required
+                  />
+                  <Button type="submit" loading={saving} size="sm">
+                    Connect
+                  </Button>
+                </form>
+              </div>
+            </>
+          )}
         </div>
 
         <p className="text-center text-xs text-fg-subtle mt-4">

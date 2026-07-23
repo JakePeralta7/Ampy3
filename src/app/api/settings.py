@@ -6,7 +6,6 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, HTTPException
 
 from src.app.auth.dependencies import get_current_user
-
 from src.app.db import AsyncSessionLocal
 from src.app.models import Config
 from src.app.schemas.settings import SettingsOut, SettingsUpdate
@@ -35,8 +34,8 @@ def _mask_token(token: str) -> str:
 
 def _build_settings_out(overrides: dict[str, str]) -> SettingsOut:
     return SettingsOut(
-        plex_host=overrides.get("plex_host", settings.plex_host),
-        plex_token=_mask_token(overrides.get("plex_token", settings.plex_token)),
+        plex_host=overrides.get("plex_host", ""),
+        plex_token=_mask_token(overrides.get("plex_token", "")),
         ollama_host=overrides.get("ollama_host", settings.ollama_host),
         ollama_model=overrides.get("ollama_model", settings.ollama_model),
         ollama_timeout=int(overrides.get("ollama_timeout", str(settings.ollama_timeout))),

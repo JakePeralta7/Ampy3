@@ -24,8 +24,6 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      - PLEX_HOST=${PLEX_HOST}
-      - PLEX_TOKEN=${PLEX_TOKEN}
       - OLLAMA_HOST=${OLLAMA_HOST:-http://localhost:11434}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-gemma4-e4b-128:latest}
       - OLLAMA_TIMEOUT=${OLLAMA_TIMEOUT:-120}
@@ -47,8 +45,6 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      - PLEX_HOST=${PLEX_HOST}
-      - PLEX_TOKEN=${PLEX_TOKEN}
       - YT_DLP_COOKIES=/cookies/cookies.txt
       - DATABASE_URL=postgresql://ampy3:ampy3@postgres:5432/ampy3
       - CELERY_WORKER_CONCURRENCY=${CELERY_WORKER_CONCURRENCY:-1}
