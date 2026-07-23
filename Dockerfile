@@ -1,12 +1,13 @@
 # --- Frontend builder ---
 FROM node:26-alpine AS web-builder
 
-RUN npm i -g pnpm@9
+RUN npm i -g pnpm@11.16.0
 
 WORKDIR /app/web
 
 # Install dependencies first (cached until lockfile changes)
 COPY web/package.json web/pnpm-lock.yaml ./
+ENV PNPM_CONFIG_STRICT_DEP_BUILDS=false
 RUN CI=true pnpm install --frozen-lockfile
 
 # Copy source files (excluding node_modules via .dockerignore)
