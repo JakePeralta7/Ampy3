@@ -20,7 +20,7 @@ RUN rm -rf node_modules
 
 
 # --- Python dependency builder ---
-FROM python:3.12-slim AS builder
+FROM python:3.14-slim AS builder
 
 WORKDIR /app
 
@@ -35,7 +35,7 @@ COPY alembic/ ./alembic/
 
 
 # --- Final production image ---
-FROM python:3.12-slim
+FROM python:3.14-slim
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends ffmpeg && \
