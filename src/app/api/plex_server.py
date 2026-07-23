@@ -32,6 +32,7 @@ class PlexServerOut(BaseModel):
 
 class SaveServerRequest(BaseModel):
     server_url: str
+    plex_token: str | None = None
 
 
 # ── Enumerate servers ────────────────────────────────────────────────
@@ -42,7 +43,7 @@ async def list_plex_servers(user: dict = Depends(get_current_user)):  # noqa: B0
     """Return the list of Plex Media Servers the owner has access to."""
     token = await get_owner_plex_token()
     if not token:
-        raise HTTPException(status_code=400, detail="Owner Plex token not available")
+        return {"servers": []}
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -98,9 +99,9 @@ async def save_server_config(
 
     Validates connectivity before persisting.
     """
-    token = await get_owner_plex_token()
+    token = body.plex_token or await get_owner_plex_token()
     if not token:
-        raise HTTPException(status_code=400, detail="Owner Plex token not available")
+        raise HTTPException(status_code=400, detail="Plex token is required")
 
     url = body.server_url.rstrip("/")
 
@@ -130,6 +131,16 @@ async def save_server_config(
             row.value = url
         else:
             session.add(Config(key="plex_server_url", value=url))
+
+        if body.plex_token and not await get_owner_plex_token():
+            token_row = (await session.execute(
+                select(Config).where(Config.key == "owner_plex_token")
+            )).scalar_one_or_none()
+            if token_row:
+                token_row.value = body.plex_token
+            else:
+                session.add(Config(key="owner_plex_token", value=body.plex_token))
+
         await session.commit()
 
     logger.info("Plex server URL saved: %s", url)

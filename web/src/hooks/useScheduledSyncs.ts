@@ -20,7 +20,10 @@ interface UseScheduledSyncsReturn {
   createSync: (input: CreateScheduledSyncInput) => Promise<ScheduledSync>;
   updateSync: (syncId: number, input: UpdateScheduledSyncInput) => Promise<ScheduledSync>;
   deleteSync: (syncId: number) => Promise<void>;
-  triggerSyncNow: (syncId: number) => Promise<string>; // Returns task ID
+  triggerSyncNow: (syncId: number) => Promise<string>;
+  bulkSyncNow: (ids: number[]) => Promise<void>;
+  bulkToggleActive: (ids: number[], isActive: boolean) => Promise<void>;
+  bulkDelete: (ids: number[]) => Promise<void>;
 }
 
 const POLL_INTERVAL_MS = 30000;
@@ -136,6 +139,50 @@ export function useScheduledSyncs(): UseScheduledSyncsReturn {
     [syncs, stopFastPoll],
   );
 
+  // Bulk: trigger sync now for multiple syncs
+  const bulkSyncNow = useCallback(
+    async (ids: number[]): Promise<void> => {
+      try {
+        await scheduledSyncsAPI.bulkSyncNow(ids);
+        await refetch(true);
+      } catch (err) {
+        setError(getErrorMessage(err, "Failed to trigger bulk sync"));
+        throw err;
+      }
+    },
+    [refetch],
+  );
+
+  // Bulk: toggle active state for multiple syncs
+  const bulkToggleActive = useCallback(
+    async (ids: number[], isActive: boolean): Promise<void> => {
+      try {
+        await scheduledSyncsAPI.bulkToggleActive(ids, isActive);
+        setSyncs((prev) =>
+          prev.map((s) => (ids.includes(s.id) ? { ...s, is_active: isActive } : s)),
+        );
+      } catch (err) {
+        setError(getErrorMessage(err, "Failed to toggle syncs"));
+        throw err;
+      }
+    },
+    [],
+  );
+
+  // Bulk: delete multiple syncs
+  const bulkDelete = useCallback(
+    async (ids: number[]): Promise<void> => {
+      try {
+        await scheduledSyncsAPI.bulkDelete(ids);
+        setSyncs((prev) => prev.filter((s) => !ids.includes(s.id)));
+      } catch (err) {
+        setError(getErrorMessage(err, "Failed to delete syncs"));
+        throw err;
+      }
+    },
+    [],
+  );
+
   // Initial fetch
   useEffect(() => {
     refetch();
@@ -162,5 +209,8 @@ export function useScheduledSyncs(): UseScheduledSyncsReturn {
     updateSync,
     deleteSync,
     triggerSyncNow,
+    bulkSyncNow,
+    bulkToggleActive,
+    bulkDelete,
   };
 }

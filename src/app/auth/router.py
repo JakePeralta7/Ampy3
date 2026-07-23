@@ -5,18 +5,16 @@ https://forums.plex.tv/t/authenticating-with-plex/609370
 """
 
 import logging
-import secrets
 import uuid
-from datetime import UTC, datetime, timedelta
 
 import httpx
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from src.app.auth.dependencies import SESSION_COOKIE, get_current_user
-from src.app.auth.tokens import sign_session
+from src.app.auth.tokens import create_session, destroy_session
 from src.app.db import AsyncSessionLocal
-from src.app.models import AuditLog, Config
+from src.app.models import Config
 from src.app.services.audit import log_event
 from src.app.settings import settings
 
@@ -87,6 +85,11 @@ async def get_plex_server_url() -> str | None:
         return row.value if row else None
 
 
+def _cookie_secure() -> bool:
+    """Cookies must always use the Secure flag when auth is required."""
+    return settings.require_auth or settings.app_env == "production"
+
+
 # ── Routes ──────────────────────────────────────────────────────────────
 
 
@@ -131,7 +134,7 @@ async def plex_login(request: Request):
         f"{pin_id}:{pin_code}",
         max_age=300,
         httponly=True,
-        secure=settings.app_env == "production",
+        secure=_cookie_secure(),
         samesite="lax",
         path="/",
     )
@@ -226,23 +229,27 @@ async def plex_callback(
         )
         return RedirectResponse("/login?error=not_authorized")
 
-    # ── 5. Sign session cookie ────────────────────────────────────────
-    session_payload = {
+    # ── 5. Create server-side session ─────────────────────────────────
+    user_profile = {
         "plex_user_id": plex_user_id,
         "username": username,
         "email": email,
         "thumb": thumb,
-        "plex_token": auth_token,
     }
-    token = sign_session(session_payload, settings.secret_key, settings.session_ttl_hours)
+    cookie_value = await create_session(
+        user_data=user_profile,
+        plex_token=auth_token,
+        secret=settings.secret_key,
+        ttl_hours=settings.session_ttl_hours,
+    )
 
     resp = RedirectResponse("/")
     resp.set_cookie(
         SESSION_COOKIE,
-        token,
+        cookie_value,
         max_age=settings.session_ttl_hours * 3600,
         httponly=True,
-        secure=settings.app_env == "production",
+        secure=_cookie_secure(),
         samesite="lax",
         path="/",
     )
@@ -267,12 +274,17 @@ async def auth_me(user: dict = Depends(get_current_user)):  # noqa: B008
         "username": user["username"],
         "email": user.get("email"),
         "thumb": user.get("thumb"),
+        "require_auth": settings.require_auth,
     }
 
 
 @router.post("/logout")
 async def auth_logout(user: dict = Depends(get_current_user)):  # noqa: B008
-    """Clear the session cookie."""
+    """Revoke the session server-side and clear the cookie."""
+    session_id = user.get("session_id")
+    if session_id:
+        await destroy_session(session_id)
+
     await log_event(
         "logout",
         f"Logout: {user.get('username', 'unknown')}",

@@ -48,8 +48,8 @@ class ScheduledPlaylistSync(Base):
         String(50), default=PlaylistSourceEnum.YOUTUBE_MUSIC, nullable=False
     )
     source_url: Mapped[str] = mapped_column(String(2048), nullable=False)
-    plex_playlist_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    plex_playlist_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    target_playlist_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    target_playlist_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     schedule_interval: Mapped[str] = mapped_column(
         String(50), default=ScheduleIntervalEnum.DAILY, nullable=False
@@ -79,7 +79,7 @@ class ScheduledPlaylistSync(Base):
     )
 
     def __repr__(self) -> str:
-        return f"<ScheduledPlaylistSync(id={self.id}, playlist={self.plex_playlist_name})>"
+        return f"<ScheduledPlaylistSync(id={self.id}, playlist={self.target_playlist_name})>"
 
 
 class PlaylistTrack(Base):
@@ -98,7 +98,7 @@ class PlaylistTrack(Base):
     source_duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     source_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
-    match_plex_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    match_item_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     match_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
     match_artist: Mapped[str | None] = mapped_column(String(255), nullable=True)
     match_album: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -114,7 +114,7 @@ class PlaylistTrack(Base):
     def __repr__(self) -> str:
         return (
             f"<PlaylistTrack(id={self.id}, sync_id={self.sync_id}, "
-            f"source='{self.source_title}', matched={self.match_plex_id is not None})>"
+            f"source='{self.source_title}', matched={self.match_item_id is not None})>"
         )
 
 
@@ -146,3 +146,77 @@ class AuditLog(Base):
 
     def __repr__(self) -> str:
         return f"<AuditLog(id={self.id}, event_type={self.event_type})>"
+
+
+class UserSession(Base):
+    """Server-side session store. The cookie only carries a signed session ID."""
+
+    __tablename__ = "user_sessions"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    plex_user_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    username: Mapped[str] = mapped_column(String(255), nullable=False)
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    thumb: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    plex_token: Mapped[str] = mapped_column(Text, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class SyncRun(Base):
+    __tablename__ = "sync_runs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    sync_id: Mapped[int] = mapped_column(
+        ForeignKey("scheduled_playlist_syncs.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    matched_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    failed_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    tracks: Mapped[list["SyncRunTrack"]] = relationship(
+        back_populates="run", cascade="all, delete-orphan", order_by="SyncRunTrack.position"
+    )
+
+    def __repr__(self) -> str:
+        return f"<SyncRun(id={self.id}, sync_id={self.sync_id}, matched={self.matched_count})>"
+
+
+class SyncRunTrack(Base):
+    __tablename__ = "sync_run_tracks"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    run_id: Mapped[int] = mapped_column(
+        ForeignKey("sync_runs.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    position: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    source_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    source_artist: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    source_album: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    source_duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    match_item_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    match_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    match_artist: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    match_album: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    match_duration: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    match_rule_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    run: Mapped["SyncRun"] = relationship(back_populates="tracks")
+
+    def __repr__(self) -> str:
+        return (
+            f"<SyncRunTrack(id={self.id}, run_id={self.run_id}, "
+            f"source='{self.source_title}', matched={self.match_item_id is not None})>"
+        )

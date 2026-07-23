@@ -8,8 +8,8 @@ export interface ScheduledSync {
   id: number;
   source: string;
   source_url: string;
-  plex_playlist_name: string;
-  plex_playlist_id: string | null;
+  target_playlist_name: string;
+  target_playlist_id: string | null;
   schedule_interval: string;
   is_active: boolean;
   replace_existing: boolean;
@@ -23,16 +23,21 @@ export interface ScheduledSync {
 export interface CreateScheduledSyncInput {
   source: string;
   source_url: string;
-  plex_playlist_name: string;
+  target_playlist_name: string;
   schedule_interval: string;
   replace_existing?: boolean;
 }
 
 export interface UpdateScheduledSyncInput {
-  plex_playlist_name?: string;
+  target_playlist_name?: string;
   schedule_interval?: string;
   is_active?: boolean;
   replace_existing?: boolean;
+}
+
+export interface BulkResponse {
+  processed: number;
+  task_ids?: string[];
 }
 
 class ScheduledSyncsAPI {
@@ -80,6 +85,18 @@ class ScheduledSyncsAPI {
         method: "POST",
       },
     );
+  }
+
+  async bulkSyncNow(ids: number[]): Promise<BulkResponse> {
+    return apiPost<BulkResponse>("/v1/schedules/bulk/sync-now", { ids });
+  }
+
+  async bulkToggleActive(ids: number[], isActive: boolean): Promise<BulkResponse> {
+    return apiPost<BulkResponse>("/v1/schedules/bulk/toggle-active", { ids, is_active: isActive });
+  }
+
+  async bulkDelete(ids: number[]): Promise<BulkResponse> {
+    return apiPost<BulkResponse>("/v1/schedules/bulk/delete", { ids });
   }
 }
 

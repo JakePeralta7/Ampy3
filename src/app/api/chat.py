@@ -6,10 +6,11 @@ import json
 import logging
 from collections.abc import AsyncGenerator
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
+from src.app.auth.dependencies import get_current_user
 from src.app.llm.agents.base import AgentContext, AgentPhase
 from src.app.llm.agents.workflows import workflow
 from src.app.llm.history import (
@@ -175,7 +176,10 @@ async def _stream_agent_events(
 
 
 @router.post("/invoke", response_model=ChatInvokeResponse)
-async def chat_invoke(request: ChatRequest):
+async def chat_invoke(
+    request: ChatRequest,
+    _user: dict = Depends(get_current_user),  # noqa: B008
+):
     """Synchronously invoke the agent (single turn, no streaming)."""
     session_id = request.session_id or request.thread_id
     try:
@@ -206,7 +210,10 @@ async def chat_invoke(request: ChatRequest):
 
 
 @router.post("/stream_events")
-async def chat_stream_events(request: ChatRequest):
+async def chat_stream_events(
+    request: ChatRequest,
+    _user: dict = Depends(get_current_user),  # noqa: B008
+):
     """Stream agent events in real-time (SSE response).
 
     Returns a `text/event-stream` response with JSON lines for each agent event.
@@ -235,7 +242,11 @@ async def chat_stream_events(request: ChatRequest):
 
 
 @router.get("/history/{session_id}", response_model=ChatHistoryResponse)
-async def chat_history(session_id: str, limit: int = Query(50, ge=1, le=1000)):
+async def chat_history(
+    session_id: str,
+    limit: int = Query(50, ge=1, le=1000),
+    _user: dict = Depends(get_current_user),  # noqa: B008
+):
     """Retrieve chat history for a session."""
     try:
         history = await get_history(session_id, limit=limit)
@@ -258,7 +269,10 @@ async def chat_history(session_id: str, limit: int = Query(50, ge=1, le=1000)):
 
 
 @router.delete("/history/{session_id}", response_model=ChatClearResponse)
-async def clear_chat_history(session_id: str):
+async def clear_chat_history(
+    session_id: str,
+    _user: dict = Depends(get_current_user),  # noqa: B008
+):
     """Clear chat history for a session."""
     try:
         await clear_history_fn(session_id)

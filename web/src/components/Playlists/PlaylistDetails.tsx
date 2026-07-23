@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { PlaylistDetailsResponse, TrackDetail } from "../../api/playlists";
 import type { ScheduledSync } from "../../api/schedules";
@@ -6,6 +6,7 @@ import { Badge } from "../ui/Badge";
 import { CopyButton } from "../ui/CopyButton";
 import { type Column, DataTable } from "../ui/DataTable";
 import { Slideover } from "../ui/Slideover";
+import { SyncHistory } from "./SyncHistory";
 import { TrackDetailModal } from "./TrackDetailModal";
 
 interface TrackRow {
@@ -53,6 +54,8 @@ export function PlaylistDetails({
   useEffect(() => {
     if (error) toast.error(error);
   }, [error]);
+
+  const [tab, setTab] = useState<"tracks" | "history">("tracks");
 
   const handleRematch = useCallback(
     async (
@@ -192,7 +195,7 @@ export function PlaylistDetails({
 
   const subtitle = playlistDetails ? (
     <span>
-      Plex: {sync.plex_playlist_name} • Source:{" "}
+      Plex: {sync.target_playlist_name} • Source:{" "}
       {sync.source === "youtube_music" ? "YouTube Music" : sync.source}
       <span className="ml-2 text-success-500 font-semibold">
         Match Rate: {playlistDetails.match_rate} ({playlistDetails.match_percentage}%)
@@ -205,7 +208,7 @@ export function PlaylistDetails({
       <Slideover
         isOpen={isOpen}
         onClose={onClose}
-        title={sync.plex_playlist_name}
+        title={sync.target_playlist_name}
         subtitle={subtitle}
         size="lg"
       >
@@ -217,30 +220,68 @@ export function PlaylistDetails({
 
         {playlistDetails && (
           <>
-            <div className="mb-4">
-              <p className="text-sm text-fg-muted">Click a track to see source and match details</p>
-              <p className="text-sm text-fg-muted">
-                Matched: {playlistDetails.matched_count} | Failed: {playlistDetails.failed_count} |
-                Total: {playlistDetails.total_source_tracks}
-              </p>
+            <div className="flex items-center gap-1 mb-4 border-b border-border">
+              <button
+                onClick={() => setTab("tracks")}
+                className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors duration-fast ${
+                  tab === "tracks"
+                    ? "border-accent-500 text-accent-500"
+                    : "border-transparent text-fg-muted hover:text-fg"
+                }`}
+              >
+                Tracks
+              </button>
+              <button
+                onClick={() => setTab("history")}
+                className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors duration-fast ${
+                  tab === "history"
+                    ? "border-accent-500 text-accent-500"
+                    : "border-transparent text-fg-muted hover:text-fg"
+                }`}
+              >
+                History
+              </button>
             </div>
 
-            {playlistDetails.tracks.length === 0 ? (
-              <p className="text-fg-muted text-center py-8">No tracks in this playlist</p>
-            ) : (
+            {tab === "tracks" && (
               <>
-                {loading && <div className="h-1 bg-accent-500/50 animate-pulse rounded-t" />}
-                <DataTable
-                  columns={columns}
-                  data={rows}
-                  keyExtractor={(r) => `${r.plex_id || r.title}-${r._idx}`}
-                  onRowClick={(r) => {
-                    if (r._detail) onTrackSelect(r._idx);
-                  }}
-                  rowClassName={(r) => (r.status === "unmatched" ? "bg-danger-500/5" : "")}
-                />
+                <div className="mb-4">
+                  <p className="text-sm text-fg-muted">
+                    Click a track to see source and match details
+                  </p>
+                  <p className="text-sm text-fg-muted">
+                    Matched: {playlistDetails.matched_count} | Failed:{" "}
+                    {playlistDetails.failed_count} | Total:{" "}
+                    {playlistDetails.total_source_tracks}
+                  </p>
+                </div>
+
+                {playlistDetails.tracks.length === 0 ? (
+                  <p className="text-fg-muted text-center py-8">
+                    No tracks in this playlist
+                  </p>
+                ) : (
+                  <>
+                    {loading && (
+                      <div className="h-1 bg-accent-500/50 animate-pulse rounded-t" />
+                    )}
+                    <DataTable
+                      columns={columns}
+                      data={rows}
+                      keyExtractor={(r) => `${r.plex_id || r.title}-${r._idx}`}
+                      onRowClick={(r) => {
+                        if (r._detail) onTrackSelect(r._idx);
+                      }}
+                      rowClassName={(r) =>
+                        r.status === "unmatched" ? "bg-danger-500/5" : ""
+                      }
+                    />
+                  </>
+                )}
               </>
             )}
+
+            {tab === "history" && <SyncHistory syncId={sync.id} />}
           </>
         )}
       </Slideover>

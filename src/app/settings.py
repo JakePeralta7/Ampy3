@@ -11,10 +11,6 @@ class Settings(BaseSettings):
         description="PostgreSQL database URL"
     )
 
-    # Plex configuration
-    plex_host: str = "http://localhost:32400"
-    plex_token: str = ""
-
     # Celery / Valkey
     celery_broker_url: str = Field(default="redis://valkey:6379/0")
     celery_result_backend: str = Field(default="redis://valkey:6379/1")

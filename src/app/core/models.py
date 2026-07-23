@@ -5,10 +5,26 @@ from dataclasses import dataclass, field
 
 
 class IPlatformSource(ABC):
-    """Abstract base class for playlist extraction sources."""
+    """Abstract base class for playlist extraction sources.
+
+    Subclasses must set ``source_id`` and ``display_name`` class
+    attributes and implement ``get_playlist`` and ``supports_url``.
+    """
+
+    source_id: str
+    """Unique identifier, e.g. ``"youtube_music"``."""
+
+    display_name: str
+    """Human-readable name, e.g. ``"YouTube Music"``."""
 
     @abstractmethod
     async def get_playlist(self, playlist_url: str) -> PlaylistMetadata:
+        ...
+
+    @classmethod
+    @abstractmethod
+    def supports_url(cls, url: str) -> bool:
+        """Return ``True`` if *url* can be handled by this source."""
         ...
 
 
@@ -62,11 +78,11 @@ class PlatformSearchResult:
 
 @dataclass(frozen=True)
 class MatchedTrack:
-    """A track matched from source platform to Plex library."""
+    """A track matched from source platform to a target library."""
 
     source_track: TrackMetadata
     match_result: PlatformSearchResult | None = None
-    plex_id: str | None = None
+    item_id: str | None = None
     success: bool = False
     error: str | None = None
 
@@ -85,10 +101,10 @@ class SyncStatus:
 
 
 @dataclass(frozen=True)
-class PlexTrack:
-    """Represents a track in the Plex library."""
+class LibraryTrack:
+    """Represents a track in a target media library."""
 
-    plex_id: str
+    item_id: str
     title: str
     artist_name: str
     album_name: str = ""

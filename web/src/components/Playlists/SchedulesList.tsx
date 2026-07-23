@@ -1,9 +1,10 @@
 import { Pause, Pencil, Play, RotateCw, Trash2 } from "lucide-react";
-import { useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type { ScheduledSync } from "../../api/schedules";
 import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
+import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { CopyButton } from "../ui/CopyButton";
 import { type Column, DataTable } from "../ui/DataTable";
 
@@ -16,6 +17,9 @@ interface SchedulesListProps {
   onToggleActive: (sync: ScheduledSync) => void;
   onSyncNow: (sync: ScheduledSync) => void;
   onViewDetails: (sync: ScheduledSync) => void;
+  onBulkSyncNow: (ids: number[]) => Promise<void>;
+  onBulkToggleActive: (ids: number[], isActive: boolean) => Promise<void>;
+  onBulkDelete: (ids: number[]) => Promise<void>;
   refreshing?: boolean;
 }
 
@@ -46,20 +50,91 @@ export function SchedulesList({
   onToggleActive,
   onSyncNow,
   onViewDetails,
+  onBulkSyncNow,
+  onBulkToggleActive,
+  onBulkDelete,
   refreshing = false,
 }: SchedulesListProps) {
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
+
+  const allSelected = syncs.length > 0 && syncs.every((s) => selectedIds.has(s.id));
+
+  const toggleAll = useCallback(() => {
+    if (allSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(syncs.map((s) => s.id)));
+    }
+  }, [allSelected, syncs]);
+
+  const toggleOne = useCallback((id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
+  const selectedSyncs = useMemo(
+    () => syncs.filter((s) => selectedIds.has(s.id)),
+    [syncs, selectedIds],
+  );
+  const anyActive = selectedSyncs.some((s) => s.is_active);
+  const anyPaused = selectedSyncs.some((s) => !s.is_active);
+
+  const handleBulkSyncNow = async () => {
+    const ids = Array.from(selectedIds);
+    setSelectedIds(new Set());
+    await onBulkSyncNow(ids);
+  };
+
+  const handleBulkToggleActive = async () => {
+    const ids = Array.from(selectedIds);
+    setSelectedIds(new Set());
+    await onBulkToggleActive(ids, !anyActive);
+  };
+
+  const handleBulkDelete = async () => {
+    const ids = Array.from(selectedIds);
+    setSelectedIds(new Set());
+    setBulkDeleteConfirm(false);
+    await onBulkDelete(ids);
+  };
+
   const columns: Column<ScheduledSync>[] = useMemo(
     () => [
+      {
+        id: "select",
+        header: "",
+        className: "w-10",
+        headerClassName: "w-10",
+        cell: (sync: ScheduledSync) => (
+          <input
+            type="checkbox"
+            checked={selectedIds.has(sync.id)}
+            onChange={() => toggleOne(sync.id)}
+            onClick={(e) => e.stopPropagation()}
+            className="h-4 w-4 rounded border-border text-accent-500 focus:ring-accent-500 bg-bg-surface cursor-pointer"
+          />
+        ),
+      },
       {
         id: "title",
         header: "Title",
         sortable: true,
         filterable: true,
+        sortValue: (sync: ScheduledSync) => sync.target_playlist_name,
+        filterValue: (sync: ScheduledSync) => sync.target_playlist_name,
         cell: (sync: ScheduledSync) => (
           <div className="text-fg">
             <div className="font-medium hover:text-accent-500 flex items-center gap-1.5 group">
-              {sync.plex_playlist_name}
-              <CopyButton value={sync.plex_playlist_name} label="playlist name" />
+              {sync.target_playlist_name}
+              <CopyButton value={sync.target_playlist_name} label="playlist name" />
             </div>
           </div>
         ),
@@ -164,7 +239,7 @@ export function SchedulesList({
         ),
       },
     ],
-    [onEdit, onDelete, onToggleActive, onSyncNow],
+    [onEdit, onDelete, onToggleActive, onSyncNow, selectedIds, allSelected, toggleOne],
   );
 
   if (error && syncs.length === 0) {
@@ -178,17 +253,83 @@ export function SchedulesList({
   }
 
   return (
-    <Card padding="none">
-      {refreshing && <div className="h-1 bg-accent-500/50 animate-pulse rounded-t" />}
-      <div className="p-4 pb-0">
-        <DataTable
-          columns={columns}
-          data={syncs}
-          keyExtractor={(sync) => sync.id}
-          onRowClick={onViewDetails}
-          loading={loading}
-        />
-      </div>
-    </Card>
+    <div className="relative">
+      <Card padding="none">
+        {refreshing && <div className="h-1 bg-accent-500/50 animate-pulse rounded-t" />}
+
+        {selectedIds.size > 0 && (
+          <div className="flex items-center gap-3 px-4 py-2.5 bg-accent-500/10 border-b border-accent-500/20">
+            <span className="text-sm font-medium text-accent-500">
+              {selectedIds.size} selected
+            </span>
+            <div className="flex items-center gap-1.5">
+              <Button
+                variant="ghost"
+                size="xs"
+                icon={<RotateCw size={14} />}
+                onClick={handleBulkSyncNow}
+              >
+                Sync Now
+              </Button>
+              {anyActive && (
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  icon={<Pause size={14} />}
+                  onClick={handleBulkToggleActive}
+                >
+                  Pause
+                </Button>
+              )}
+              {anyPaused && (
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  icon={<Play size={14} />}
+                  onClick={handleBulkToggleActive}
+                >
+                  Resume
+                </Button>
+              )}
+              <Button
+                variant="ghost"
+                size="xs"
+                icon={<Trash2 size={14} />}
+                onClick={() => setBulkDeleteConfirm(true)}
+                className="text-danger-500 hover:bg-danger-500/10"
+              >
+                Delete
+              </Button>
+            </div>
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              className="ml-auto text-xs text-fg-muted hover:text-fg"
+            >
+              Clear selection
+            </button>
+          </div>
+        )}
+
+        <div className="p-4 pb-0">
+          <DataTable
+            columns={columns}
+            data={syncs}
+            keyExtractor={(sync) => sync.id}
+            onRowClick={onViewDetails}
+            loading={loading}
+          />
+        </div>
+      </Card>
+
+      <ConfirmDialog
+        open={bulkDeleteConfirm}
+        onCancel={() => setBulkDeleteConfirm(false)}
+        onConfirm={handleBulkDelete}
+        title="Delete Schedules"
+        message={`Are you sure you want to delete ${selectedIds.size} schedule(s)? This will also delete their playlist tracks and history.`}
+        confirmLabel="Delete All"
+        variant="danger"
+      />
+    </div>
   );
 }

@@ -31,7 +31,7 @@ def check_and_trigger_scheduled_syncs(self):
             result = db.execute(stmt)
             due_syncs = result.scalars().all()
             for sync in due_syncs:
-                logger.info(f"Triggering sync: {sync.plex_playlist_name} (ID: {sync.id})")
+                logger.info(f"Triggering sync: {sync.target_playlist_name} (ID: {sync.id})")
                 scheduled_sync_task.delay(sync.id)
             return {"status": "SUCCESS", "syncs_triggered": len(due_syncs)}
         finally:
@@ -60,7 +60,7 @@ def scheduled_sync_task(self, schedule_id: int):
                 summary=f"Scheduled sync #{schedule_id} failed — sync not found",
             )
             return {"status": "FAILED", "error": "Sync not found"}
-        source_url, source, replace_existing, title = sync.source_url, sync.source, sync.replace_existing, sync.plex_playlist_name
+        source_url, source, replace_existing, title = sync.source_url, sync.source, sync.replace_existing, sync.target_playlist_name
     finally:
         db.close()
 

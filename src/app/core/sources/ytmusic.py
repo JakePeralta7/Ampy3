@@ -10,15 +10,24 @@ from typing import List
 import requests
 
 from src.app.core.models import IPlatformSource, PlaylistMetadata, TrackMetadata
+from src.app.core.sources.registry import register_source
 from src.app.settings import settings
 
 logger = logging.getLogger(__name__)
 
 
+@register_source("youtube_music")
 class YouTubeMusicSource(IPlatformSource):
     """Extracts playlists from YouTube Music via yt-dlp."""
 
+    source_id = "youtube_music"
+    display_name = "YouTube Music"
+
     YTM_URL_PATTERN = re.compile(r"(https?://music\.youtube\.com/playlist\?list=[a-zA-Z0-9_-]+)")
+
+    @classmethod
+    def supports_url(cls, url: str) -> bool:
+        return bool(cls.YTM_URL_PATTERN.search(url))
 
     @classmethod
     def _parse_playlist_id(cls, url: str) -> str | None:
@@ -38,7 +47,7 @@ class YouTubeMusicSource(IPlatformSource):
         # Try Valkey cache first (5 min TTL)
         from src.app.services.valkey import ValkeyService
         try:
-            cache = ValkeyService.get_client()
+            cache = ValkeyService.get_instance()
             cached = await cache.get(cache_key)
             if cached:
                 logger.info("Cache hit for playlist '%s' — using cached yt-dlp output", pl_id)
@@ -73,7 +82,7 @@ class YouTubeMusicSource(IPlatformSource):
 
         # Cache the result (non-blocking on failure)
         try:
-            cache = ValkeyService.get_client()
+            cache = ValkeyService.get_instance()
             await cache.setex(cache_key, 300, json.dumps(data))
         except Exception as e:
             logger.debug("Failed to cache yt-dlp output (non-fatal): %s", e)
@@ -120,6 +129,4 @@ class YouTubeMusicSource(IPlatformSource):
             external_url=playlist_url,
         )
 
-    @classmethod
-    def get_sources_list(cls) -> list[dict]:
-        return [{"id": "youtube_music", "name": "YouTube Music", "type": "ytmusic"}]
+

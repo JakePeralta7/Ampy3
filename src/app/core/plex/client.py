@@ -6,8 +6,7 @@ from typing import Any
 
 import httpx
 
-from src.app.core.plex.matching import _best_match, _extract_primary_artist, _normalize_album
-from src.app.settings import settings
+from src.app.core.matching import _best_match, _extract_primary_artist, _normalize_album
 
 logger = logging.getLogger(__name__)
 
@@ -15,11 +14,9 @@ logger = logging.getLogger(__name__)
 
 class PlexClient:
 
-    def __init__(self, token: str | None = None, base_url: str | None = None):
-        self._token = token or settings.plex_token
-        self._base_url = base_url or settings.plex_host
-        if not self._token:
-            raise ValueError("Plex token missing in application settings.")
+    def __init__(self, token: str, base_url: str):
+        self._token = token
+        self._base_url = base_url
         self.client = httpx.AsyncClient(base_url=self._base_url, timeout=10.0)
         self.client.headers.update({
             "X-Plex-Token": self._token,
