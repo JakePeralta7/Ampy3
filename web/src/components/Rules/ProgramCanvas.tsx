@@ -13,7 +13,9 @@ import {
   ReactFlowProvider,
   useEdgesState,
   useNodesState,
+  useReactFlow,
 } from "@xyflow/react";
+import { AlignLeft, Copy, LayoutGrid } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "@xyflow/react/dist/style.css";
 
@@ -27,15 +29,91 @@ import { TestPanel } from "./TestPanel";
 
 export type { MatchRuleCanvas, MatchRuleEdge, MatchRuleNode };
 
+// Layout constants — must match backend layout.py
+const H_SPACING = 220;
+const V_SPACING = 120;
+const MARGIN_X = 80;
+const MARGIN_Y = 80;
+
 interface ProgramCanvasProps {
   ruleId: number | null;
   ruleName: string;
+  isDefault: boolean;
   canvas: MatchRuleCanvas;
   onCanvasChange: (canvas: MatchRuleCanvas) => void;
   onNameChange: (name: string) => void;
   onBack: () => void;
   onSave: (canvas: MatchRuleCanvas) => void;
+  onClone: () => void;
   saving?: boolean;
+}
+
+/**
+ * Compute auto-layout positions for nodes using a hierarchical left-to-right
+ * algorithm that mirrors the Python backend's layout.py.
+ */
+function computeAutoLayout(nodes: Node[], edges: Edge[]): Map<string, { x: number; y: number }> {
+  const nodeIds = nodes.map((n) => n.id);
+  const children: Map<string, string[]> = new Map(nodeIds.map((id) => [id, []]));
+  const inDegree: Map<string, number> = new Map(nodeIds.map((id) => [id, 0]));
+
+  for (const edge of edges) {
+    children.get(edge.source)?.push(edge.target);
+    inDegree.set(edge.target, (inDegree.get(edge.target) ?? 0) + 1);
+  }
+
+  // BFS layer assignment
+  const layer: Map<string, number> = new Map();
+  const queue: string[] = [];
+
+  for (const id of nodeIds) {
+    if ((inDegree.get(id) ?? 0) === 0) {
+      layer.set(id, 0);
+      queue.push(id);
+    }
+  }
+  if (queue.length === 0) {
+    for (const id of nodeIds) {
+      layer.set(id, 0);
+      queue.push(id);
+    }
+  }
+
+  let qi = 0;
+  while (qi < queue.length) {
+    const cur = queue[qi++];
+    const curLayer = layer.get(cur) ?? 0;
+    for (const child of children.get(cur) ?? []) {
+      const newLayer = curLayer + 1;
+      if (!layer.has(child) || (layer.get(child) ?? 0) < newLayer) {
+        layer.set(child, newLayer);
+        queue.push(child);
+      }
+    }
+  }
+  for (const id of nodeIds) {
+    if (!layer.has(id)) layer.set(id, 0);
+  }
+
+  // Group by layer (in original node order)
+  const layers: Map<number, string[]> = new Map();
+  for (const id of nodeIds) {
+    const l = layer.get(id) ?? 0;
+    if (!layers.has(l)) layers.set(l, []);
+    layers.get(l)?.push(id);
+  }
+
+  // Assign pixel positions
+  const positions: Map<string, { x: number; y: number }> = new Map();
+  for (const [layerIdx, layerNodes] of layers) {
+    for (let ni = 0; ni < layerNodes.length; ni++) {
+      positions.set(layerNodes[ni], {
+        x: MARGIN_X + layerIdx * H_SPACING,
+        y: MARGIN_Y + ni * V_SPACING,
+      });
+    }
+  }
+  return positions;
 }
 
 function generateNodeId(existingIds: Set<string> = new Set()): string {
@@ -78,6 +156,8 @@ function reactFlowEdgeFromRule(e: MatchRuleEdge): Edge {
     target: e.target,
     sourceHandle: e.sourceHandle,
     targetHandle: e.targetHandle,
+    animated: true,
+    style: { strokeWidth: 1.5, stroke: "#60a5fa" },
   };
 }
 
@@ -98,11 +178,14 @@ export function ProgramCanvasInner({
   onNameChange,
   onBack,
   onSave,
+  onClone,
   saving,
   ruleName,
+  isDefault,
 }: ProgramCanvasProps) {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const [rfInstance, setRfInstance] = useState<ReactFlowInstance | null>(null);
+  const { fitView } = useReactFlow();
 
   const initialNodes = useMemo(() => canvas.nodes.map(reactFlowNodeFromRule), [canvas.nodes]);
   const initialEdges = useMemo(() => canvas.edges.map(reactFlowEdgeFromRule), [canvas.edges]);
@@ -138,10 +221,8 @@ export function ProgramCanvasInner({
         });
       }
     };
-
     const timer1 = setTimeout(applyMinimapStyling, 100);
     const timer2 = setTimeout(applyMinimapStyling, 300);
-
     return () => {
       clearTimeout(timer1);
       clearTimeout(timer2);
@@ -175,6 +256,7 @@ export function ProgramCanvasInner({
   const onDrop = useCallback(
     (event: React.DragEvent) => {
       event.preventDefault();
+      if (isDefault) return; // read-only
       const type = event.dataTransfer.getData("application/reactflow");
       if (!type || !getNodeDef(type)) return;
 
@@ -187,14 +269,11 @@ export function ProgramCanvasInner({
       const def = getNodeDef(type);
       setNodes((nds) => {
         const existingIds = new Set(nds.map((n) => n.id));
-
         let position = screenPos;
         const nodeWidth = 160;
         const nodeHeight = 100;
         let offset = 0;
-        const maxAttempts = 10;
-
-        while (offset < maxAttempts) {
+        while (offset < 10) {
           const testPos = { x: position.x + offset * 20, y: position.y + offset * 20 };
           const overlaps = nds.some(
             (n) =>
@@ -218,12 +297,24 @@ export function ProgramCanvasInner({
             config: def ? { ...def.defaultConfig } : {},
           },
         };
-
         return nds.concat(newNode);
       });
     },
-    [rfInstance, setNodes],
+    [rfInstance, setNodes, isDefault],
   );
+
+  /** Apply automatic tidy-up layout to current nodes/edges. */
+  const handleTidyUp = useCallback(() => {
+    const positions = computeAutoLayout(nodes, edges);
+    setNodes((nds) =>
+      nds.map((n) => {
+        const pos = positions.get(n.id);
+        return pos ? { ...n, position: pos } : n;
+      }),
+    );
+    // Fit view after layout settles
+    setTimeout(() => fitView({ padding: 0.15, duration: 300 }), 50);
+  }, [nodes, edges, setNodes, fitView]);
 
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     setSelectedNode(node.id);
@@ -305,13 +396,12 @@ export function ProgramCanvasInner({
         x: document.documentElement.clientWidth / 2,
         y: document.documentElement.clientHeight / 3,
       });
-      const position = center;
       setNodes((nds) => {
         const existingIds = new Set(nds.map((n) => n.id));
         const newNode: Node = {
           id: generateNodeId(existingIds),
           type,
-          position,
+          position: center,
           data: {
             label: def?.label || type,
             nodeType: type,
@@ -332,52 +422,6 @@ export function ProgramCanvasInner({
     onSave(canvasData);
   }, [nodes, edges, onCanvasChange, onSave]);
 
-  const handleQuickStart = useCallback(() => {
-    const searchNodeId = "qs_search";
-    const compareNodeId = "qs_compare";
-    const searchNode: Node = {
-      id: searchNodeId,
-      type: "search",
-      position: { x: 100, y: 100 },
-      data: {
-        label: "Search",
-        nodeType: "search",
-        config: {
-          fields_to_search: ["search_title", "search_artist", "search_album"],
-          max_results: 50,
-        },
-      },
-    };
-
-    const compareNode: Node = {
-      id: compareNodeId,
-      type: "compare",
-      position: { x: 400, y: 100 },
-      data: {
-        label: "Compare",
-        nodeType: "compare",
-        config: {
-          fields_to_match: "title,artist_name,album_name",
-          threshold: 0.75,
-          weights: { title: 0.5, artist_name: 0.25, album_name: 0.25 },
-        },
-      },
-    };
-
-    const edge: Edge = {
-      id: `e_${searchNodeId}_${compareNodeId}`,
-      source: searchNodeId,
-      target: compareNodeId,
-      sourceHandle: "out",
-      targetHandle: "candidates",
-      animated: true,
-      style: { strokeWidth: 1.5, stroke: "#60a5fa" },
-    };
-
-    setNodes([searchNode, compareNode]);
-    setEdges([edge]);
-  }, [setNodes, setEdges]);
-
   const selectedNodeType = selectedNode
     ? (nodes.find((n) => n.id === selectedNode)?.type ?? null)
     : null;
@@ -390,30 +434,56 @@ export function ProgramCanvasInner({
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-2 border-b border-border bg-bg-surface">
         <Button variant="ghost" size="xs" onClick={onBack}>
-          ← Back to Pipeline
+          ← Back
         </Button>
         <input
           type="text"
           value={ruleName}
           onChange={(e) => onNameChange(e.target.value)}
-          className="flex-1 px-2 py-1 text-sm font-medium bg-transparent border border-border rounded-sm focus:outline-none focus:ring-1 focus:ring-border-focus text-fg"
+          readOnly={isDefault}
+          className="flex-1 px-2 py-1 text-sm font-medium bg-transparent border border-border rounded-sm focus:outline-none focus:ring-1 focus:ring-border-focus text-fg disabled:opacity-50"
           placeholder="Rule name"
         />
+        {/* Tidy Up — applies auto-layout */}
         <Button
-          variant="primary"
-          size="sm"
-          onClick={persistCanvas}
-          disabled={saving}
-          loading={saving}
+          variant="secondary"
+          size="xs"
+          icon={<LayoutGrid size={12} />}
+          onClick={handleTidyUp}
+          title="Automatically tidy up node positions"
         >
-          {saving ? "Saving..." : "Save"}
+          Tidy Up
         </Button>
+        {isDefault ? (
+          <Button variant="secondary" size="sm" icon={<Copy size={14} />} onClick={onClone}>
+            Clone to Edit
+          </Button>
+        ) : (
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={persistCanvas}
+            disabled={saving}
+            loading={saving}
+          >
+            {saving ? "Saving..." : "Save"}
+          </Button>
+        )}
       </div>
+
+      {/* Default rule read-only banner */}
+      {isDefault && (
+        <div className="flex items-center gap-2 px-4 py-2 bg-accent-500/10 border-b border-accent-500/20 text-xs text-accent-500">
+          <AlignLeft size={12} />
+          This is a built-in default rule and cannot be edited. Clone it to create a customisable
+          copy.
+        </div>
+      )}
 
       {/* Body */}
       <div className="flex flex-1 overflow-hidden">
         {/* Left: Node Palette */}
-        <NodePalette onAddNode={handleAddNode} />
+        <NodePalette onAddNode={isDefault ? () => {} : handleAddNode} />
 
         {/* Center: Canvas */}
         <div
@@ -422,33 +492,21 @@ export function ProgramCanvasInner({
           onDrop={onDrop}
           onDragOver={onDragOver}
         >
-          {nodes.length === 0 && (
-            <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-bg-muted to-bg-app z-10">
-              <div className="text-center">
-                <div className="mb-4 text-sm text-fg-muted">
-                  <p className="font-medium mb-2">Quick start: Search + Compare</p>
-                  <p className="text-xs mb-4">Creates a ready-to-use matching rule</p>
-                </div>
-                <Button onClick={handleQuickStart} variant="primary" size="md">
-                  + Create Search Rule
-                </Button>
-                <p className="text-xs text-fg-subtle mt-4">Or drag nodes from the left panel</p>
-              </div>
-            </div>
-          )}
           <ReactFlow
             nodes={nodes}
             edges={edges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
+            onNodesChange={isDefault ? undefined : onNodesChange}
+            onEdgesChange={isDefault ? undefined : onEdgesChange}
+            onConnect={isDefault ? undefined : onConnect}
             onInit={setRfInstance}
             onNodeClick={onNodeClick}
-            onEdgeClick={onEdgeClick}
+            onEdgeClick={isDefault ? undefined : onEdgeClick}
             onPaneClick={onPaneClick}
             nodeTypes={nodeTypes}
             fitView
-            deleteKeyCode={["Backspace", "Delete"]}
+            deleteKeyCode={isDefault ? null : ["Backspace", "Delete"]}
+            nodesDraggable={!isDefault}
+            nodesConnectable={!isDefault}
             connectionLineStyle={{ stroke: "#60a5fa", strokeWidth: 2 }}
             defaultEdgeOptions={{
               animated: true,
@@ -472,7 +530,7 @@ export function ProgramCanvasInner({
         </div>
 
         {/* Right: Inspector */}
-        {selectedEdge ? (
+        {selectedEdge && !isDefault ? (
           <div className="w-72 bg-bg-muted border-l border-border p-4 flex-shrink-0">
             <div className="text-xs text-fg-subtle uppercase tracking-wider mb-3">Connection</div>
             <div className="text-xs text-fg-muted mb-4 space-y-1">
@@ -493,11 +551,12 @@ export function ProgramCanvasInner({
             nodeType={selectedNodeType}
             nodeName={nodeName}
             config={selectedNodeConfig}
-            onNameChange={handleNodeNameChange}
-            onConfigChange={handleConfigChange}
-            onDelete={handleDeleteNode}
-            onBreakpointToggle={handleBreakpointToggle}
+            onNameChange={isDefault ? () => {} : handleNodeNameChange}
+            onConfigChange={isDefault ? () => {} : handleConfigChange}
+            onDelete={isDefault ? () => {} : handleDeleteNode}
+            onBreakpointToggle={isDefault ? () => {} : handleBreakpointToggle}
             hasBreakpoint={hasBreakpoint}
+            readOnly={isDefault}
           />
         )}
       </div>

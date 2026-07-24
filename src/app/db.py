@@ -1,8 +1,5 @@
 """Database configuration and initialization."""
-import asyncio
-import os
 from collections.abc import AsyncGenerator, Generator
-from pathlib import Path
 
 from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import (
@@ -16,7 +13,6 @@ from src.app.settings import settings
 
 # Create async engine for PostgreSQL (used by FastAPI)
 async_engine = create_async_engine(
-    # Convert postgresql:// to postgresql+asyncpg://
     settings.database_url.replace("postgresql://", "postgresql+asyncpg://"),
     echo=False,
     future=True,
@@ -66,36 +62,24 @@ def get_sync_session() -> Generator[Session, None, None]:
         db.close()
 
 
-def _run_alembic_migrations() -> None:
-    """Run Alembic migrations to bring the database to the latest revision."""
-    import subprocess
-    import sys
+async def init_db() -> None:
+    """Create all tables from ORM models, then seed default rules.
 
-    result = subprocess.run(
-        [sys.executable, "-m", "alembic", "-c", "alembic/alembic.ini", "upgrade", "head"],
-        capture_output=True,
-        text=True,
-        cwd=str(Path(__file__).resolve().parent.parent.parent),
-        env={
-            **os.environ,
-            "DATABASE_URL": settings.database_url,
-        },
-    )
-    if result.stdout:
-        for line in result.stdout.strip().splitlines():
-            print(line)
-    if result.returncode != 0:
-        stderr = result.stderr.strip() if result.stderr else ""
-        print(f"Migration failed (exit {result.returncode}): {stderr}")
-        raise RuntimeError(f"alembic upgrade failed: {stderr}")
+    Uses ``create_all(checkfirst=True)`` so existing tables are never
+    dropped — safe to call on every startup.  Future schema changes
+    should be handled via Alembic migrations generated against the
+    updated models.
+    """
+    import src.app.models  # noqa: F401 — registers all ORM models on Base
+
+    async with async_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all, checkfirst=True)
+
+    from src.app.match_rules.loader import seed_default_rules
+    await seed_default_rules()
 
 
-async def init_db():
-    """Initialize database via Alembic migrations (runs subprocess at startup)."""
-    await asyncio.to_thread(_run_alembic_migrations)
-
-
-async def close_db():
+async def close_db() -> None:
     """Close database connections."""
     await async_engine.dispose()
     sync_engine.dispose()

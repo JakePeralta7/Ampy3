@@ -6,6 +6,7 @@ import { Badge } from "../ui/Badge";
 import { CopyButton } from "../ui/CopyButton";
 import { type Column, DataTable } from "../ui/DataTable";
 import { Slideover } from "../ui/Slideover";
+import { Tabs } from "../ui/Tabs";
 import { SyncHistory } from "./SyncHistory";
 import { TrackDetailModal } from "./TrackDetailModal";
 
@@ -220,28 +221,14 @@ export function PlaylistDetails({
 
         {playlistDetails && (
           <>
-            <div className="flex items-center gap-1 mb-4 border-b border-border">
-              <button
-                onClick={() => setTab("tracks")}
-                className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors duration-fast ${
-                  tab === "tracks"
-                    ? "border-accent-500 text-accent-500"
-                    : "border-transparent text-fg-muted hover:text-fg"
-                }`}
-              >
-                Tracks
-              </button>
-              <button
-                onClick={() => setTab("history")}
-                className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors duration-fast ${
-                  tab === "history"
-                    ? "border-accent-500 text-accent-500"
-                    : "border-transparent text-fg-muted hover:text-fg"
-                }`}
-              >
-                History
-              </button>
-            </div>
+            <Tabs
+              tabs={[
+                { id: "tracks", label: "Tracks" },
+                { id: "history", label: "History" },
+              ]}
+              activeTab={tab}
+              onChange={(id) => setTab(id as "tracks" | "history")}
+            />
 
             {tab === "tracks" && (
               <>
@@ -251,20 +238,15 @@ export function PlaylistDetails({
                   </p>
                   <p className="text-sm text-fg-muted">
                     Matched: {playlistDetails.matched_count} | Failed:{" "}
-                    {playlistDetails.failed_count} | Total:{" "}
-                    {playlistDetails.total_source_tracks}
+                    {playlistDetails.failed_count} | Total: {playlistDetails.total_source_tracks}
                   </p>
                 </div>
 
                 {playlistDetails.tracks.length === 0 ? (
-                  <p className="text-fg-muted text-center py-8">
-                    No tracks in this playlist
-                  </p>
+                  <p className="text-fg-muted text-center py-8">No tracks in this playlist</p>
                 ) : (
                   <>
-                    {loading && (
-                      <div className="h-1 bg-accent-500/50 animate-pulse rounded-t" />
-                    )}
+                    {loading && <div className="h-1 bg-accent-500/50 animate-pulse rounded-t" />}
                     <DataTable
                       columns={columns}
                       data={rows}
@@ -272,9 +254,7 @@ export function PlaylistDetails({
                       onRowClick={(r) => {
                         if (r._detail) onTrackSelect(r._idx);
                       }}
-                      rowClassName={(r) =>
-                        r.status === "unmatched" ? "bg-danger-500/5" : ""
-                      }
+                      rowClassName={(r) => (r.status === "unmatched" ? "bg-danger-500/5" : "")}
                     />
                   </>
                 )}

@@ -1,114 +1,67 @@
 #!/usr/bin/env python
-"""Database migration utility script.
+"""Database migration utility.
 
-This script helps manage database migrations and can fix migration state issues.
+Schema initialisation (create_all) happens automatically at API startup.
+Use this script to manage future Alembic migrations for incremental changes.
 
 Usage:
-    python migrate.py upgrade    # Apply all pending migrations
-    python migrate.py reset      # Reset migration state and reapply all
-    python migrate.py status     # Show current migration status
+    python migrate.py upgrade    # Apply any pending Alembic migrations
+    python migrate.py status     # Show current Alembic revision
+    python migrate.py autogen    # Generate a new migration from model changes
 """
-import asyncio
 import sys
-from sqlalchemy import create_engine, inspect, text
-from alembic.config import Config
-from alembic import command
 
+from alembic.config import Config
+from sqlalchemy import create_engine, text
+
+from alembic import command
 from src.app.settings import settings
 
 
-def get_current_revision(engine):
-    """Get the current alembic revision."""
+def _alembic_cfg() -> Config:
+    cfg = Config("alembic/alembic.ini")
+    cfg.set_main_option("sqlalchemy.url", settings.database_url)
+    return cfg
+
+
+def _current_revision() -> str | None:
+    engine = create_engine(settings.database_url)
     try:
         with engine.connect() as conn:
-            result = conn.execute(text("SELECT version_num FROM alembic_version LIMIT 1"))
-            row = result.fetchone()
+            row = conn.execute(text("SELECT version_num FROM alembic_version LIMIT 1")).fetchone()
             return row[0] if row else None
     except Exception:
         return None
-
-
-def upgrade_migrations():
-    """Upgrade to the latest migration."""
-    alembic_cfg = Config("alembic/alembic.ini")
-    alembic_cfg.set_main_option("sqlalchemy.url", settings.database_url)
-    
-    engine = create_engine(settings.database_url)
-    try:
-        current_rev = get_current_revision(engine)
-        print(f"Current revision: {current_rev}")
-        
-        print("Upgrading to head...")
-        command.upgrade(alembic_cfg, "head")
-        
-        new_rev = get_current_revision(engine)
-        print(f"New revision: {new_rev}")
-        print("✓ Migration upgrade completed successfully")
     finally:
         engine.dispose()
 
 
-def reset_migrations():
-    """Reset migration state (downgrade to initial, then upgrade to head)."""
-    alembic_cfg = Config("alembic/alembic.ini")
-    alembic_cfg.set_main_option("sqlalchemy.url", settings.database_url)
-    
-    engine = create_engine(settings.database_url)
-    try:
-        current_rev = get_current_revision(engine)
-        print(f"Current revision: {current_rev}")
-        
-        # Downgrade to the initial migration
-        print("Downgrading to initial revision...")
-        command.downgrade(alembic_cfg, "54f7e2d8b1a3")
-        
-        # Upgrade to head
-        print("Upgrading to head...")
-        command.upgrade(alembic_cfg, "head")
-        
-        new_rev = get_current_revision(engine)
-        print(f"New revision: {new_rev}")
-        print("✓ Migration reset completed successfully")
-    finally:
-        engine.dispose()
+def upgrade() -> None:
+    print(f"Current revision: {_current_revision()}")
+    command.upgrade(_alembic_cfg(), "head")
+    print(f"New revision:     {_current_revision()}")
 
 
-def show_status():
-    """Show migration status."""
-    alembic_cfg = Config("alembic/alembic.ini")
-    alembic_cfg.set_main_option("sqlalchemy.url", settings.database_url)
-    
-    engine = create_engine(settings.database_url)
-    try:
-        current_rev = get_current_revision(engine)
-        print(f"Current revision: {current_rev}")
-        
-        # Show available migrations
-        print("\nAvailable migrations:")
-        command.history(alembic_cfg)
-    finally:
-        engine.dispose()
+def status() -> None:
+    print(f"Current revision: {_current_revision()}")
+    command.history(_alembic_cfg())
+
+
+def autogen() -> None:
+    msg = input("Migration message: ").strip() or "auto"
+    command.revision(_alembic_cfg(), message=msg, autogenerate=True)
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python migrate.py [upgrade|reset|status]")
+    actions = {"upgrade": upgrade, "status": status, "autogen": autogen}
+    action = sys.argv[1] if len(sys.argv) > 1 else ""
+    if action not in actions:
+        print(f"Usage: python migrate.py [{' | '.join(actions)}]")
         sys.exit(1)
-    
-    action = sys.argv[1]
-    
     try:
-        if action == "upgrade":
-            upgrade_migrations()
-        elif action == "reset":
-            reset_migrations()
-        elif action == "status":
-            show_status()
-        else:
-            print(f"Unknown action: {action}")
-            sys.exit(1)
+        actions[action]()
     except Exception as e:
-        print(f"✗ Error: {e}")
+        print(f"Error: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)

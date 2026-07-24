@@ -1,6 +1,7 @@
 import type React from "react";
 import { useCallback, useEffect, useState } from "react";
 import type { CreateScheduledSyncInput, ScheduledSync } from "../../api/schedules";
+import { INPUT_STYLES, SELECT_STYLES } from "../../lib/styles";
 import { Button } from "../ui/Button";
 
 interface ScheduleFormProps {
@@ -104,7 +105,7 @@ export function ScheduleForm({
           <select
             value={source}
             onChange={(e) => setSource(e.target.value)}
-            className="w-full px-3 py-2 text-sm border border-border rounded-md bg-bg-surface text-fg disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-border-focus"
+            className={SELECT_STYLES}
             disabled={isLoading}
           >
             {SOURCES.map((s) => (
@@ -122,7 +123,7 @@ export function ScheduleForm({
             value={sourceUrl}
             onChange={(e) => setSourceUrl(e.target.value)}
             placeholder="https://music.youtube.com/playlist?list=..."
-            className="w-full px-3 py-2 text-sm border border-border rounded-md bg-bg-surface text-fg placeholder-fg-subtle disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-border-focus"
+            className={INPUT_STYLES}
             disabled={isLoading}
           />
         </div>
@@ -136,7 +137,7 @@ export function ScheduleForm({
             value={targetPlaylistName}
             onChange={(e) => setTargetPlaylistName(e.target.value)}
             placeholder="e.g., Synced Playlist"
-            className="w-full px-3 py-2 text-sm border border-border rounded-md bg-bg-surface text-fg placeholder-fg-subtle disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-border-focus"
+            className={INPUT_STYLES}
             disabled={isLoading}
           />
         </div>
@@ -146,7 +147,7 @@ export function ScheduleForm({
           <select
             value={scheduleInterval}
             onChange={(e) => setScheduleInterval(e.target.value)}
-            className="w-full px-3 py-2 text-sm border border-border rounded-md bg-bg-surface text-fg disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-border-focus"
+            className={SELECT_STYLES}
             disabled={isLoading}
           >
             {SCHEDULE_INTERVALS.map((s) => (

@@ -172,14 +172,22 @@ async def get_sync_diff(
                 old_track = old_keys[key]
                 was_matched = old_track.match_item_id is not None
                 is_matched = track.match_item_id is not None
-                unchanged.append(SyncDiffItem(
+                item = SyncDiffItem(
                     source_title=track.source_title,
                     source_artist=track.source_artist,
                     source_album=track.source_album,
                     match_item_id=track.match_item_id,
                     match_title=track.match_title,
                     match_artist=track.match_artist,
-                ))
+                )
+                if is_matched and not was_matched:
+                    # Newly matched this run
+                    added.append(item)
+                elif was_matched and not is_matched:
+                    # Lost its match this run
+                    removed.append(item)
+                else:
+                    unchanged.append(item)
             else:
                 added.append(SyncDiffItem(
                     source_title=track.source_title,

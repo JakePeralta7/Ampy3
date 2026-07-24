@@ -35,8 +35,8 @@ RUN pip install --no-cache-dir --prefer-binary --prefix=/install -e "."
 COPY alembic/ ./alembic/
 
 
-# --- Final production image ---
-FROM python:3.14-slim
+# --- Base production image (shared by web + worker) ---
+FROM python:3.14-slim AS base
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends ffmpeg && \
@@ -45,7 +45,6 @@ RUN apt-get update && \
 WORKDIR /app
 
 COPY --from=builder /install /usr/local
-COPY --from=web-builder /app/web/dist /app/web/dist
 COPY pyproject.toml ./
 COPY alembic/ ./alembic/
 COPY src/ ./src/
@@ -53,6 +52,14 @@ COPY src/ ./src/
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app/src
 ENV APP_ENV=production
-EXPOSE 8000
 
+# --- Web image (API + SPA) ---
+FROM base AS web
+
+COPY --from=web-builder /app/web/dist /app/web/dist
+EXPOSE 8000
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+# --- Worker image (no frontend) ---
+FROM base AS worker
+CMD ["celery", "-A", "src.app.tasks", "worker"]

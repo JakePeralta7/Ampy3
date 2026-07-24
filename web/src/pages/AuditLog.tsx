@@ -1,10 +1,12 @@
 import { RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { type AuditLogEntry, auditLogsAPI } from "../api/audit";
+import { PageLayout } from "../components/Layout/PageLayout";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { type Column, DataTable } from "../components/ui/DataTable";
+import { formatTimestamp } from "../lib/utils";
 
 const EVENT_LABELS: Record<
   string,
@@ -13,7 +15,10 @@ const EVENT_LABELS: Record<
   "schedule.created": { label: "Schedule Created", variant: "success" },
   "schedule.updated": { label: "Schedule Updated", variant: "neutral" },
   "schedule.deleted": { label: "Schedule Deleted", variant: "danger" },
+  "schedule.bulk_updated": { label: "Schedules Bulk Updated", variant: "neutral" },
+  "schedule.bulk_deleted": { label: "Schedules Bulk Deleted", variant: "danger" },
   "sync.manually_triggered": { label: "Manual Sync", variant: "warning" },
+  "sync.bulk_triggered": { label: "Bulk Sync Triggered", variant: "warning" },
   "sync.started": { label: "Sync Started", variant: "neutral" },
   "sync.completed": { label: "Sync Completed", variant: "success" },
   "sync.failed": { label: "Sync Failed", variant: "danger" },
@@ -22,18 +27,21 @@ const EVENT_LABELS: Record<
   "plex.playlist_created": { label: "Plex Playlist Created", variant: "success" },
   "plex.playlist_deleted": { label: "Plex Playlist Deleted", variant: "danger" },
   "plex.playlist_items_added": { label: "Tracks Added to Plex", variant: "success" },
+  "plex.server_saved": { label: "Plex Server Saved", variant: "success" },
+  "settings.updated": { label: "Settings Updated", variant: "neutral" },
+  owner_registered: { label: "Owner Registered", variant: "success" },
+  login: { label: "Login", variant: "neutral" },
+  login_rejected: { label: "Login Rejected", variant: "danger" },
+  logout: { label: "Logout", variant: "neutral" },
+  "match_rule.created": { label: "Match Rule Created", variant: "success" },
+  "match_rule.updated": { label: "Match Rule Updated", variant: "neutral" },
+  "match_rule.deleted": { label: "Match Rule Deleted", variant: "danger" },
+  "match_rule.cloned": { label: "Match Rule Cloned", variant: "success" },
+  "match_rule.reordered": { label: "Match Rules Reordered", variant: "neutral" },
+  "chat.invoked": { label: "Chat Invoked", variant: "neutral" },
+  "chat.streamed": { label: "Chat Streamed", variant: "neutral" },
   "chat.history_cleared": { label: "Chat History Cleared", variant: "danger" },
 };
-
-function formatTimestamp(ts: string): string {
-  return new Date(ts).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-}
 
 interface AuditLogPageProps {
   limit?: number;
@@ -98,30 +106,26 @@ export function AuditLogPage({ limit = 100 }: AuditLogPageProps) {
   );
 
   return (
-    <div className="flex-1">
-      <div className="max-w-7xl mx-auto p-8">
-        <div className="mb-8 flex items-center justify-between">
-          <div>
-            <h1 className="text-4xl font-bold mb-2 text-fg">Audit Log</h1>
-            <p className="text-fg-muted">Track of all important operations in the system</p>
-          </div>
-          <Button onClick={fetchLogs} icon={<RefreshCw size={14} />} variant="secondary" size="sm">
-            Refresh
-          </Button>
+    <PageLayout
+      title="Audit Log"
+      subtitle="Track of all important operations in the system"
+      actions={
+        <Button onClick={fetchLogs} icon={<RefreshCw size={14} />} variant="secondary" size="sm">
+          Refresh
+        </Button>
+      }
+    >
+      <Card padding="none">
+        <div className="p-4 pb-0">
+          <DataTable columns={columns} data={logs} keyExtractor={(r) => r.id} loading={loading} />
         </div>
+      </Card>
 
-        <Card padding="none">
-          <div className="p-4 pb-0">
-            <DataTable columns={columns} data={logs} keyExtractor={(r) => r.id} loading={loading} />
-          </div>
-        </Card>
-
-        {!loading && (
-          <p className="text-xs text-fg-subtle mt-3 text-center">
-            {total} total entries (showing last {Math.min(limit, total)})
-          </p>
-        )}
-      </div>
-    </div>
+      {!loading && (
+        <p className="text-xs text-fg-subtle mt-3 text-center">
+          {total} total entries (showing last {Math.min(limit, total)})
+        </p>
+      )}
+    </PageLayout>
   );
 }

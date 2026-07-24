@@ -58,16 +58,6 @@ export function SchedulesList({
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
 
-  const allSelected = syncs.length > 0 && syncs.every((s) => selectedIds.has(s.id));
-
-  const toggleAll = useCallback(() => {
-    if (allSelected) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(syncs.map((s) => s.id)));
-    }
-  }, [allSelected, syncs]);
-
   const toggleOne = useCallback((id: number) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -239,7 +229,7 @@ export function SchedulesList({
         ),
       },
     ],
-    [onEdit, onDelete, onToggleActive, onSyncNow, selectedIds, allSelected, toggleOne],
+    [onEdit, onDelete, onToggleActive, onSyncNow, selectedIds, toggleOne],
   );
 
   if (error && syncs.length === 0) {
@@ -259,9 +249,7 @@ export function SchedulesList({
 
         {selectedIds.size > 0 && (
           <div className="flex items-center gap-3 px-4 py-2.5 bg-accent-500/10 border-b border-accent-500/20">
-            <span className="text-sm font-medium text-accent-500">
-              {selectedIds.size} selected
-            </span>
+            <span className="text-sm font-medium text-accent-500">{selectedIds.size} selected</span>
             <div className="flex items-center gap-1.5">
               <Button
                 variant="ghost"

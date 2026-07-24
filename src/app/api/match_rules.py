@@ -5,12 +5,13 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException
 
 from src.app.auth.dependencies import get_current_user
-
 from src.app.core.models import TrackMetadata
-from src.app.core.services.matcher import MatchEngine, get_active_rules
+from src.app.core.services.matcher import MatchEngine
 from src.app.db import AsyncSessionLocal
+from src.app.match_rules import ValidationError, validate_rule_yaml
 from src.app.models import MatchRule
 from src.app.schemas.match_rules import (
+    MatchRuleClone,
     MatchRuleCreate,
     MatchRuleDeleteResponse,
     MatchRuleOut,
@@ -22,6 +23,7 @@ from src.app.schemas.match_rules import (
     _model_to_out,
 )
 from src.app.services import get_sync_target
+from src.app.services.audit import log_event
 
 logger = logging.getLogger(__name__)
 
@@ -74,8 +76,14 @@ async def create_rule(
     body: MatchRuleCreate,
     _user: dict = Depends(get_current_user),  # noqa: B008
 ):
-    """Create a new match rule with auto-assigned priority."""
+    """Create a new user-defined match rule from a YAML definition."""
     from sqlalchemy import func, select
+
+    # Validate YAML before touching the DB
+    try:
+        validate_rule_yaml(body.yaml_content)
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail={"yaml_errors": exc.errors})
 
     try:
         async with AsyncSessionLocal() as session:
@@ -88,15 +96,77 @@ async def create_rule(
                 name=body.name,
                 priority=next_priority,
                 is_active=True,
-                canvas={"nodes": [], "edges": []},
+                is_default=False,
+                yaml_content=body.yaml_content,
             )
             session.add(rule)
             await session.commit()
             await session.refresh(rule)
+
+            await log_event(
+                event_type="match_rule.created",
+                summary=f"Match rule created: {body.name}",
+                resource_type="match_rule",
+                resource_id=str(rule.id),
+            )
+
             return _model_to_out(rule)
     except Exception as e:
         logger.error(f"Error creating rule: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to create rule: {str(e)}")
+
+
+@router.post("/{rule_id}/clone", response_model=MatchRuleOut, status_code=201)
+async def clone_rule(
+    rule_id: int,
+    body: MatchRuleClone,
+    _user: dict = Depends(get_current_user),  # noqa: B008
+):
+    """Clone any rule (especially useful for immutable default rules).
+
+    The clone is a new user-owned rule with the same YAML definition.
+    """
+    from sqlalchemy import func, select
+
+    try:
+        async with AsyncSessionLocal() as session:
+            stmt = select(MatchRule).where(MatchRule.id == rule_id)
+            result = await session.execute(stmt)
+            source = result.scalars().first()
+            if not source:
+                raise HTTPException(status_code=404, detail="Rule not found")
+
+            new_name = body.name or f"{source.name} (copy)"
+            max_priority = await session.execute(
+                select(func.coalesce(func.max(MatchRule.priority), -1))
+            )
+            next_priority = max_priority.scalar() + 1
+
+            clone = MatchRule(
+                name=new_name,
+                priority=next_priority,
+                is_active=True,
+                is_default=False,
+                yaml_content=source.yaml_content,
+            )
+            session.add(clone)
+            await session.commit()
+            await session.refresh(clone)
+
+            await log_event(
+                event_type="match_rule.cloned",
+                summary=f"Match rule cloned: {source.name} → {new_name}",
+                resource_type="match_rule",
+                resource_id=str(clone.id),
+                details={"source_rule_id": rule_id},
+            )
+
+            return _model_to_out(clone)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error cloning rule {rule_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to clone rule: {str(e)}")
 
 
 @router.put("/reorder", response_model=list[MatchRuleOut])
@@ -132,6 +202,13 @@ async def reorder_rules(
                     next_priority += 1
 
             await session.commit()
+
+            await log_event(
+                event_type="match_rule.reordered",
+                summary=f"Match rules reordered: {len(requested_ids)} rules",
+                resource_type="match_rule",
+                details={"rule_ids": requested_ids},
+            )
 
             stmt = select(MatchRule).order_by(MatchRule.priority)
             result = await session.execute(stmt)
@@ -198,7 +275,11 @@ async def update_rule(
     body: MatchRuleUpdate,
     _user: dict = Depends(get_current_user),  # noqa: B008
 ):
-    """Update a match rule's name, active state, or canvas."""
+    """Update a match rule's name, active state, or YAML definition.
+
+    Default rules are immutable — only ``is_active`` can be toggled.
+    Clone them to create an editable copy.
+    """
     from sqlalchemy import select
 
     try:
@@ -213,23 +294,58 @@ async def update_rule(
                 blocked = []
                 if body.name is not None and body.name != rule.name:
                     blocked.append("name")
-                if body.canvas is not None:
-                    blocked.append("canvas")
+                if body.yaml_content is not None:
+                    blocked.append("yaml_content")
                 if blocked:
                     raise HTTPException(
                         status_code=409,
-                        detail=f"Default rules cannot modify: {', '.join(blocked)}. You can only pause/resume them.",
+                        detail=(
+                            f"Default rules are immutable — cannot modify: {', '.join(blocked)}. "
+                            "Clone this rule to create an editable copy."
+                        ),
                     )
+
+            # Validate YAML before persisting
+            if body.yaml_content is not None:
+                try:
+                    validate_rule_yaml(body.yaml_content)
+                except ValidationError as exc:
+                    raise HTTPException(status_code=422, detail={"yaml_errors": exc.errors})
+
+            old_name = rule.name
+            old_active = rule.is_active
 
             if body.name is not None:
                 rule.name = body.name
             if body.is_active is not None:
                 rule.is_active = body.is_active
-            if body.canvas is not None:
-                rule.canvas = body.canvas
+            if body.yaml_content is not None:
+                rule.yaml_content = body.yaml_content
 
             await session.commit()
             await session.refresh(rule)
+
+            changes = []
+            if body.is_active is not None and body.is_active != old_active:
+                changes.append("activated" if body.is_active else "deactivated")
+            if body.name is not None and body.name != old_name:
+                changes.append(f"renamed to {body.name}")
+            if body.yaml_content is not None:
+                changes.append("YAML updated")
+
+            if changes:
+                summary = f"Match rule {', '.join(changes)}: {rule.name}"
+            else:
+                summary = f"Match rule updated: {rule.name}"
+
+            await log_event(
+                event_type="match_rule.updated",
+                summary=summary,
+                resource_type="match_rule",
+                resource_id=str(rule_id),
+                details={"fields_updated": list(body.model_dump(exclude_unset=True).keys())},
+            )
+
             return _model_to_out(rule)
     except HTTPException:
         raise
@@ -257,11 +373,22 @@ async def delete_rule(
             if rule.is_default:
                 raise HTTPException(
                     status_code=409,
-                    detail="Default rules cannot be deleted. Disable them instead.",
+                    detail="Default rules cannot be deleted. Disable or clone them instead.",
                 )
+
+            rule_name = rule.name
+            rule_id_str = str(rule.id)
 
             await session.delete(rule)
             await session.commit()
+
+            await log_event(
+                event_type="match_rule.deleted",
+                summary=f"Match rule deleted: {rule_name}",
+                resource_type="match_rule",
+                resource_id=rule_id_str,
+            )
+
             return MatchRuleDeleteResponse(success=True)
     except HTTPException:
         raise

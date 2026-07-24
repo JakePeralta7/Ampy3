@@ -1,15 +1,14 @@
-import { Cog, GitBranch, MessageSquare, Music2, ScrollText } from "lucide-react";
+import { Cog, GitBranch, LayoutDashboard, MessageSquare, Music2, ScrollText } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { Toaster } from "sonner";
-import { ChatSessionProvider } from "../../contexts/ChatSessionContext";
 import { AppRoutes } from "../../router";
 import { CommandPalette } from "../ui/CommandPalette";
 import { ErrorBoundary } from "../ui/ErrorBoundary";
 import { Nav } from "./Nav";
 
 const paletteItems = [
-  { to: "/", label: "Dashboard", icon: Music2 },
+  { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/syncs", label: "Syncs", icon: Music2 },
   { to: "/chat", label: "Chat", icon: MessageSquare },
   { to: "/audit", label: "Audit Log", icon: ScrollText },
@@ -54,14 +53,12 @@ export function AppLayout() {
 
   return (
     <div className="h-screen flex bg-bg-app">
-      <ChatSessionProvider>
-        {!hideNav && <Nav />}
-        <main className="flex-1 flex flex-col min-w-0">
-          <ErrorBoundary>
-            <AppRoutes />
-          </ErrorBoundary>
-        </main>
-      </ChatSessionProvider>
+      {!hideNav && <Nav />}
+      <main className="flex-1 flex flex-col min-w-0 overflow-y-auto">
+        <ErrorBoundary>
+          <AppRoutes />
+        </ErrorBoundary>
+      </main>
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} items={paletteItems} />
       <Toaster
         theme={theme}

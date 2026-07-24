@@ -1,244 +1,312 @@
-"""LangGraph workflow orchestration for music research, discovery, and Plex playlist management.
+"""LangGraph workflow for the Ampy3 sync investigator agent.
 
-Replaces sync.py with a hierarchical sub-agents architecture:
-- Router: Flow classification (playlist_create, artist_suggestion, general)
-- Coordinator: Parent agent managing playlist workflow sequencing
-- Specialized sub-agents: Research (MusicBrainz), Match (Plex search), Create (Plex playlist), Suggest (analysis)
-- Chat: Free-form conversation with all tools
+Multi-phase task-specific workflow:
+    gather_context → diagnose → group_patterns → verify → create → test_verify → END
 
-Two main paths:
-  - Playlist workflow: research → match → create (sequential with scoped tools)
-  - Free chat: ReAct loop with all tools
+Each phase has:
+  - A dedicated system prompt (scoped to its task)
+  - A restricted tool set (only tools needed for that phase)
+  - Structured state outputs (populate phase-specific state fields)
+  - Clear exit conditions (LLM decides when phase is complete)
+
+The exported ``workflow`` object is consumed by api/chat.py via
+``workflow.astream_events`` and ``workflow.ainvoke``.
 """
 from __future__ import annotations
+
+from langchain_core.messages import SystemMessage
 
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 
-from src.app.llm.agents.base import AgentContext, AgentPhase
-from src.app.llm.agents.chat import ALL_TOOLS, ChatAgent
-from src.app.llm.agents.coordinator import CoordinatorAgent
-from src.app.llm.agents.create import CreateAgent
-from src.app.llm.agents.match import MatchAgent
-from src.app.llm.agents.research import ResearchAgent
-from src.app.llm.agents.router import RouterAgent, route_to_flow
-from src.app.llm.agents.suggest import SuggestAgent
+from src.app.llm.agents.investigator import (
+    CREATE_TOOLS,
+    DIAGNOSE_TOOLS,
+    GATHER_CONTEXT_TOOLS,
+    GROUP_PATTERNS_TOOLS,
+    TEST_VERIFY_TOOLS,
+    VERIFY_TOOLS,
+)
+from src.app.llm.prompts import (
+    CREATE_PROMPT,
+    DIAGNOSE_PROMPT,
+    GATHER_CONTEXT_PROMPT,
+    GROUP_PATTERNS_PROMPT,
+    TEST_VERIFY_PROMPT,
+    VERIFY_PROMPT,
+)
 from src.app.llm.state import AgentState
-from src.app.llm.tools.musicbrainz import (
-    get_mb_artist_releases,
-    get_mb_release_tracks,
-    search_mb_artists,
-    search_mb_by_tag,
-    search_mb_recordings,
-    search_mb_releases,
-)
-from src.app.llm.tools.plex import (
-    add_tracks_to_plex_playlist,
-    create_plex_playlist,
-    delete_plex_playlist,
-    get_plex_playlist_tracks,
-    list_plex_playlists,
-    search_plex_library,
-    search_plex_playlists,
-)
 
-# Tool sets by workflow phase
-RESEARCH_TOOLS = [
-    search_mb_by_tag,
-    search_mb_artists,
-    search_mb_releases,
-    search_mb_recordings,
-    get_mb_artist_releases,
-    get_mb_release_tracks,
-]
+# ─── Tool Nodes (one per phase) ───────────────────────────────────────────────
 
-MATCH_TOOLS = [
-    search_plex_library,
-]
-
-CREATE_TOOLS = [
-    create_plex_playlist,
-    add_tracks_to_plex_playlist,
-    list_plex_playlists,
-    search_plex_playlists,
-    get_plex_playlist_tracks,
-    delete_plex_playlist,
-]
+_gather_context_tools = ToolNode(GATHER_CONTEXT_TOOLS)
+_diagnose_tools = ToolNode(DIAGNOSE_TOOLS)
+_group_patterns_tools = ToolNode(GROUP_PATTERNS_TOOLS)  # No tools, but included for consistency
+_verify_tools = ToolNode(VERIFY_TOOLS)
+_create_tools = ToolNode(CREATE_TOOLS)
+_test_verify_tools = ToolNode(TEST_VERIFY_TOOLS)
 
 
-# ── Initialize agent instances ───────────────────────────────────────────────
+# ─── Phase Node Functions ─────────────────────────────────────────────────────
 
-router_agent = RouterAgent()
-coordinator = CoordinatorAgent()
-research_agent = ResearchAgent()
-match_agent = MatchAgent()
-create_agent = CreateAgent()
-suggest_agent = SuggestAgent()
-chat_agent = ChatAgent()
+async def _gather_context_node(state: AgentState) -> dict:
+    """Phase 1: Gather context about syncs and unmatched tracks."""
+    from src.app.llm.ollama import get_llm
 
-# Create tool nodes
-research_tools = ToolNode(RESEARCH_TOOLS)
-match_tools = ToolNode(MATCH_TOOLS)
-create_tools = ToolNode(CREATE_TOOLS)
-chat_tools = ToolNode(ALL_TOOLS)
-
-
-# ── Async node wrappers ──────────────────────────────────────────────────────
-
-async def router_node(state: AgentState) -> dict:
-    """Execute router agent."""
-    return await router_agent.run(state)
-
-
-async def research_node(state: AgentState) -> dict:
-    """Execute research agent."""
-    return await research_agent.run(state)
-
-
-async def match_node(state: AgentState) -> dict:
-    """Execute match agent."""
-    return await match_agent.run(state)
-
-
-async def create_node(state: AgentState) -> dict:
-    """Execute create agent."""
-    return await create_agent.run(state)
-
-
-async def suggest_node(state: AgentState) -> dict:
-    """Execute suggest agent."""
-    return await suggest_agent.run(state)
-
-
-async def chat_node(state: AgentState) -> dict:
-    """Execute chat agent."""
-    return await chat_agent.run(state)
-
-
-# ── Routing functions ────────────────────────────────────────────────────────
-
-def route_entry(state: AgentState) -> str:
-    """Entry point: always route to router agent."""
-    return "router_agent"
-
-
-def route_from_router(state: AgentState) -> str:
-    """Route based on router's flow classification.
+    llm_bound = get_llm().bind_tools(GATHER_CONTEXT_TOOLS)
     
-    Args:
-        state: AgentState with 'flow' field set by router
+    messages = list(state["messages"])
+    if messages and not isinstance(messages[0], SystemMessage):
+        messages.insert(0, SystemMessage(content=GATHER_CONTEXT_PROMPT))
+    else:
+        messages[0] = SystemMessage(content=GATHER_CONTEXT_PROMPT)
+
+    response = await llm_bound.ainvoke(messages)
     
-    Returns:
-        "research_agent" for playlist workflows, "chat_agent" for general
-    """
-    flow = state.get("flow", "general")
-    if flow in ("playlist_create", "artist_suggestion"):
-        return "research_agent"
-    return "chat_agent"
+    return {
+        "messages": [response],
+        "current_phase": "gather_context",
+    }
 
 
-def should_continue_chat(state: AgentState) -> str:
-    """Check if chat agent should loop or exit.
+async def _diagnose_node(state: AgentState) -> dict:
+    """Phase 2: Diagnose unmatched tracks by testing them against rules."""
+    from src.app.llm.ollama import get_llm
+
+    llm_bound = get_llm().bind_tools(DIAGNOSE_TOOLS)
     
-    Continues if last message has tool calls, else exits.
+    messages = list(state["messages"])
+    if messages and isinstance(messages[0], SystemMessage):
+        messages[0] = SystemMessage(content=DIAGNOSE_PROMPT)
+    else:
+        messages.insert(0, SystemMessage(content=DIAGNOSE_PROMPT))
+
+    response = await llm_bound.ainvoke(messages)
+    
+    return {
+        "messages": [response],
+        "current_phase": "diagnose",
+    }
+
+
+async def _group_patterns_node(state: AgentState) -> dict:
+    """Phase 3: Analyze and group diagnosed patterns by root cause (analysis only, no tools)."""
+    from src.app.llm.ollama import get_llm
+
+    llm = get_llm()  # No tool binding needed
+    
+    messages = list(state["messages"])
+    if messages and isinstance(messages[0], SystemMessage):
+        messages[0] = SystemMessage(content=GROUP_PATTERNS_PROMPT)
+    else:
+        messages.insert(0, SystemMessage(content=GROUP_PATTERNS_PROMPT))
+
+    response = await llm.ainvoke(messages)
+    
+    return {
+        "messages": [response],
+        "current_phase": "group_patterns",
+    }
+
+
+async def _verify_node(state: AgentState) -> dict:
+    """Phase 4: Verify that identified patterns can actually be fixed in Plex."""
+    from src.app.llm.ollama import get_llm
+
+    llm_bound = get_llm().bind_tools(VERIFY_TOOLS)
+    
+    messages = list(state["messages"])
+    if messages and isinstance(messages[0], SystemMessage):
+        messages[0] = SystemMessage(content=VERIFY_PROMPT)
+    else:
+        messages.insert(0, SystemMessage(content=VERIFY_PROMPT))
+
+    response = await llm_bound.ainvoke(messages)
+    
+    return {
+        "messages": [response],
+        "current_phase": "verify",
+    }
+
+
+async def _create_node(state: AgentState) -> dict:
+    """Phase 5: Create match rules for verified patterns."""
+    from src.app.llm.ollama import get_llm
+
+    llm_bound = get_llm().bind_tools(CREATE_TOOLS)
+    
+    messages = list(state["messages"])
+    if messages and isinstance(messages[0], SystemMessage):
+        messages[0] = SystemMessage(content=CREATE_PROMPT)
+    else:
+        messages.insert(0, SystemMessage(content=CREATE_PROMPT))
+
+    response = await llm_bound.ainvoke(messages)
+    
+    return {
+        "messages": [response],
+        "current_phase": "create",
+    }
+
+
+async def _test_verify_node(state: AgentState) -> dict:
+    """Phase 6: Re-test created rules to confirm they fix the matched tracks."""
+    from src.app.llm.ollama import get_llm
+
+    llm_bound = get_llm().bind_tools(TEST_VERIFY_TOOLS)
+    
+    messages = list(state["messages"])
+    if messages and isinstance(messages[0], SystemMessage):
+        messages[0] = SystemMessage(content=TEST_VERIFY_PROMPT)
+    else:
+        messages.insert(0, SystemMessage(content=TEST_VERIFY_PROMPT))
+
+    response = await llm_bound.ainvoke(messages)
+    
+    return {
+        "messages": [response],
+        "current_phase": "test_verify",
+    }
+
+
+# ─── Conditional Edge Functions ───────────────────────────────────────────────
+
+def _should_continue_gather_context(state: AgentState) -> str:
+    """After gather_context, check if LLM made tool calls.
+    
+    If no tool calls, assume context gathering failed; otherwise proceed to diagnose.
     """
     last = state["messages"][-1]
-    return "chat_tools" if getattr(last, "tool_calls", None) else END
+    if getattr(last, "tool_calls", None):
+        return "gather_context_tools"
+    return "diagnose"
 
 
-def should_continue_research(state: AgentState) -> str:
-    """Check if research phase should continue or move to match."""
-    return coordinator.should_continue_research(state)
+def _should_gather_context_to_diagnose(state: AgentState) -> str:
+    """After gather_context tools, return to gather_context node or proceed to diagnose.
+    
+    For now, always proceed to diagnose (no looping within phase).
+    """
+    return "diagnose"
 
 
-def should_continue_match(state: AgentState) -> str:
-    """Check if match phase should continue or move to next phase."""
-    return coordinator.should_continue_match(state)
+def _should_continue_diagnose(state: AgentState) -> str:
+    """After diagnose, check if LLM made tool calls for testing."""
+    last = state["messages"][-1]
+    if getattr(last, "tool_calls", None):
+        return "diagnose_tools"
+    return "group_patterns"
 
 
-def should_continue_create(state: AgentState) -> str:
-    """Check if create phase should continue or exit."""
-    return coordinator.should_continue_create(state)
+def _should_diagnose_to_group(state: AgentState) -> str:
+    """After diagnose tools, return to diagnose node or proceed to group_patterns.
+    
+    For now, always proceed to group_patterns (no looping within phase).
+    """
+    return "group_patterns"
 
 
-def should_always_end(state: AgentState) -> str:
-    """Suggest agent always terminates (terminal node)."""
+def _should_continue_verify(state: AgentState) -> str:
+    """After verify, check if LLM made tool calls for searching Plex."""
+    last = state["messages"][-1]
+    if getattr(last, "tool_calls", None):
+        return "verify_tools"
+    return "create"
+
+
+def _should_verify_to_create(state: AgentState) -> str:
+    """After verify tools, return to verify node or proceed to create.
+    
+    For now, always proceed to create (no looping within phase).
+    """
+    return "create"
+
+
+def _should_continue_create(state: AgentState) -> str:
+    """After create, check if LLM made tool calls for rule creation."""
+    last = state["messages"][-1]
+    if getattr(last, "tool_calls", None):
+        return "create_tools"
+    return "test_verify"
+
+
+def _should_create_to_test(state: AgentState) -> str:
+    """After create tools, return to create node or proceed to test_verify.
+    
+    For now, always proceed to test_verify (no looping within phase).
+    """
+    return "test_verify"
+
+
+def _should_continue_test_verify(state: AgentState) -> str:
+    """After test_verify, check if LLM made tool calls for re-testing."""
+    last = state["messages"][-1]
+    if getattr(last, "tool_calls", None):
+        return "test_verify_tools"
     return END
 
 
-# ── Graph construction ───────────────────────────────────────────────────────
-
-def build_graph() -> StateGraph:
-    """Build LangGraph workflow with sub-agents architecture.
+def _should_test_verify_to_end(state: AgentState) -> str:
+    """After test_verify tools, return to test_verify node or end.
     
-    Graph structure:
-    
-    entry (conditional)
-        ↓
-    router_agent
-        ↓
-    route_from_router (conditional)
-        ├─ "general" → chat_agent ⇄ chat_tools (ReAct loop) → END
-        └─ "playlist_create"/"artist_suggestion" → research_agent
-            ↓
-        research_tools ⇄ research_agent (ReAct loop)
-            ↓
-        match_agent
-            ↓
-        match_tools ⇄ match_agent (ReAct loop)
-            ↓
-        should_continue_match (conditional)
-            ├─ "suggest_agent" → suggest_agent → END
-            └─ "create_agent" → create_agent
-                ↓
-            create_tools ⇄ create_agent (ReAct loop)
-                ↓
-            END
-    
-    Returns:
-        Compiled LangGraph StateGraph
+    For now, always end (no looping within phase).
     """
+    return END
+
+
+# ─── Graph Construction ──────────────────────────────────────────────────────
+
+def _build_graph() -> StateGraph:
+    """Build the 6-phase task-specific workflow graph."""
     graph = StateGraph(AgentState)
 
-    # Add all nodes
-    graph.add_node("router_agent", router_node)
-    graph.add_node("chat_agent", chat_node)
-    graph.add_node("chat_tools", chat_tools)
-    graph.add_node("research_agent", research_node)
-    graph.add_node("research_tools", research_tools)
-    graph.add_node("match_agent", match_node)
-    graph.add_node("match_tools", match_tools)
-    graph.add_node("create_agent", create_node)
-    graph.add_node("create_tools", create_tools)
-    graph.add_node("suggest_agent", suggest_node)
+    # Add all phase nodes
+    graph.add_node("gather_context", _gather_context_node)
+    graph.add_node("gather_context_tools", _gather_context_tools)
+    graph.add_node("diagnose", _diagnose_node)
+    graph.add_node("diagnose_tools", _diagnose_tools)
+    graph.add_node("group_patterns", _group_patterns_node)
+    graph.add_node("verify", _verify_node)
+    graph.add_node("verify_tools", _verify_tools)
+    graph.add_node("create", _create_node)
+    graph.add_node("create_tools", _create_tools)
+    graph.add_node("test_verify", _test_verify_node)
+    graph.add_node("test_verify_tools", _test_verify_tools)
 
-    # Set entry point
-    graph.set_conditional_entry_point(route_entry)
+    # Entry point: gather context
+    graph.set_entry_point("gather_context")
 
-    # Router → flow routing
-    graph.add_conditional_edges("router_agent", route_from_router)
+    # Phase 1: gather_context → gather_context_tools (if tool calls) → back to gather_context
+    graph.add_conditional_edges("gather_context", _should_continue_gather_context)
+    graph.add_edge("gather_context_tools", "gather_context")
 
-    # Free chat path: ReAct loop
-    graph.add_conditional_edges("chat_agent", should_continue_chat)
-    graph.add_edge("chat_tools", "chat_agent")
+    # Phase 2: diagnose → diagnose_tools (if tool calls) → back to diagnose
+    # Note: When gather_context completes (no more tool calls), _should_continue_gather_context
+    # returns "diagnose" directly (no edge needed; conditional routing handles it)
+    graph.add_conditional_edges("diagnose", _should_continue_diagnose)
+    graph.add_edge("diagnose_tools", "diagnose")
 
-    # Playlist workflow path: research → match → create/suggest
-    graph.add_conditional_edges("research_agent", should_continue_research)
-    graph.add_edge("research_tools", "research_agent")
+    # Phase 3: group_patterns → verify (no tools, direct progression via conditional return)
+    # Note: When diagnose completes, _should_continue_diagnose returns "group_patterns"
+    # Add conditional edge to group_patterns to move to next phase
+    graph.add_edge("group_patterns", "verify")
 
-    graph.add_conditional_edges("match_agent", should_continue_match)
-    graph.add_edge("match_tools", "match_agent")
+    # Phase 4: verify → verify_tools (if tool calls) → back to verify
+    graph.add_conditional_edges("verify", _should_continue_verify)
+    graph.add_edge("verify_tools", "verify")
 
-    graph.add_conditional_edges("create_agent", should_continue_create)
-    graph.add_edge("create_tools", "create_agent")
+    # Phase 5: create → create_tools (if tool calls) → back to create
+    # When verify completes, _should_continue_verify returns "create" (conditional routing)
+    graph.add_conditional_edges("create", _should_continue_create)
+    graph.add_edge("create_tools", "create")
 
-    # Suggest is terminal
-    graph.add_conditional_edges("suggest_agent", should_always_end)
+    # Phase 6: test_verify → test_verify_tools (if tool calls) → back to test_verify
+    # When create completes, _should_continue_create returns "test_verify" (conditional routing)
+    graph.add_conditional_edges("test_verify", _should_continue_test_verify)
+    graph.add_edge("test_verify_tools", "test_verify")
 
     return graph
 
 
-# ── Compiled agent ───────────────────────────────────────────────────────────
+workflow = _build_graph().compile()
 
-_graph = build_graph()
-workflow = _graph.compile()

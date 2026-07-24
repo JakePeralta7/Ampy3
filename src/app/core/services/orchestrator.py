@@ -25,7 +25,7 @@ class SyncOrchestrator:
         if not rules:
             logger.warning("No active match rules configured — all tracks will fail to match")
         else:
-            logger.info("Loaded %d active match rule(s) for this sync run", len(rules))
+            logger.debug("Loaded %d active match rule(s) for this sync run", len(rules))
 
         stats = {
             "playlist": playlist.title,
@@ -45,7 +45,7 @@ class SyncOrchestrator:
         if existing and replace_existing:
             try:
                 await self._target.delete_playlist(existing["rating_key"])
-                logger.info("Deleted existing playlist '%s' for replacement", playlist.title)
+                logger.debug("Deleted existing playlist '%s' for replacement", playlist.title)
                 existing = None
             except Exception as e:
                 stats["errors"].append(f"Failed to delete existing: {e}")
@@ -135,7 +135,7 @@ class SyncOrchestrator:
             matches = await self._match_engine.run(track, rules=rules)
             if matches:
                 m = matches[0]
-                logger.info(
+                logger.debug(
                     "Matched '%s' by '%s' via rule '%s' (id=%d)",
                     track.title, track.artist_name, m.get("_rule_name", "?"), m.get("_rule_id", -1),
                 )
@@ -146,7 +146,7 @@ class SyncOrchestrator:
                     "rule_id": m.get("_rule_id"),
                 }
 
-            logger.info("No match found for '%s' by '%s'", track.title, track.artist_name)
+            logger.debug("No match found for '%s' by '%s'", track.title, track.artist_name)
             return None
         except Exception as e:
             logger.error("MatchEngine failed for '%s' by '%s': %s", track.title, track.artist_name, e)

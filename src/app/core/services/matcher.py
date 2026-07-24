@@ -201,7 +201,7 @@ class NodeGraphExecutor:
                     if "reference" in inputs:
                         break
 
-            step_start = logger.info("Executing node %s (%s)", nid, node["type"])
+            step_start = logger.debug("Executing node %s (%s)", nid, node["type"])
 
             result = await handler(node.get("config", {}), track, inputs)
 
@@ -224,12 +224,21 @@ class NodeGraphExecutor:
 
             # Handle breakpoints
             if node.get("config", {}).get("breakpoint"):
-                logger.info("Breakpoint hit at node %s (%s)", nid, node["type"])
+                logger.debug("Breakpoint hit at node %s (%s)", nid, node["type"])
 
         return match_results if not collect_trace else trace
 
 
 # ─── Match Engine ──────────────────────────────────────────────
+
+def _rule_canvas(rule: MatchRule) -> dict:
+    """Convert a MatchRule's yaml_content to a canvas dict for the executor."""
+    from src.app.match_rules.parser import yaml_to_canvas
+    from src.app.match_rules.validator import validate_rule_yaml
+
+    rule_def = validate_rule_yaml(rule.yaml_content)
+    return yaml_to_canvas(rule_def)
+
 
 class MatchEngine:
     """Runs all active rules in priority order, collecting matches.
@@ -252,7 +261,8 @@ class MatchEngine:
         all_matches: list[dict] = []
         for rule in rules:
             try:
-                matches = await self._executor.execute(rule.canvas, track)
+                canvas = _rule_canvas(rule)
+                matches = await self._executor.execute(canvas, track)
                 for m in matches:
                     m["_rule_id"] = rule.id
                     m["_rule_name"] = rule.name
@@ -274,7 +284,8 @@ class MatchEngine:
         traces: list[dict] = []
         for rule in rules:
             try:
-                steps = await self._executor.execute(rule.canvas, track, collect_trace=True)
+                canvas = _rule_canvas(rule)
+                steps = await self._executor.execute(canvas, track, collect_trace=True)
                 traces.append({
                     "rule_id": rule.id,
                     "rule_name": rule.name,
@@ -601,9 +612,9 @@ async def _handle_search(config: NodeConfig, track: TrackMetadata, inputs: NodeI
     artist = data.get("artist_name", "") if search_artist else ""
     album = data.get("album_name", "") if search_album else ""
 
-    logger.info(f"[SEARCH] Input track: title={track.title}, artist={track.artist_name}, album={track.album_name}")
-    logger.info(f"[SEARCH] Search config: title={search_title}, artist={search_artist}, album={search_album}")
-    logger.info(f"[SEARCH] Search params: title={title}, artist={artist}, album={album}")
+    logger.debug(f"[SEARCH] Input track: title={track.title}, artist={track.artist_name}, album={track.album_name}")
+    logger.debug(f"[SEARCH] Search config: title={search_title}, artist={search_artist}, album={search_album}")
+    logger.debug(f"[SEARCH] Search params: title={title}, artist={artist}, album={album}")
 
     # If nothing is checked, return empty
     if not search_title and not search_artist and not search_album:
@@ -614,26 +625,26 @@ async def _handle_search(config: NodeConfig, track: TrackMetadata, inputs: NodeI
         if not title:
             return {"out": []}
         results = await target.search_title_only(title)
-        logger.info(f"[SEARCH] Title-only search returned {len(results)} results")
+        logger.debug(f"[SEARCH] Title-only search returned {len(results)} results")
         return {"out": results[:max_results]}
 
     if search_artist and not search_title and not search_album:
         if not artist:
             return {"out": []}
         results = await target.search_artist_tracks(artist)
-        logger.info(f"[SEARCH] Artist-only search returned {len(results)} results")
+        logger.debug(f"[SEARCH] Artist-only search returned {len(results)} results")
         return {"out": results[:max_results]}
 
     if search_album and not search_title and not search_artist:
         if not album:
             return {"out": []}
         results = await target.search_library(album=album)
-        logger.info(f"[SEARCH] Album-only search returned {len(results)} results")
+        logger.debug(f"[SEARCH] Album-only search returned {len(results)} results")
         return {"out": results[:max_results]}
 
     # For multiple fields checked, use library search
     results = await target.search_library(title=title, artist=artist, album=album)
-    logger.info(f"[SEARCH] Multi-field search returned {len(results) if results else 0} results")
+    logger.debug(f"[SEARCH] Multi-field search returned {len(results) if results else 0} results")
     return {"out": results[:max_results] if results else []}
 
 
@@ -750,15 +761,15 @@ async def _handle_compare(config: NodeConfig, track: TrackMetadata, inputs: Node
 
     # Accept input from any handle: candidates (explicit edge), in (implicit), or first available input
     candidates = inputs.get("candidates") or inputs.get("in") or inputs.get("out") or []
-    logger.info(f"[COMPARE] Received inputs keys: {list(inputs.keys())}")
-    logger.info(f"[COMPARE] Received candidates type: {type(candidates)}, len: {len(candidates) if isinstance(candidates, list) else 'N/A'}")
+    logger.debug(f"[COMPARE] Received inputs keys: {list(inputs.keys())}")
+    logger.debug(f"[COMPARE] Received candidates type: {type(candidates)}, len: {len(candidates) if isinstance(candidates, list) else 'N/A'}")
 
     if not isinstance(candidates, list):
-        logger.info("[COMPARE] Candidates is not a list, returning None")
+        logger.debug("[COMPARE] Candidates is not a list, returning None")
         return {"out": None}
 
     if not candidates:
-        logger.info("[COMPARE] Candidates list is empty, returning None")
+        logger.debug("[COMPARE] Candidates list is empty, returning None")
         return {"out": None}
 
     # Parse fields_to_match (can be string or list)
@@ -781,8 +792,8 @@ async def _handle_compare(config: NodeConfig, track: TrackMetadata, inputs: Node
     ref_title = ref.get("title", track.title or "")
     ref_artist = ref.get("artist_name", track.artist_name or "")
     ref_album = ref.get("album_name", track.album_name or "")
-    logger.info(f"[COMPARE] Reference: title={ref_title}, artist={ref_artist}, album={ref_album}")
-    logger.info(f"[COMPARE] Fields to match: {fields}, threshold: {threshold}")
+    logger.debug(f"[COMPARE] Reference: title={ref_title}, artist={ref_artist}, album={ref_album}")
+    logger.debug(f"[COMPARE] Fields to match: {fields}, threshold: {threshold}")
 
     # Parse weights (could be string, dict, or null)
     if isinstance(weights_config, str):
@@ -844,13 +855,13 @@ async def _handle_compare(config: NodeConfig, track: TrackMetadata, inputs: Node
             for f in fields
         )
 
-        logger.info(f"[COMPARE] Candidate: {candidate.get('title')} by {candidate.get('artist_name')} - score: {weighted_score:.2f}, field_scores: {field_scores}")
+        logger.debug(f"[COMPARE] Candidate: {candidate.get('title')} by {candidate.get('artist_name')} - score: {weighted_score:.2f}, field_scores: {field_scores}")
 
         if weighted_score > best_score:
             best_score = weighted_score
             best_match = candidate
 
-    logger.info(f"[COMPARE] Best match: {best_match.get('title') if best_match else 'None'}, score: {best_score:.2f}, threshold: {threshold}")
+    logger.debug(f"[COMPARE] Best match: {best_match.get('title') if best_match else 'None'}, score: {best_score:.2f}, threshold: {threshold}")
 
     if best_score >= threshold and best_match:
         return {"out": best_match}

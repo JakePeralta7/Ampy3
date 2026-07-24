@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { apiGet, apiPost } from "../api/client";
 import { Button } from "../components/ui/Button";
+import { LoadingSpinner } from "../components/ui/LoadingSpinner";
+import { INPUT_STYLES } from "../lib/styles";
 
 interface PlexServer {
   name: string;
@@ -96,11 +98,7 @@ export function SetupPage() {
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-bg-app">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-border border-t-accent-500" />
-      </div>
-    );
+    return <LoadingSpinner fullPage />;
   }
 
   return (
@@ -123,28 +121,24 @@ export function SetupPage() {
           {needsToken ? (
             <form onSubmit={handleCustomSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-medium text-fg-muted mb-1.5">
-                  Server URL
-                </label>
+                <label className="block text-xs font-medium text-fg-muted mb-1.5">Server URL</label>
                 <input
                   type="url"
                   value={customUrl}
                   onChange={(e) => setCustomUrl(e.target.value)}
                   placeholder="http://192.168.1.100:32400"
-                  className="w-full px-3 py-2 rounded-md border border-border bg-bg-surface text-fg text-sm placeholder:text-fg-subtle focus:outline-none focus:ring-2 focus:ring-accent-500"
+                  className={INPUT_STYLES}
                   required
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-fg-muted mb-1.5">
-                  Plex Token
-                </label>
+                <label className="block text-xs font-medium text-fg-muted mb-1.5">Plex Token</label>
                 <input
                   type="text"
                   value={plexToken}
                   onChange={(e) => setPlexToken(e.target.value)}
                   placeholder="Find it at plex.tv → Account → Authorized Devices"
-                  className="w-full px-3 py-2 rounded-md border border-border bg-bg-surface text-fg text-sm placeholder:text-fg-subtle focus:outline-none focus:ring-2 focus:ring-accent-500"
+                  className={INPUT_STYLES}
                   required
                 />
                 <p className="mt-1.5 text-xs text-fg-subtle">
@@ -175,7 +169,7 @@ export function SetupPage() {
                       onFocus={() => setOpen(true)}
                       placeholder="Search servers..."
                       disabled={saving}
-                      className="w-full px-3 py-2 rounded-md border border-border bg-bg-surface text-fg text-sm placeholder:text-fg-subtle focus:outline-none focus:ring-2 focus:ring-accent-500 disabled:opacity-50"
+                      className={INPUT_STYLES}
                     />
                     {open && filtered.length > 0 && (
                       <div className="absolute z-10 mt-1 w-full max-h-60 overflow-auto rounded-md border border-border bg-bg-surface shadow-lg">
@@ -194,9 +188,7 @@ export function SetupPage() {
                             <span className="font-medium text-fg">{server.name}</span>
                             <span className="text-xs text-fg-muted">
                               {server.protocol}://{server.host}:{server.port}
-                              {server.local && (
-                                <span className="ml-1 text-accent-500">local</span>
-                              )}
+                              {server.local && <span className="ml-1 text-accent-500">local</span>}
                             </span>
                           </button>
                         ))}
@@ -221,7 +213,7 @@ export function SetupPage() {
                     value={customUrl}
                     onChange={(e) => setCustomUrl(e.target.value)}
                     placeholder="http://192.168.1.100:32400"
-                    className="flex-1 px-3 py-2 rounded-md border border-border bg-bg-surface text-fg text-sm placeholder:text-fg-subtle focus:outline-none focus:ring-2 focus:ring-accent-500"
+                    className={`flex-1 ${INPUT_STYLES}`}
                     required
                   />
                   <Button type="submit" loading={saving} size="sm">

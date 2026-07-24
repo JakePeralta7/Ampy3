@@ -21,14 +21,14 @@ class MusicBrainzResolver:
     def _get(self, endpoint: str, params: dict) -> dict:
         url = f"{self.BASE_URL}/{endpoint}"
         query = params.get('query', '')
-        logger.info(f"[MusicBrainz] Searching {endpoint} with query: {query}")
+        logger.debug(f"[MusicBrainz] Searching {endpoint} with query: {query}")
         resp = requests.get(url, params=params, headers=self.headers, timeout=15)
         resp.raise_for_status()
         result = resp.json()
         # Log result counts for debugging
         result_key = f"{endpoint}s" if endpoint != "release" else "releases"
         result_count = len(result.get(result_key, []))
-        logger.info(f"[MusicBrainz] Found {result_count} {endpoint} results")
+        logger.debug(f"[MusicBrainz] Found {result_count} {endpoint} results")
         return result
 
     def search_recording(

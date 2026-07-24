@@ -19,6 +19,7 @@ import Markdown from "react-markdown";
 import { useNavigate } from "react-router-dom";
 import { useChatSessions } from "../../contexts/ChatSessionContext";
 import { type FlowItem, type Message, useAgentChat } from "../../hooks/useAgentChat";
+import { generateId } from "../../lib/utils";
 import { Button } from "../ui/Button";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 
@@ -172,7 +173,8 @@ export const AgentChatUI: React.FC<AgentChatUIProps> = ({
   }, []);
 
   const handleNewSession = () => {
-    resetSession();
+    const newId = generateId();
+    navigate(`/chat/${newId}`);
   };
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -198,7 +200,7 @@ export const AgentChatUI: React.FC<AgentChatUIProps> = ({
   };
 
   return (
-    <div className={`flex flex-col flex-1 bg-gradient-to-b from-bg-app to-bg-muted ${className}`}>
+    <div className={`flex flex-col h-full bg-gradient-to-b from-bg-app to-bg-muted ${className}`}>
       <div className="border-b border-border bg-bg-surface shadow-sm">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
@@ -288,7 +290,7 @@ export const AgentChatUI: React.FC<AgentChatUIProps> = ({
         </div>
       </div>
 
-      <div className="border-t border-border bg-bg-surface">
+      <div className="border-t border-border bg-bg-surface shrink-0">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <form onSubmit={handleSendMessage} className="flex gap-3 items-end">
             <div className="flex-1 relative">

@@ -29,7 +29,7 @@ class ServiceBase(ABC):
         """Get or lazily create the singleton service instance."""
         if cls._instance is None:
             cls._instance = cls.create()
-            logger.info("Initialized %s", cls.__name__)
+            logger.debug("Initialized %s", cls.__name__)
         return cls._instance
 
     @classmethod
@@ -41,7 +41,7 @@ class ServiceBase(ABC):
         """
         if cls._instance is None:
             cls._instance = await cls.create_async()
-            logger.info("Initialized %s (async)", cls.__name__)
+            logger.debug("Initialized %s (async)", cls.__name__)
         return cls._instance
 
     @classmethod

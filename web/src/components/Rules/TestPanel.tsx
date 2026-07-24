@@ -13,7 +13,7 @@ import {
   X,
   XCircle,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { playlistsAPI, type UnmatchedTrack } from "../../api/playlists";
 import { matchRulesAPI, type TestResponse, type TrackTestInput } from "../../api/rules";
 import { Button } from "../ui/Button";
@@ -106,16 +106,13 @@ export function TestPanel({ ruleId, onTestResult }: TestPanelProps) {
     }
   }, [pickerTracks.length]);
 
-  const selectFromPicker = useCallback(
-    (track: UnmatchedTrack) => {
-      setTitle(track.source_title || "");
-      setArtist(track.source_artist || "");
-      setAlbum(track.source_album || "");
-      setPickerOpen(false);
-      setPickerSearch("");
-    },
-    [],
-  );
+  const selectFromPicker = useCallback((track: UnmatchedTrack) => {
+    setTitle(track.source_title || "");
+    setArtist(track.source_artist || "");
+    setAlbum(track.source_album || "");
+    setPickerOpen(false);
+    setPickerSearch("");
+  }, []);
 
   const filteredPickerTracks = pickerSearch
     ? pickerTracks.filter(
@@ -240,7 +237,6 @@ export function TestPanel({ ruleId, onTestResult }: TestPanelProps) {
                   onChange={(e) => setPickerSearch(e.target.value)}
                   placeholder="Filter tracks..."
                   className="w-full pl-7 pr-2 py-1.5 text-xs bg-bg-surface border border-border rounded-sm focus:outline-none focus:ring-1 focus:ring-border-focus placeholder-fg-subtle"
-                  autoFocus
                 />
               </div>
             </div>
@@ -256,9 +252,9 @@ export function TestPanel({ ruleId, onTestResult }: TestPanelProps) {
                     : "No tracks match your filter"}
                 </div>
               ) : (
-                filteredPickerTracks.map((track, idx) => (
+                filteredPickerTracks.map((track) => (
                   <button
-                    key={`${track.sync_id}-${idx}`}
+                    key={track.sync_id}
                     onClick={() => selectFromPicker(track)}
                     className="w-full px-3 py-2 text-left hover:bg-bg-muted transition-colors duration-fast border-b border-border last:border-0"
                   >
@@ -269,9 +265,7 @@ export function TestPanel({ ruleId, onTestResult }: TestPanelProps) {
                       {track.source_artist || "Unknown"}
                       {track.source_album ? ` — ${track.source_album}` : ""}
                     </div>
-                    <div className="text-xs text-fg-subtle mt-0.5 truncate">
-                      {track.sync_name}
-                    </div>
+                    <div className="text-xs text-fg-subtle mt-0.5 truncate">{track.sync_name}</div>
                   </button>
                 ))
               )}

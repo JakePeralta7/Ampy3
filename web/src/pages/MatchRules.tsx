@@ -2,16 +2,60 @@ import { Beaker, Plus } from "lucide-react";
 import { useCallback, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { type MatchRule } from "../api/rules";
+import type { MatchRule } from "../api/rules";
 import { RuleList } from "../components/Rules/RuleList";
 import { TestPanel } from "../components/Rules/TestPanel";
 import { Button } from "../components/ui/Button";
 import { ConfirmDialog } from "../components/ui/ConfirmDialog";
 import { useMatchRules } from "../hooks/useMatchRules";
 
+/** Minimal starter YAML for a brand-new rule. */
+const STARTER_YAML = `nodes:
+  source:
+    type: track_source
+
+  search:
+    type: search
+    config:
+      fields_to_search:
+        - search_title
+        - search_artist
+        - search_album
+      max_results: 50
+
+  compare:
+    type: compare
+    config:
+      fields_to_match:
+        - title
+        - artist_name
+        - album_name
+      threshold: 0.75
+      weights:
+        title: 50
+        artist_name: 25
+        album_name: 25
+
+  output:
+    type: match_output
+
+edges:
+  - from: source
+    to: search
+
+  - from: search
+    to: compare
+    source_handle: out
+    target_handle: candidates
+
+  - from: compare
+    to: output
+`;
+
 export function MatchRulesPage() {
   const navigate = useNavigate();
-  const { rules, loading, createRule, updateRule, deleteRule, reorderRules } = useMatchRules();
+  const { rules, loading, createRule, cloneRule, updateRule, deleteRule, reorderRules } =
+    useMatchRules();
   const [showTest, setShowTest] = useState(false);
   const [deleteConfirmRuleId, setDeleteConfirmRuleId] = useState<number | null>(null);
 
@@ -24,11 +68,21 @@ export function MatchRulesPage() {
 
   const handleAddRule = useCallback(async () => {
     const name = `Rule ${rules.length + 1}`;
-    const rule = await createRule(name);
+    const rule = await createRule(name, STARTER_YAML);
     if (rule) {
       navigate(`/settings/matching/${rule.id}`);
     }
   }, [rules.length, createRule, navigate]);
+
+  const handleCloneRule = useCallback(
+    async (ruleId: number) => {
+      const rule = await cloneRule(ruleId);
+      if (rule) {
+        navigate(`/settings/matching/${rule.id}`);
+      }
+    },
+    [cloneRule, navigate],
+  );
 
   const handleDeleteRule = useCallback((ruleId: number) => {
     setDeleteConfirmRuleId(ruleId);
@@ -85,6 +139,7 @@ export function MatchRulesPage() {
           onRulesReorder={handleReorder}
           onDeleteRule={handleDeleteRule}
           onToggleActive={handleToggleActive}
+          onCloneRule={handleCloneRule}
           loading={loading}
         />
       </div>

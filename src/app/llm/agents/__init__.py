@@ -1,1 +1,1 @@
-"""LangGraph agent definitions for the music assistant workflow."""
+"""LangGraph investigator agent for diagnosing unmatched sync tracks."""

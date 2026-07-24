@@ -148,7 +148,7 @@ def _save_sync_results(
                 sync_record.next_sync_at = sync_record.last_synced_at + delta
 
         db.commit()
-        logger.info(f"Saved {len(track_rows)} playlist tracks for '{playlist_title}'")
+        logger.debug(f"Saved {len(track_rows)} playlist tracks for '{playlist_title}'")
     except Exception as e:
         logger.error(f"Failed to save playlist tracks: {e}")
         raise

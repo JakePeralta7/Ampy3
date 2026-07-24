@@ -52,7 +52,7 @@ class SyncTaskBase(Task):
         use :class:`execute` directly.
         """
         try:
-            logger.info(summary_start)
+            logger.debug(summary_start)
             log_event_sync(
                 event_type=f"{self.event_type_prefix}.started",
                 resource_type="playlist",

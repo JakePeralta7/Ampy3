@@ -15,6 +15,7 @@ from src.app.auth.dependencies import get_current_user
 from src.app.auth.router import get_owner_plex_token, get_plex_server_url
 from src.app.db import AsyncSessionLocal
 from src.app.models import Config
+from src.app.services.audit import log_event
 
 logger = logging.getLogger(__name__)
 
@@ -144,4 +145,12 @@ async def save_server_config(
         await session.commit()
 
     logger.info("Plex server URL saved: %s", url)
+
+    await log_event(
+        event_type="plex.server_saved",
+        summary=f"Plex server saved: {url}",
+        resource_type="plex_server",
+        resource_id=url,
+    )
+
     return {"server_url": url}

@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 def check_and_trigger_scheduled_syncs(self):
     try:
         now = datetime.now(UTC)
-        logger.info(f"Checking for scheduled syncs due at {now}")
+        logger.debug(f"Checking for scheduled syncs due at {now}")
 
         db = SessionLocal()
         try:
@@ -31,7 +31,7 @@ def check_and_trigger_scheduled_syncs(self):
             result = db.execute(stmt)
             due_syncs = result.scalars().all()
             for sync in due_syncs:
-                logger.info(f"Triggering sync: {sync.target_playlist_name} (ID: {sync.id})")
+                logger.debug(f"Triggering sync: {sync.target_playlist_name} (ID: {sync.id})")
                 scheduled_sync_task.delay(sync.id)
             return {"status": "SUCCESS", "syncs_triggered": len(due_syncs)}
         finally:
@@ -43,7 +43,7 @@ def check_and_trigger_scheduled_syncs(self):
 
 @celery_app.task(bind=True)
 def scheduled_sync_task(self, schedule_id: int):
-    logger.info(f"Executing scheduled sync with ID: {schedule_id}")
+    logger.debug(f"Executing scheduled sync with ID: {schedule_id}")
 
     db = SessionLocal()
     try:
@@ -71,14 +71,14 @@ def scheduled_sync_task(self, schedule_id: int):
         summary=f"Scheduled sync started for '{title}'",
     )
 
-    logger.info(f"Starting sync for: {title}")
+    logger.debug(f"Starting sync for: {title}")
 
     try:
         # Load rules synchronously FIRST to avoid asyncio.run() conflicts with asyncpg
         rules = get_active_rules_sync()
         # Pass a lambda that creates the coroutine, so _run_async can retry with a fresh coroutine
         stats = _run_async(lambda: _async_sync_task(source_url, source, replace_existing, schedule_id, rules))
-        logger.info(f"Sync successful for {title}: {stats}")
+        logger.debug(f"Sync successful for {title}: {stats}")
         log_event_sync(
             event_type="sync.completed",
             resource_type="schedule",

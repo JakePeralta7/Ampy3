@@ -79,12 +79,9 @@ class ScheduledSyncsAPI {
   }
 
   async triggerSyncNow(syncId: number): Promise<{ task_id: string; message: string }> {
-    return apiRequest<{ task_id: string; message: string }>(
-      `/v1/schedules/${syncId}/sync-now`,
-      {
-        method: "POST",
-      },
-    );
+    return apiRequest<{ task_id: string; message: string }>(`/v1/schedules/${syncId}/sync-now`, {
+      method: "POST",
+    });
   }
 
   async bulkSyncNow(ids: number[]): Promise<BulkResponse> {

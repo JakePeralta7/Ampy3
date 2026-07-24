@@ -154,34 +154,26 @@ export function useScheduledSyncs(): UseScheduledSyncsReturn {
   );
 
   // Bulk: toggle active state for multiple syncs
-  const bulkToggleActive = useCallback(
-    async (ids: number[], isActive: boolean): Promise<void> => {
-      try {
-        await scheduledSyncsAPI.bulkToggleActive(ids, isActive);
-        setSyncs((prev) =>
-          prev.map((s) => (ids.includes(s.id) ? { ...s, is_active: isActive } : s)),
-        );
-      } catch (err) {
-        setError(getErrorMessage(err, "Failed to toggle syncs"));
-        throw err;
-      }
-    },
-    [],
-  );
+  const bulkToggleActive = useCallback(async (ids: number[], isActive: boolean): Promise<void> => {
+    try {
+      await scheduledSyncsAPI.bulkToggleActive(ids, isActive);
+      setSyncs((prev) => prev.map((s) => (ids.includes(s.id) ? { ...s, is_active: isActive } : s)));
+    } catch (err) {
+      setError(getErrorMessage(err, "Failed to toggle syncs"));
+      throw err;
+    }
+  }, []);
 
   // Bulk: delete multiple syncs
-  const bulkDelete = useCallback(
-    async (ids: number[]): Promise<void> => {
-      try {
-        await scheduledSyncsAPI.bulkDelete(ids);
-        setSyncs((prev) => prev.filter((s) => !ids.includes(s.id)));
-      } catch (err) {
-        setError(getErrorMessage(err, "Failed to delete syncs"));
-        throw err;
-      }
-    },
-    [],
-  );
+  const bulkDelete = useCallback(async (ids: number[]): Promise<void> => {
+    try {
+      await scheduledSyncsAPI.bulkDelete(ids);
+      setSyncs((prev) => prev.filter((s) => !ids.includes(s.id)));
+    } catch (err) {
+      setError(getErrorMessage(err, "Failed to delete syncs"));
+      throw err;
+    }
+  }, []);
 
   // Initial fetch
   useEffect(() => {

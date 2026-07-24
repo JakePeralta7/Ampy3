@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 @celery_app.task(bind=True)
 def sync_playlists_task(self, playlist_url: str, source: str = "youtube_music", replace_existing: bool = False, schedule_id: int | None = None):
     try:
-        logger.info(f"Starting sync for playlist from {source}: {playlist_url}")
+        logger.debug(f"Starting sync for playlist from {source}: {playlist_url}")
         log_event_sync(
             event_type="sync.started",
             resource_type="playlist",
@@ -28,7 +28,7 @@ def sync_playlists_task(self, playlist_url: str, source: str = "youtube_music", 
         rules = get_active_rules_sync()
         # Pass a lambda that creates the coroutine, so _run_async can retry with a fresh coroutine
         stats = _run_async(lambda: _async_sync_task(playlist_url, source, replace_existing, schedule_id, rules))
-        logger.info(f"Sync completed: {stats['matched']} matched, {stats['failed']} failed")
+        logger.debug(f"Sync completed: {stats['matched']} matched, {stats['failed']} failed")
         log_event_sync(
             event_type="sync.completed",
             resource_type="playlist",
@@ -55,7 +55,7 @@ async def _async_sync_task(playlist_url: str, source: str, replace_existing: boo
     source_adapter = source_cls()
     playlist_metadata = await source_adapter.get_playlist(playlist_url)
 
-    logger.info(f"Fetched playlist '{playlist_metadata.title}' with {len(playlist_metadata.tracks)} tracks")
+    logger.debug(f"Fetched playlist '{playlist_metadata.title}' with {len(playlist_metadata.tracks)} tracks")
 
     target = await get_sync_target()
     orchestrator = SyncOrchestrator(target=target)

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { type MatchRule, type MatchRuleCanvas, matchRulesAPI } from "../api/rules";
+import { type MatchRule, matchRulesAPI } from "../api/rules";
 
 export function useMatchRules() {
   const [rules, setRules] = useState<MatchRule[]>([]);
@@ -22,9 +22,9 @@ export function useMatchRules() {
     fetchRules();
   }, [fetchRules]);
 
-  const createRule = useCallback(async (name: string) => {
+  const createRule = useCallback(async (name: string, yaml_content: string) => {
     try {
-      const rule = await matchRulesAPI.create({ name });
+      const rule = await matchRulesAPI.create({ name, yaml_content });
       setRules((prev) => [...prev, rule]);
       toast.success(`Rule "${name}" created`);
       return rule;
@@ -35,8 +35,21 @@ export function useMatchRules() {
     }
   }, []);
 
+  const cloneRule = useCallback(async (id: number, name?: string) => {
+    try {
+      const rule = await matchRulesAPI.clone(id, name ? { name } : undefined);
+      setRules((prev) => [...prev, rule]);
+      toast.success(`Rule cloned as "${rule.name}"`);
+      return rule;
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Failed to clone rule";
+      toast.error(msg);
+      return null;
+    }
+  }, []);
+
   const updateRule = useCallback(
-    async (id: number, data: { name?: string; is_active?: boolean; canvas?: MatchRuleCanvas }) => {
+    async (id: number, data: { name?: string; is_active?: boolean; yaml_content?: string }) => {
       try {
         const rule = await matchRulesAPI.update(id, data);
         setRules((prev) => prev.map((r) => (r.id === id ? rule : r)));
@@ -76,21 +89,14 @@ export function useMatchRules() {
     [fetchRules],
   );
 
-  const saveCanvas = useCallback(
-    async (ruleId: number, canvas: MatchRuleCanvas) => {
-      return updateRule(ruleId, { canvas });
-    },
-    [updateRule],
-  );
-
   return {
     rules,
     loading,
     fetchRules,
     createRule,
+    cloneRule,
     updateRule,
     deleteRule,
     reorderRules,
-    saveCanvas,
   };
 }

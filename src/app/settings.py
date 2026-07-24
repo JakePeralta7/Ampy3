@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     celery_broker_url: str = Field(default="redis://valkey:6379/0")
     celery_result_backend: str = Field(default="redis://valkey:6379/1")
     celery_worker_concurrency: int = Field(default=1, ge=1)
+    celery_log_level: str = Field(default="info")
 
     # yt-dlp
     yt_dlp_cookies: str = ""

@@ -7,6 +7,7 @@ import {
   type SyncRun,
 } from "../../api/playlists";
 import { Badge } from "../ui/Badge";
+import { LoadingSpinner } from "../ui/LoadingSpinner";
 
 interface SyncHistoryProps {
   syncId: number;
@@ -71,11 +72,7 @@ export function SyncHistory({ syncId }: SyncHistoryProps) {
   );
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-8">
-        <p className="text-sm text-fg-muted">Loading history...</p>
-      </div>
-    );
+    return <LoadingSpinner text="Loading history..." />;
   }
 
   if (error) {
@@ -104,7 +101,10 @@ export function SyncHistory({ syncId }: SyncHistoryProps) {
         {runs.map((run) => {
           const isSelected = selectedRunId === run.id;
           return (
-            <div key={run.id} className="bg-bg-surface rounded-lg border border-border overflow-hidden">
+            <div
+              key={run.id}
+              className="bg-bg-surface rounded-lg border border-border overflow-hidden"
+            >
               <button
                 onClick={() => handleSelectRun(run)}
                 className="w-full flex items-center justify-between px-3 py-2.5 text-left hover:bg-bg-muted transition-colors duration-fast"
@@ -181,8 +181,12 @@ function DiffView({ diff }: { diff: SyncDiffResponse }) {
         <div>
           <div className="text-xs font-medium text-success-500 mb-1">Added</div>
           <div className="space-y-0.5">
-            {diff.added.map((item, i) => (
-              <DiffTrackRow key={`added-${i}`} item={item} variant="added" />
+            {diff.added.map((item) => (
+              <DiffTrackRow
+                key={`added-${item.source_title ?? "unknown"}-${item.source_artist ?? "unknown"}`}
+                item={item}
+                variant="added"
+              />
             ))}
           </div>
         </div>
@@ -192,8 +196,12 @@ function DiffView({ diff }: { diff: SyncDiffResponse }) {
         <div>
           <div className="text-xs font-medium text-danger-500 mb-1">Removed</div>
           <div className="space-y-0.5">
-            {diff.removed.map((item, i) => (
-              <DiffTrackRow key={`removed-${i}`} item={item} variant="removed" />
+            {diff.removed.map((item) => (
+              <DiffTrackRow
+                key={`removed-${item.source_title ?? "unknown"}-${item.source_artist ?? "unknown"}`}
+                item={item}
+                variant="removed"
+              />
             ))}
           </div>
         </div>
@@ -204,17 +212,14 @@ function DiffView({ diff }: { diff: SyncDiffResponse }) {
 
 function DiffTrackRow({ item, variant }: { item: SyncDiffItem; variant: "added" | "removed" }) {
   const bgClass = variant === "added" ? "bg-success-500/5" : "bg-danger-500/5";
-  const borderClass =
-    variant === "added" ? "border-success-500/20" : "border-danger-500/20";
+  const borderClass = variant === "added" ? "border-success-500/20" : "border-danger-500/20";
 
   return (
-    <div className={`flex items-center gap-2 px-2 py-1 rounded-sm border text-xs ${bgClass} ${borderClass}`}>
-      <span className="text-fg truncate flex-1">
-        {item.source_title || "Unknown"}
-      </span>
-      <span className="text-fg-muted truncate">
-        {item.source_artist || "Unknown"}
-      </span>
+    <div
+      className={`flex items-center gap-2 px-2 py-1 rounded-sm border text-xs ${bgClass} ${borderClass}`}
+    >
+      <span className="text-fg truncate flex-1">{item.source_title || "Unknown"}</span>
+      <span className="text-fg-muted truncate">{item.source_artist || "Unknown"}</span>
     </div>
   );
 }

@@ -2,8 +2,10 @@ import { Brain, Download, Eye, EyeOff, Save, Server } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { type AppSettings, getSettings, updateSettings } from "../api/settings";
+import { PageLayout } from "../components/Layout/PageLayout";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
+import { INPUT_STYLES } from "../lib/styles";
 import { getErrorMessage } from "../lib/utils";
 
 function SettingField({
@@ -35,7 +37,7 @@ function SettingField({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
-          className="w-full rounded-md border border-border bg-bg-surface px-3 py-2 text-sm text-fg placeholder-fg-subtle focus:outline-none focus:ring-2 focus:ring-border-focus disabled:opacity-50 disabled:cursor-not-allowed"
+          className={INPUT_STYLES}
         />
         {type === "password" && (
           <button
@@ -158,80 +160,85 @@ export function ConfigPage() {
   }
 
   return (
-    <div className="max-w-3xl p-8 space-y-8">
-      <div className="flex items-center justify-between">
+    <PageLayout
+      title=""
+      maxWidth="md"
+      actions={
         <Button onClick={handleSave} disabled={!hasChanges || saving} icon={<Save size={16} />}>
           {saving ? "Saving..." : "Save"}
         </Button>
+      }
+    >
+      <div className="space-y-8">
+        <SectionCard
+          icon={<Server size={20} className="text-accent-500" />}
+          title="Plex Media Server"
+        >
+          <SettingField
+            id="plex_host"
+            label="Host URL"
+            value={values.plex_host ?? ""}
+            onChange={(v) => setField("plex_host", v)}
+            placeholder="http://plex.lan:32400"
+          />
+          <SettingField
+            id="plex_token"
+            label="Token"
+            type="password"
+            value={values.plex_token ?? ""}
+            onChange={(v) => setField("plex_token", v)}
+            placeholder="Plex API token"
+          />
+        </SectionCard>
+
+        <SectionCard icon={<Brain size={20} className="text-accent-500" />} title="Ollama">
+          <SettingField
+            id="ollama_host"
+            label="Host URL"
+            value={values.ollama_host ?? ""}
+            onChange={(v) => setField("ollama_host", v)}
+            placeholder="http://localhost:11434"
+          />
+          <SettingField
+            id="ollama_model"
+            label="Model"
+            value={values.ollama_model ?? ""}
+            onChange={(v) => setField("ollama_model", v)}
+            placeholder="gemma4-e4b-128:latest"
+          />
+          <SettingField
+            id="ollama_timeout"
+            label="Timeout (seconds)"
+            type="number"
+            value={values.ollama_timeout ?? ""}
+            onChange={(v) => setField("ollama_timeout", v)}
+          />
+        </SectionCard>
+
+        <SectionCard icon={<Download size={20} className="text-accent-500" />} title="yt-dlp">
+          <SettingField
+            id="yt_dlp_cookies"
+            label="Cookies file path"
+            value={values.yt_dlp_cookies ?? ""}
+            onChange={(v) => setField("yt_dlp_cookies", v)}
+            placeholder="/cookies/cookies.txt"
+          />
+          <SettingField
+            id="yt_dlp_timeout"
+            label="Timeout (seconds)"
+            type="number"
+            value={values.yt_dlp_timeout ?? ""}
+            onChange={(v) => setField("yt_dlp_timeout", v)}
+          />
+        </SectionCard>
+
+        {hasChanges && (
+          <p className="text-sm text-warn-500 text-center">
+            Changes apply immediately. Plex and Ollama connections will be reset with the new
+            values.
+          </p>
+        )}
       </div>
-
-      <SectionCard
-        icon={<Server size={20} className="text-accent-500" />}
-        title="Plex Media Server"
-      >
-        <SettingField
-          id="plex_host"
-          label="Host URL"
-          value={values.plex_host ?? ""}
-          onChange={(v) => setField("plex_host", v)}
-          placeholder="http://plex.lan:32400"
-        />
-        <SettingField
-          id="plex_token"
-          label="Token"
-          type="password"
-          value={values.plex_token ?? ""}
-          onChange={(v) => setField("plex_token", v)}
-          placeholder="Plex API token"
-        />
-      </SectionCard>
-
-      <SectionCard icon={<Brain size={20} className="text-accent-500" />} title="Ollama">
-        <SettingField
-          id="ollama_host"
-          label="Host URL"
-          value={values.ollama_host ?? ""}
-          onChange={(v) => setField("ollama_host", v)}
-          placeholder="http://localhost:11434"
-        />
-        <SettingField
-          id="ollama_model"
-          label="Model"
-          value={values.ollama_model ?? ""}
-          onChange={(v) => setField("ollama_model", v)}
-          placeholder="gemma4-e4b-128:latest"
-        />
-        <SettingField
-          id="ollama_timeout"
-          label="Timeout (seconds)"
-          type="number"
-          value={values.ollama_timeout ?? ""}
-          onChange={(v) => setField("ollama_timeout", v)}
-        />
-      </SectionCard>
-
-      <SectionCard icon={<Download size={20} className="text-accent-500" />} title="yt-dlp">
-        <SettingField
-          id="yt_dlp_cookies"
-          label="Cookies file path"
-          value={values.yt_dlp_cookies ?? ""}
-          onChange={(v) => setField("yt_dlp_cookies", v)}
-          placeholder="/cookies/cookies.txt"
-        />
-        <SettingField
-          id="yt_dlp_timeout"
-          label="Timeout (seconds)"
-          type="number"
-          value={values.yt_dlp_timeout ?? ""}
-          onChange={(v) => setField("yt_dlp_timeout", v)}
-        />
-      </SectionCard>
-
-      {hasChanges && (
-        <p className="text-sm text-warn-500 text-center">
-          Changes apply immediately. Plex and Ollama connections will be reset with the new values.
-        </p>
-      )}
-    </div>
+    </PageLayout>
   );
 }

@@ -29,5 +29,5 @@ class PlexService(ServiceBase):
             raise RuntimeError("Plex server not configured. Complete the setup at /setup.")
 
         client = PlexClient(token=token, base_url=server_url)
-        logger.info("Initialized PlexClient with server %s", server_url)
+        logger.debug("Initialized PlexClient with server %s", server_url)
         return client

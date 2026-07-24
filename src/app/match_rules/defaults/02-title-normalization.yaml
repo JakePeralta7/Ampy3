@@ -1,0 +1,148 @@
+name: "Title Normalization"
+description: >
+  Handles YouTube Music metadata quirks where the video title contains
+  "Artist – Song" or "Song (ft. Artist)" patterns. Extracts the artist
+  from the title prefix, strips feature credits and common suffixes
+  (Official Video, M/V, [label], etc.), then searches and compares on
+  the cleaned title and extracted artist. Uses a slightly relaxed 0.70
+  threshold because the normalization step introduces some uncertainty.
+
+nodes:
+  source:
+    type: track_source
+
+  # Extract artist name from "Artist – Title" pattern
+  extract_artist:
+    type: transform
+    config:
+      field: title
+      target_field: artist_name
+      operation: regex_extract
+      pattern: "^(.+?)\\s*[\\u2013\\u2014-]\\s*"
+      group: 1
+
+  # Remove "Artist – " prefix from title
+  strip_artist_prefix:
+    type: transform
+    config:
+      field: title
+      target_field: title
+      operation: regex_replace
+      pattern: "^.+?\\s*[\\u2013\\u2014-]\\s*"
+      replacement: ""
+
+  # Remove "(ft. …)" / "(feat. …)" / "(featuring …)"
+  strip_ft:
+    type: transform
+    config:
+      field: title
+      target_field: title
+      operation: regex_replace
+      pattern: "\\s*[\\(\\s]*(?:ft\\.?|feat\\.?|featuring)\\s*.*$"
+      replacement: ""
+
+  # Remove "[Official Video]" / "(Official Music Video)" etc.
+  strip_official_video:
+    type: transform
+    config:
+      field: title
+      target_field: title
+      operation: regex_replace
+      pattern: "\\s*[\\[\\(]\\s*(?:Official\\s+(?:Music\\s+)?Video|OFFICIAL\\s+(?:MUSIC\\s+)?VIDEO)\\s*[\\]\\)]"
+      replacement: ""
+
+  # Remove trailing "– M/V" or "M/V"
+  strip_mv:
+    type: transform
+    config:
+      field: title
+      target_field: title
+      operation: regex_replace
+      pattern: "(?:\\s*[\\u2013\\u2014-]\\s*)?M\\/V\\s*$"
+      replacement: ""
+
+  # Remove "(from [Movie/Show])"
+  strip_movie:
+    type: transform
+    config:
+      field: title
+      target_field: title
+      operation: regex_replace
+      pattern: "\\s*\\(from\\s+[^)]*\\)"
+      replacement: ""
+
+  # Remove trailing "[label text]"
+  strip_label:
+    type: transform
+    config:
+      field: title
+      target_field: title
+      operation: regex_replace
+      pattern: "\\s*\\[[^\\]]*\\]\\s*$"
+      replacement: ""
+
+  # Trim whitespace
+  trim:
+    type: transform
+    config:
+      field: title
+      target_field: title
+      operation: trim
+
+  search:
+    type: search
+    config:
+      fields_to_search:
+        - search_title
+        - search_artist
+      max_results: 50
+
+  compare:
+    type: compare
+    config:
+      fields_to_match:
+        - title
+        - artist_name
+      threshold: 0.70
+      weights:
+        title: 60
+        artist_name: 40
+
+  output:
+    type: match_output
+
+edges:
+  - from: source
+    to: extract_artist
+
+  - from: extract_artist
+    to: strip_artist_prefix
+
+  - from: strip_artist_prefix
+    to: strip_ft
+
+  - from: strip_ft
+    to: strip_official_video
+
+  - from: strip_official_video
+    to: strip_mv
+
+  - from: strip_mv
+    to: strip_movie
+
+  - from: strip_movie
+    to: strip_label
+
+  - from: strip_label
+    to: trim
+
+  - from: trim
+    to: search
+
+  - from: search
+    to: compare
+    source_handle: out
+    target_handle: candidates
+
+  - from: compare
+    to: output

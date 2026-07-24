@@ -50,7 +50,7 @@ class YouTubeMusicSource(IPlatformSource):
             cache = ValkeyService.get_instance()
             cached = await cache.get(cache_key)
             if cached:
-                logger.info("Cache hit for playlist '%s' — using cached yt-dlp output", pl_id)
+                logger.debug("Cache hit for playlist '%s' — using cached yt-dlp output", pl_id)
                 return self._parse_playlist_data(pl_id, playlist_url, json.loads(cached))
         except Exception as e:
             logger.debug("Valkey cache read failed (continuing without cache): %s", e)

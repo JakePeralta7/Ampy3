@@ -6,6 +6,14 @@ from celery import Celery
 
 from src.app.settings import settings
 
+logging.basicConfig(
+    level=getattr(logging, settings.celery_log_level.upper(), logging.INFO),
+    format="%(levelname)s: %(message)s",
+)
+
+for _name in ("httpx", "httpcore"):
+    logging.getLogger(_name).setLevel(logging.WARNING)
+
 logger = logging.getLogger(__name__)
 
 celery_app = Celery(

@@ -1,5 +1,6 @@
 import {
   Cog,
+  LayoutDashboard,
   LogOut,
   Menu,
   MessageCircle,
@@ -14,11 +15,12 @@ import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 import { useChatSessions } from "../../contexts/ChatSessionContext";
+import { generateId } from "../../lib/utils";
 
 const COLLAPSE_KEY = "ampy3:sidebar-collapsed";
 
 const links = [
-  { path: "/", label: "Dashboard", icon: Music2 },
+  { path: "/", label: "Dashboard", icon: LayoutDashboard },
   { path: "/syncs", label: "Syncs", icon: Music2 },
   { path: "/chat", label: "Chat", icon: MessageSquare },
   { path: "/audit", label: "Audit Log", icon: ScrollText },
@@ -123,7 +125,10 @@ export function Nav() {
               {!collapsed && link.path === "/chat" && active && chatSessions.length > 0 && (
                 <div className="ml-2 mt-1 flex flex-col gap-0.5 border-l border-border pl-3">
                   <button
-                    onClick={() => navigate("/chat")}
+                    onClick={() => {
+                      const newId = generateId();
+                      navigate(`/chat/${newId}`);
+                    }}
                     className={`flex items-center gap-2 rounded px-3 py-1.5 text-sm transition-colors duration-fast ${
                       location.pathname === "/chat"
                         ? "bg-accent-50 text-accent-700 font-medium"

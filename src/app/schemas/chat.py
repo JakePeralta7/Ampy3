@@ -1,6 +1,7 @@
 """Chat request/response schemas."""
 
 import uuid
+from datetime import datetime
 
 from pydantic import BaseModel, Field
 
@@ -18,10 +19,33 @@ class ChatRequest(BaseModel):
     )
 
 
+class ChatFlowItem(BaseModel):
+    """A tool call item within an assistant message.
+    
+    Classification: BACKEND PERSISTED
+    - Tool calls are persisted to Valkey for audit, replay, and debugging
+    - Includes execution traces and results
+    """
+    name: str | None = None
+    args: dict | None = None
+    result: str | None = None
+    status: str | None = None
+
+
 class ChatMessage(BaseModel):
-    """Single chat message."""
-    role: str
+    """Single chat message.
+    
+    Message Types (backend-managed classification):
+    
+    "user" → Persisted to Valkey
+    "assistant" → Persisted to Valkey (backend skips ephemeral thinking)
+    
+    Frontend receives all messages in real-time, but only non-thinking responses
+    are persisted to backend history via Valkey.
+    """
+    role: str  # "user" | "assistant"
     content: str
+    flow_items: list[ChatFlowItem] | None = None  # Tool calls within this message
 
 
 class ChatHistoryResponse(BaseModel):
@@ -44,3 +68,31 @@ class ChatClearResponse(BaseModel):
     """Response after clearing chat history."""
     status: str
     session_id: str
+
+
+class ChatSessionEntry(BaseModel):
+    """A chat session entry."""
+    id: str
+    preview: str
+    title: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ChatSessionsListResponse(BaseModel):
+    """Response for listing chat sessions."""
+    sessions: list[ChatSessionEntry]
+
+
+class ChatSessionCreateRequest(BaseModel):
+    """Request to create a chat session."""
+    id: str
+    preview: str
+
+
+class ChatSessionCreateResponse(BaseModel):
+    """Response after creating a chat session."""
+    id: str
+    preview: str
+    created_at: datetime
+    updated_at: datetime

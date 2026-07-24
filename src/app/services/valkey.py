@@ -16,5 +16,5 @@ class ValkeyService(ServiceBase):
     def create(cls) -> valkey_async.Valkey:
         url = settings.celery_broker_url.replace("redis://", "valkey://")
         instance = valkey_async.from_url(url, decode_responses=True)
-        logger.info("Valkey client initialized")
+        logger.debug("Valkey client initialized")
         return instance

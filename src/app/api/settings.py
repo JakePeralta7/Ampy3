@@ -9,6 +9,7 @@ from src.app.auth.dependencies import get_current_user
 from src.app.db import AsyncSessionLocal
 from src.app.models import Config
 from src.app.schemas.settings import SettingsOut, SettingsUpdate
+from src.app.services.audit import log_event
 from src.app.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -95,6 +96,13 @@ async def put_settings(
         overrides = {row.key: row.value for row in rows}
 
     settings.load_overrides(overrides)
+
+    await log_event(
+        event_type="settings.updated",
+        summary=f"Settings updated: {', '.join(incoming.keys())}",
+        resource_type="settings",
+        details={"keys_updated": list(incoming.keys())},
+    )
 
     if "plex_host" in incoming or "plex_token" in incoming:
         from src.app.services.plex import PlexService

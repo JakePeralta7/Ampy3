@@ -1,5 +1,6 @@
 """Handles all interaction with the Plex Media Server API."""
 import logging
+import re
 import urllib.parse
 import xml.etree.ElementTree as ET
 from typing import Any
@@ -10,6 +11,38 @@ from src.app.core.matching import _best_match, _extract_primary_artist, _normali
 
 logger = logging.getLogger(__name__)
 
+
+def _normalize_for_compare(text: str) -> str:
+    """Normalize a string for quote-insensitive comparison.
+
+    Plex stores artist names with curly quotes (U+2018/2019) while YTMusic
+    sends straight quotes (U+0027).  This strips all quote characters so
+    comparisons succeed regardless of the Unicode code point used.
+    """
+    text = text.replace("\u2018", "'").replace("\u2019", "'")
+    text = text.replace("\u201c", '"').replace("\u201d", '"')
+    text = re.sub(r"['''`]", "", text)
+    return text.lower().strip()
+
+
+def _normalize_search_query(query: str) -> str:
+    """Strip characters that cause Plex search API issues."""
+    query = re.sub(r"\(.*?\)", "", query)   # remove parenthesized groups
+    query = re.sub(r"\[.*?\]", "", query)   # remove bracketed groups
+    query = re.sub(r"\{.*?\}", "", query)   # remove braced groups
+    query = re.sub(r"[(){}\[\]]", "", query)  # remove stray parens/brackets
+    query = re.sub(r"\.{2,}", " ", query)   # collapse ellipses
+    # Replace commas with spaces — Plex search API returns no results for
+    # comma-separated multi-artist queries like "Post Malone, Swae Lee".
+    query = query.replace(",", " ")
+    # Normalize Unicode quotes to straight equivalents.  Plex's search API
+    # cannot match straight quotes (U+0027) against curly quotes (U+2018/19)
+    # stored in its database.  Stripping all quotes avoids this mismatch.
+    query = query.replace("\u2018", "'").replace("\u2019", "'")
+    query = query.replace("\u201c", '"').replace("\u201d", '"')
+    query = re.sub(r"['''`]", " ", query)   # strip all quote chars
+    query = re.sub(r"\s{2,}", " ", query)   # collapse whitespace
+    return query.strip()
 
 
 class PlexClient:
@@ -103,7 +136,7 @@ class PlexClient:
                 response = await self.client.put(f"/playlists/{playlist_id}/items", params=params)
                 response.raise_for_status()
                 added_count += 1
-                logger.info(
+                logger.debug(
                     "Added item %d/%d to playlist %s",
                     i + 1,
                     len(plex_ids),
@@ -144,7 +177,7 @@ class PlexClient:
                 )
                 response.raise_for_status()
                 removed_count += 1
-                logger.info(
+                logger.debug(
                     "Removed item %d/%d from playlist %s",
                     i + 1,
                     len(plex_ids),
@@ -179,7 +212,7 @@ class PlexClient:
                         "track_count": int(pl.get("leafCount", 0)),
                     })
 
-            logger.info(f"Found {len(results)} playlists matching query: {query or '*'}")
+            logger.debug(f"Found {len(results)} playlists matching query: {query or '*'}")
             return results
         except httpx.HTTPStatusError as e:
             logger.error(f"HTTP error searching playlists: {e}")
@@ -237,11 +270,11 @@ class PlexClient:
                 root = ET.fromstring(response.text)
                 tracks = root.findall(".//Track")
 
-                logger.info("Playlist %s: Retrieved %d tracks at offset %d", playlist_id, len(tracks), offset)
+                logger.debug("Playlist %s: Retrieved %d tracks at offset %d", playlist_id, len(tracks), offset)
 
                 if not tracks:
                     # No more items returned, exit the loop
-                    logger.info(f"Playlist {playlist_id}: No more tracks at offset {offset}, stopping pagination")
+                    logger.debug(f"Playlist {playlist_id}: No more tracks at offset {offset}, stopping pagination")
                     break
 
                 for track in tracks:
@@ -257,12 +290,12 @@ class PlexClient:
 
                 # If we got fewer items than the limit, we've reached the end
                 if len(tracks) < limit:
-                    logger.info(f"Playlist {playlist_id}: Got {len(tracks)} tracks (less than limit {limit}), stopping pagination")
+                    logger.debug(f"Playlist {playlist_id}: Got {len(tracks)} tracks (less than limit {limit}), stopping pagination")
                     break
 
                 offset += limit
 
-            logger.info(f"Playlist {playlist_id}: Total items retrieved: {len(items)}")
+            logger.debug(f"Playlist {playlist_id}: Total items retrieved: {len(items)}")
             return items
         except httpx.HTTPStatusError as e:
             logger.error(f"HTTP error getting items in playlist {playlist_id}: {e}")
@@ -300,19 +333,35 @@ class PlexClient:
         Returns:
             List of track dicts, or empty list if artist not found.
         """
-        params = {"query": artist, "limit": "50"}
+        query = _normalize_search_query(artist)
+        params = {"query": query, "limit": "50"}
         qs = "&".join(f"{k}={urllib.parse.quote(str(v))}" for k, v in params.items())
         artist_resp = await self.client.get(f"/search?{qs}")
         artist_resp.raise_for_status()
         artist_root = ET.fromstring(artist_resp.text)
         dirs = artist_root.findall(".//Directory")
         if not dirs:
-            return []
+            # Plex search struggles with certain artist names (e.g. those
+            # containing apostrophes).  Retry using only the first
+            # significant word as a broader query.
+            words = query.split()
+            if len(words) > 1:
+                fallback_query = words[0]
+                params = {"query": fallback_query, "limit": "50"}
+                qs = "&".join(
+                    f"{k}={urllib.parse.quote(str(v))}" for k, v in params.items()
+                )
+                artist_resp = await self.client.get(f"/search?{qs}")
+                artist_resp.raise_for_status()
+                artist_root = ET.fromstring(artist_resp.text)
+                dirs = artist_root.findall(".//Directory")
+            if not dirs:
+                return []
         return await self._expand_artists(dirs, genre)
 
     async def search_title_only(self, title: str) -> list[dict]:
         """Direct Plex track search by title only."""
-        params = {"query": title, "limit": "100"}
+        params = {"query": _normalize_search_query(title), "limit": "100"}
         qs = "&".join(f"{k}={urllib.parse.quote(str(v))}" for k, v in params.items())
         response = await self.client.get(f"/hubs/search?{qs}")
         response.raise_for_status()
@@ -358,7 +407,7 @@ class PlexClient:
                         "track_number": None,
                         "genre": genre,
                     })
-                logger.info(f"Found {len(results)} artists matching genre '{genre}'")
+                    logger.debug(f"Found {len(results)} artists matching genre '{genre}'")
                 return results
 
             if title and artist:
@@ -366,72 +415,72 @@ class PlexClient:
                 log_msg = f"Searching for track by artist='{primary_artist}', title='{title}'"
                 if album:
                     log_msg += f", album='{album}'"
-                logger.info(log_msg)
+                logger.debug(log_msg)
 
                 result_tracks = await self.search_artist_tracks(primary_artist, genre)
 
                 if result_tracks:
-                    logger.info(f"Expanded artist '{artist}' to {len(result_tracks)} tracks")
+                    logger.debug(f"Expanded artist '{artist}' to {len(result_tracks)} tracks")
 
                     # Album-scoped match first
                     if album:
                         norm_album = _normalize_album(album)
                         album_tracks = [t for t in result_tracks if _normalize_album(t.get("album_name", "")) == norm_album]
-                        logger.info(f"Found {len(album_tracks)} tracks in album '{album}'")
+                        logger.debug(f"Found {len(album_tracks)} tracks in album '{album}'")
                         if album_tracks:
                             match = _best_match(title, album_tracks)
                             if match:
-                                logger.info(f"Album match: '{title}' → '{match.get('title')}' in '{album}'")
+                                logger.debug(f"Album match: '{title}' → '{match.get('title')}' in '{album}'")
                                 return [match]
 
                     # All-artist-tracks match
                     match = _best_match(title, result_tracks)
                     if match:
-                        logger.info(f"Matched '{title}' → '{match.get('title')}' by {match.get('artist_name', '')}")
+                        logger.debug(f"Matched '{title}' → '{match.get('title')}' by {match.get('artist_name', '')}")
                         return [match]
 
-                    logger.info(f"No match found for '{title}' by '{artist}'")
+                    logger.debug(f"No match found for '{title}' by '{artist}'")
                     return []
 
                 # No artist directory found — fall back to title-only search
-                logger.info(f"Artist directory not found: '{artist}' - falling back to title-only search")
+                logger.debug(f"Artist directory not found: '{artist}' - falling back to title-only search")
                 if title:
                     results = await self.search_title_only(title)
                     if results:
-                        norm_artist = artist.lower().strip()
+                        norm_artist = _normalize_for_compare(artist)
                         filtered = [
                             t for t in results
-                            if norm_artist in t.get("artist_name", "").lower()
-                            or t.get("artist_name", "").lower() in norm_artist
+                            if norm_artist in _normalize_for_compare(t.get("artist_name", ""))
+                            or _normalize_for_compare(t.get("artist_name", "")) in norm_artist
                         ]
                         if filtered:
                             return filtered
-                        logger.info(f"No results matching artist '{artist}' in title-only fallback")
+                        logger.debug(f"No results matching artist '{artist}' in title-only fallback")
                         return []
                 return []
 
             elif artist:
-                logger.info(f"Searching for artist='{artist}'")
+                logger.debug(f"Searching for artist='{artist}'")
                 results = await self.search_artist_tracks(artist, genre)
                 if results:
-                    logger.info(f"Found {len(results)} tracks for artist '{artist}'")
+                    logger.debug(f"Found {len(results)} tracks for artist '{artist}'")
                     return results
-                logger.info(f"Artist not found: '{artist}'")
+                logger.debug(f"Artist not found: '{artist}'")
                 return []
 
             elif title:
-                logger.info(f"Searching for title='{title}'")
+                logger.debug(f"Searching for title='{title}'")
                 results = await self.search_title_only(title)
                 if results:
-                    logger.info(f"Found {len(results)} tracks for title '{title}'")
+                    logger.debug(f"Found {len(results)} tracks for title '{title}'")
                     return results
-                logger.info(f"No tracks found for title '{title}'")
+                logger.debug(f"No tracks found for title '{title}'")
                 return []
 
-            logger.info("No search criteria provided")
+            logger.debug("No search criteria provided")
             return []
         except httpx.HTTPStatusError as e:
-            logger.error(f"HTTP error searching library: {e}")
+            logger.warning(f"HTTP error searching library: {e}")
             return []
         except ET.ParseError as e:
             logger.error(f"XML parse error in search_library: {e}")
@@ -478,7 +527,7 @@ class PlexClient:
                         "summary": summary,
                     }
 
-            logger.info(f"No playlist found with source_id: {source_id}")
+            logger.debug(f"No playlist found with source_id: {source_id}")
             return None
         except httpx.HTTPStatusError as e:
             logger.error(f"HTTP error getting library playlist: {e}")
@@ -585,7 +634,7 @@ class PlexClient:
 
             # Early exit if nothing changed
             if current_ids == desired_ids:
-                logger.info(f"Playlist {playlist_id} already up to date ({len(current_ids)} items)")
+                logger.debug(f"Playlist {playlist_id} already up to date ({len(current_ids)} items)")
                 return True
 
             current_set = set(current_ids)

@@ -27,7 +27,8 @@ export interface MatchRule {
   priority: number;
   is_active: boolean;
   is_default: boolean;
-  canvas: MatchRuleCanvas;
+  yaml_content: string;
+  canvas: MatchRuleCanvas; // Auto-generated from yaml_content on load
   created_at: string;
   updated_at: string;
 }
@@ -76,14 +77,18 @@ export const matchRulesAPI = {
 
   get: (id: number) => apiGet<MatchRule>(`/v1/match-rules/${id}`),
 
-  create: (data: { name: string }) => apiPost<MatchRule>("/v1/match-rules", data),
+  create: (data: { name: string; yaml_content: string }) =>
+    apiPost<MatchRule>("/v1/match-rules", data),
+
+  clone: (id: number, data?: { name?: string }) =>
+    apiPost<MatchRule>(`/v1/match-rules/${id}/clone`, data ?? {}),
 
   update: (
     id: number,
     data: {
       name?: string;
       is_active?: boolean;
-      canvas?: MatchRuleCanvas;
+      yaml_content?: string;
     },
   ) => apiPut<MatchRule>(`/v1/match-rules/${id}`, data),
 

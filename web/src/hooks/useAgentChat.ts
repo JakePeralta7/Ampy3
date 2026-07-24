@@ -29,6 +29,7 @@ export interface UseAgentChatOptions {
 interface HistoryMessage {
   role: string;
   content: string;
+  flow_items?: { name?: string; args?: Record<string, unknown>; result?: string; status?: string }[];
 }
 
 interface StreamEvent {
@@ -91,6 +92,31 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
 
   const abortControllerRef = useRef<AbortController | null>(null);
 
+  // Save/restore streaming content to sessionStorage for recovery on page refresh
+  const saveStreamingContent = useCallback((content: string) => {
+    try {
+      sessionStorage.setItem(`streaming_${sessionId}`, content);
+    } catch {
+      // Ignore sessionStorage errors
+    }
+  }, [sessionId]);
+
+  const getStreamingContent = useCallback((): string | null => {
+    try {
+      return sessionStorage.getItem(`streaming_${sessionId}`);
+    } catch {
+      return null;
+    }
+  }, [sessionId]);
+
+  const clearStreamingContent = useCallback(() => {
+    try {
+      sessionStorage.removeItem(`streaming_${sessionId}`);
+    } catch {
+      // Ignore errors
+    }
+  }, [sessionId]);
+
   const loadHistory = useCallback(async () => {
     try {
       const history = await chatClient.getHistory(sessionId);
@@ -100,8 +126,38 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
           role: msg.role === "user" ? ("user" as const) : ("assistant" as const),
           content: msg.content,
           timestamp: 0,
+          flowItems:
+            msg.flow_items && msg.flow_items.length > 0
+              ? msg.flow_items.map((fi, fiIdx) => ({
+                  id: `hist-fi-${idx}-${fiIdx}`,
+                  type: "tool_call" as const,
+                  name: fi.name,
+                  args: fi.args,
+                  result: fi.result,
+                  status: fi.status as FlowItem["status"],
+                }))
+              : undefined,
         }),
       );
+
+      // Check if there's streaming content that wasn't persisted yet
+      const streamingContent = getStreamingContent();
+      if (streamingContent && streamingContent.trim()) {
+        const hasStreamingMessage = loadedMessages.some(
+          (m) => m.role === "assistant" && m.content === streamingContent,
+        );
+        if (!hasStreamingMessage) {
+          // Add the streaming content as if it was partially persisted
+          loadedMessages.push({
+            id: `streaming-${Date.now()}`,
+            role: "assistant",
+            content: streamingContent,
+            timestamp: Date.now(),
+          });
+          console.debug(`Recovered streaming content from sessionStorage: ${streamingContent.length} chars`);
+        }
+      }
+
       setMessages(loadedMessages);
       if (history.title) {
         setSessionTitle(history.title);
@@ -109,7 +165,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
     } catch (err) {
       setError(getErrorMessage(err, "Failed to load chat history"));
     }
-  }, [sessionId]);
+  }, [sessionId, getStreamingContent]);
 
   useEffect(() => {
     if (autoLoadHistory && sessionId) {
@@ -129,6 +185,10 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
         flowItems: flowItemsRef.current.length > 0 ? [...flowItemsRef.current] : undefined,
       };
       setMessages((prev) => [...prev, newMessage]);
+      // Save to sessionStorage for recovery
+      if (content) {
+        saveStreamingContent(content);
+      }
     } else {
       setMessages((prev) =>
         prev.map((msg) =>
@@ -141,8 +201,12 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
             : msg,
         ),
       );
+      // Update sessionStorage
+      if (content) {
+        saveStreamingContent(content);
+      }
     }
-  }, []);
+  }, [saveStreamingContent]);
 
   const sendMessage = useCallback(
     async (content: string) => {
@@ -219,7 +283,11 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
             const chunk = event.data?.chunk;
             if (typeof chunk === "string") {
               assistantContent += chunk;
-            } else if (chunk && typeof chunk === "object" && typeof (chunk as Record<string, unknown>).content === "string") {
+            } else if (
+              chunk &&
+              typeof chunk === "object" &&
+              typeof (chunk as Record<string, unknown>).content === "string"
+            ) {
               assistantContent += (chunk as Record<string, unknown>).content;
             } else if (event.data?.output && typeof event.data.output === "string") {
               assistantContent += event.data.output;
@@ -251,6 +319,9 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
         if (assistantContent || flowItemsRef.current.length > 0) {
           updateOrCreateAssistantMessage(assistantContent);
         }
+
+        // Clear streaming content from sessionStorage once successfully persisted
+        clearStreamingContent();
       } catch (err) {
         if (!(err instanceof Error && err.name === "AbortError")) {
           setError(getErrorMessage(err, "Failed to send message"));
@@ -259,7 +330,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
         setIsLoading(false);
       }
     },
-    [sessionId, updateOrCreateAssistantMessage],
+    [sessionId, updateOrCreateAssistantMessage, clearStreamingContent],
   );
 
   const clearHistory = useCallback(async () => {

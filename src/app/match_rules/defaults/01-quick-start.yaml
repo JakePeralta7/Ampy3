@@ -1,0 +1,46 @@
+name: "Quick Start"
+description: >
+  Simple search-then-compare pipeline. Searches Plex by title, artist and album,
+  then scores candidates with a 0.75 weighted threshold. A good first rule that
+  covers the majority of well-tagged tracks.
+
+nodes:
+  source:
+    type: track_source
+
+  search:
+    type: search
+    config:
+      fields_to_search:
+        - search_title
+        - search_artist
+        - search_album
+      max_results: 50
+
+  compare:
+    type: compare
+    config:
+      fields_to_match:
+        - title
+        - artist_name
+        - album_name
+      threshold: 0.75
+      weights:
+        title: 50
+        artist_name: 25
+        album_name: 25
+
+  output:
+    type: match_output
+
+edges:
+  - from: source
+    to: search
+
+  - from: search
+    to: compare
+    source_handle: out
+    target_handle: candidates
+
+  - from: compare
+    to: output

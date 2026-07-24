@@ -1,4 +1,4 @@
-import { Pause, Pencil, Play, Trash2 } from "lucide-react";
+import { Copy, Pause, Pencil, Play, Trash2 } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import type { MatchRule } from "../../api/rules";
 import { Badge } from "../ui/Badge";
@@ -10,6 +10,7 @@ interface RuleListProps {
   onRulesReorder: (order: { id: number; priority: number }[]) => void;
   onDeleteRule: (ruleId: number) => void;
   onToggleActive: (rule: MatchRule) => void;
+  onCloneRule: (ruleId: number) => void;
   loading: boolean;
 }
 
@@ -19,6 +20,7 @@ export function RuleList({
   onRulesReorder,
   onDeleteRule,
   onToggleActive,
+  onCloneRule,
   loading,
 }: RuleListProps) {
   const [localRules, setLocalRules] = useState<MatchRule[] | null>(null);
@@ -128,6 +130,13 @@ export function RuleList({
               icon={rule.is_active ? <Pause size={14} /> : <Play size={14} />}
               onClick={() => onToggleActive(rule)}
               title={rule.is_active ? "Pause" : "Resume"}
+            />
+            <Button
+              variant="ghost"
+              size="xs"
+              icon={<Copy size={14} />}
+              onClick={() => onCloneRule(rule.id)}
+              title="Clone"
             />
             {!rule.is_default && (
               <>

@@ -11,6 +11,7 @@ interface NodeInspectorProps {
   onDelete: () => void;
   onBreakpointToggle: () => void;
   hasBreakpoint: boolean;
+  readOnly?: boolean;
 }
 
 export function NodeInspector({
@@ -23,6 +24,7 @@ export function NodeInspector({
   onDelete,
   onBreakpointToggle,
   hasBreakpoint,
+  readOnly = false,
 }: NodeInspectorProps) {
   const def = nodeType ? getNodeDef(nodeType) : undefined;
 
@@ -35,6 +37,7 @@ export function NodeInspector({
   }
 
   const handleFieldChange = (field: ConfigFieldDef, value: unknown) => {
+    if (readOnly) return;
     onConfigChange({ ...config, [field.key]: value });
   };
 
@@ -184,9 +187,11 @@ export function NodeInspector({
         </div>
 
         {/* Delete */}
-        <Button variant="danger" size="sm" onClick={onDelete}>
-          Delete Node
-        </Button>
+        {!readOnly && (
+          <Button variant="danger" size="sm" onClick={onDelete}>
+            Delete Node
+          </Button>
+        )}
       </div>
     </div>
   );

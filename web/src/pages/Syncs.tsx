@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import type { CreateScheduledSyncInput, ScheduledSync } from "../api/schedules";
+import { PageLayout } from "../components/Layout/PageLayout";
 import { PlaylistDetails } from "../components/Playlists/PlaylistDetails";
 import { ScheduleFormModal } from "../components/Playlists/ScheduleFormModal";
 import { SchedulesList } from "../components/Playlists/SchedulesList";
@@ -209,40 +210,36 @@ export function SyncsPage() {
   };
 
   return (
-    <div className="flex-1">
-      <div className="max-w-7xl mx-auto p-8">
-        <div className="mb-8 flex items-center justify-between">
-          <div>
-            <h1 className="text-4xl font-bold mb-2 text-fg">Syncs</h1>
-            <p className="text-fg-muted">Manage your scheduled playlist syncs</p>
-          </div>
-          <Button
-            onClick={() => {
-              setEditingSync(null);
-              setIsFormModalOpen(true);
-            }}
-            icon={<span>+</span>}
-          >
-            Add Schedule
-          </Button>
-        </div>
-
-        <div>
-          <SchedulesList
-            syncs={syncs}
-            loading={loading}
-            error={error}
-            refreshing={refreshing}
-            onEdit={handleEdit}
-            onDelete={handleDelete}
-            onToggleActive={handleToggleActive}
-            onSyncNow={handleSyncNow}
-            onViewDetails={handleViewDetails}
-            onBulkSyncNow={handleBulkSyncNow}
-            onBulkToggleActive={handleBulkToggleActive}
-            onBulkDelete={handleBulkDelete}
-          />
-        </div>
+    <PageLayout
+      title="Syncs"
+      subtitle="Manage your scheduled playlist syncs"
+      actions={
+        <Button
+          onClick={() => {
+            setEditingSync(null);
+            setIsFormModalOpen(true);
+          }}
+          icon={<span>+</span>}
+        >
+          Add Schedule
+        </Button>
+      }
+    >
+      <div>
+        <SchedulesList
+          syncs={syncs}
+          loading={loading}
+          error={error}
+          refreshing={refreshing}
+          onEdit={handleEdit}
+          onDelete={handleDelete}
+          onToggleActive={handleToggleActive}
+          onSyncNow={handleSyncNow}
+          onViewDetails={handleViewDetails}
+          onBulkSyncNow={handleBulkSyncNow}
+          onBulkToggleActive={handleBulkToggleActive}
+          onBulkDelete={handleBulkDelete}
+        />
       </div>
 
       <ScheduleFormModal
@@ -277,6 +274,6 @@ export function SyncsPage() {
         onConfirm={confirmDelete}
         onCancel={() => setDeleteConfirmSync(null)}
       />
-    </div>
+    </PageLayout>
   );
 }

@@ -15,7 +15,9 @@ services:
       retries: 5
 
   web:
-    build: .
+    build:
+      context: .
+      target: web
     ports:
       - ${APP_PORT:-8000}:8000
     depends_on:
@@ -37,8 +39,10 @@ services:
       - ./cookies:/cookies:ro
 
   worker:
-    build: .
-    command: sh -c "celery -A src.app.tasks worker --loglevel=info --concurrency=${CELERY_WORKER_CONCURRENCY:-1}"
+    build:
+      context: .
+      target: worker
+    command: sh -c "celery -A src.app.tasks worker --loglevel=${CELERY_LOG_LEVEL:-info} --concurrency=${CELERY_WORKER_CONCURRENCY:-1}"
     depends_on:
       valkey:
         condition: service_healthy
@@ -48,6 +52,7 @@ services:
       - YT_DLP_COOKIES=/cookies/cookies.txt
       - DATABASE_URL=postgresql://ampy3:ampy3@postgres:5432/ampy3
       - CELERY_WORKER_CONCURRENCY=${CELERY_WORKER_CONCURRENCY:-1}
+      - CELERY_LOG_LEVEL=${CELERY_LOG_LEVEL:-info}
     volumes:
       - ./cookies:/cookies:ro
 
