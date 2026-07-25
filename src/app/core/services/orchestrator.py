@@ -62,7 +62,8 @@ class SyncOrchestrator:
         semaphore = asyncio.Semaphore(10)
 
         async def _resolve_one(
-            position: int, track: TrackMetadata,
+            position: int,
+            track: TrackMetadata,
         ) -> tuple[int, TrackMetadata, dict | None]:
             async with semaphore:
                 result = await self._resolve_track(track, rules)
@@ -95,16 +96,20 @@ class SyncOrchestrator:
                 row["match_rule_id"] = result.get("rule_id")
                 matched_results.append(result)
                 stats["matched"] += 1
-                stats["matched_tracks"].append({
-                    "title": track.title,
-                    "artist": track.artist_name,
-                })
+                stats["matched_tracks"].append(
+                    {
+                        "title": track.title,
+                        "artist": track.artist_name,
+                    }
+                )
             else:
                 stats["failed"] += 1
-                stats["failed_tracks"].append({
-                    "title": track.title or "unknown",
-                    "artist": track.artist_name,
-                })
+                stats["failed_tracks"].append(
+                    {
+                        "title": track.title or "unknown",
+                        "artist": track.artist_name,
+                    }
+                )
                 error_msg = f"No match for track: {track.title or 'unknown'}"
                 stats["errors"].append(error_msg)
             track_rows.append(row)
@@ -136,12 +141,15 @@ class SyncOrchestrator:
         return stats
 
     async def _resolve_track(
-        self, track: TrackMetadata, rules: list[MatchRule] | None = None,
+        self,
+        track: TrackMetadata,
+        rules: list[MatchRule] | None = None,
     ) -> dict | None:
         if not track.is_matchable:
             logger.warning(
-                "Track missing required metadata for matching:"
-                " title=%s artist=%s", track.title, track.artist_name,
+                "Track missing required metadata for matching: title=%s artist=%s",
+                track.title,
+                track.artist_name,
             )
             return None
 
@@ -154,7 +162,10 @@ class SyncOrchestrator:
                 m = matches[0]
                 logger.debug(
                     "Matched '%s' by '%s' via rule '%s' (id=%d)",
-                    track.title, track.artist_name, m.get("_rule_name", "?"), m.get("_rule_id", -1),
+                    track.title,
+                    track.artist_name,
+                    m.get("_rule_name", "?"),
+                    m.get("_rule_id", -1),
                 )
                 return {
                     "found": True,
@@ -168,6 +179,8 @@ class SyncOrchestrator:
         except Exception as e:
             logger.error(
                 "MatchEngine failed for '%s' by '%s': %s",
-                track.title, track.artist_name, e,
+                track.title,
+                track.artist_name,
+                e,
             )
             return None

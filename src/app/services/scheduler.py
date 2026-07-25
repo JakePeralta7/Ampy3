@@ -1,4 +1,5 @@
 """APScheduler service for managing scheduled playlist syncs."""
+
 from __future__ import annotations
 
 import logging
@@ -76,9 +77,7 @@ class SchedulerService(ServiceBase):
 
         try:
             async with AsyncSessionLocal() as session:
-                stmt = select(ScheduledPlaylistSync).where(
-                    ScheduledPlaylistSync.is_active
-                )
+                stmt = select(ScheduledPlaylistSync).where(ScheduledPlaylistSync.is_active)
                 result = await session.execute(stmt)
                 syncs = result.scalars().all()
 
@@ -91,9 +90,7 @@ class SchedulerService(ServiceBase):
             raise
 
     @classmethod
-    async def _register_sync(
-        cls, scheduler: AsyncIOScheduler, sync: ScheduledPlaylistSync
-    ) -> None:
+    async def _register_sync(cls, scheduler: AsyncIOScheduler, sync: ScheduledPlaylistSync) -> None:
         """Register a single sync with the scheduler."""
         job_id = f"sync_{sync.id}"
 

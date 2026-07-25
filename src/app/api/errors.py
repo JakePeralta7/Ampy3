@@ -1,4 +1,5 @@
 """Shared API error handling utilities."""
+
 from __future__ import annotations
 
 import functools

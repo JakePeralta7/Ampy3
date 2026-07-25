@@ -2,6 +2,7 @@
 
 Auto-registers built-in providers on import.
 """
+
 from src.app.core.providers.base import BaseMetadataProvider  # noqa: F401
 from src.app.core.providers.musicbrainz import MusicBrainzProvider  # noqa: F401
 from src.app.core.providers.registry import (  # noqa: F401

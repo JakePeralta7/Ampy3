@@ -33,6 +33,7 @@ A rule YAML looks like:
 Node keys are semantic (user-chosen) identifiers. Positions are never
 stored in YAML — the auto-layout algorithm generates them at render time.
 """
+
 from __future__ import annotations
 
 from typing import Any, Literal

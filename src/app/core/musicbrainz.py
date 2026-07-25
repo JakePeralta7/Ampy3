@@ -1,4 +1,5 @@
 """MusicBrainz resolver for metadata matching."""
+
 from __future__ import annotations
 
 import logging
@@ -20,7 +21,7 @@ class MusicBrainzResolver:
 
     def _get(self, endpoint: str, params: dict) -> dict:
         url = f"{self.BASE_URL}/{endpoint}"
-        query = params.get('query', '')
+        query = params.get("query", "")
         logger.debug(f"[MusicBrainz] Searching {endpoint} with query: {query}")
         resp = requests.get(url, params=params, headers=self.headers, timeout=15)
         resp.raise_for_status()
@@ -52,9 +53,7 @@ class MusicBrainzResolver:
         artists = result.get("artists", [])
         return artists[0] if artists else None
 
-    def lookup_release_group(
-        self, title: str, artist_name: str | None = None
-    ) -> dict | None:
+    def lookup_release_group(self, title: str, artist_name: str | None = None) -> dict | None:
         query = f"releasetitle:{title}"
         if artist_name:
             query += f' artist:"{artist_name}"'
@@ -82,26 +81,32 @@ class MusicBrainzResolver:
         for item in result.get(key, []):
             entry = {"id": item.get("id"), "name": item.get("name") or item.get("title", "")}
             if entity == "artist":
-                entry.update({
-                    "type": item.get("type"),
-                    "country": item.get("country"),
-                    "disambiguation": item.get("disambiguation", ""),
-                })
+                entry.update(
+                    {
+                        "type": item.get("type"),
+                        "country": item.get("country"),
+                        "disambiguation": item.get("disambiguation", ""),
+                    }
+                )
             elif entity == "release":
-                entry.update({
-                    "artist": self._artist_name(item.get("artist-credit")),
-                    "date": item.get("date", ""),
-                    "track_count": (
-                        len(item.get("media", [])) > 0
-                        and item["media"][0].get("track-count", 0)
-                        or 0
-                    ),
-                })
+                entry.update(
+                    {
+                        "artist": self._artist_name(item.get("artist-credit")),
+                        "date": item.get("date", ""),
+                        "track_count": (
+                            len(item.get("media", [])) > 0
+                            and item["media"][0].get("track-count", 0)
+                            or 0
+                        ),
+                    }
+                )
             elif entity == "recording":
-                entry.update({
-                    "artist": self._artist_name(item.get("artist-credit")),
-                    "duration_ms": item.get("length", 0),
-                })
+                entry.update(
+                    {
+                        "artist": self._artist_name(item.get("artist-credit")),
+                        "duration_ms": item.get("length", 0),
+                    }
+                )
             items.append(entry)
         return items
 
@@ -121,14 +126,16 @@ class MusicBrainzResolver:
         )
         artists = []
         for a in result.get("artists", []):
-            artists.append({
-                "id": a.get("id"),
-                "name": a.get("name"),
-                "type": a.get("type"),
-                "country": a.get("country"),
-                "disambiguation": a.get("disambiguation", ""),
-                "tags": [t.get("name") for t in a.get("tags", []) if t.get("name")],
-            })
+            artists.append(
+                {
+                    "id": a.get("id"),
+                    "name": a.get("name"),
+                    "type": a.get("type"),
+                    "country": a.get("country"),
+                    "disambiguation": a.get("disambiguation", ""),
+                    "tags": [t.get("name") for t in a.get("tags", []) if t.get("name")],
+                }
+            )
         return artists
 
     def search_releases(self, query: str, artist: str = "", limit: int = 10) -> list[dict]:
@@ -148,18 +155,18 @@ class MusicBrainzResolver:
         result = self._get("release", {"query": q, "fmt": "json", "limit": min(limit, 25)})
         releases = []
         for r in result.get("releases", []):
-            releases.append({
-                "id": r.get("id"),
-                "title": r.get("title"),
-                "artist": self._artist_name(r.get("artist-credit")),
-                "date": r.get("date", ""),
-                "track_count": (
-                    len(r.get("media", [])) > 0
-                    and r["media"][0].get("track-count", 0)
-                    or 0
-                ),
-                "status": r.get("status"),
-            })
+            releases.append(
+                {
+                    "id": r.get("id"),
+                    "title": r.get("title"),
+                    "artist": self._artist_name(r.get("artist-credit")),
+                    "date": r.get("date", ""),
+                    "track_count": (
+                        len(r.get("media", [])) > 0 and r["media"][0].get("track-count", 0) or 0
+                    ),
+                    "status": r.get("status"),
+                }
+            )
         return releases
 
     def search_recordings(self, query: str, artist: str = "", limit: int = 10) -> list[dict]:
@@ -179,13 +186,15 @@ class MusicBrainzResolver:
         result = self._get("recording", {"query": q, "fmt": "json", "limit": min(limit, 25)})
         recordings = []
         for rec in result.get("recordings", []):
-            recordings.append({
-                "id": rec.get("id"),
-                "title": rec.get("title"),
-                "artist": self._artist_name(rec.get("artist-credit")),
-                "duration_ms": rec.get("length", 0),
-                "video": rec.get("video", False),
-            })
+            recordings.append(
+                {
+                    "id": rec.get("id"),
+                    "title": rec.get("title"),
+                    "artist": self._artist_name(rec.get("artist-credit")),
+                    "duration_ms": rec.get("length", 0),
+                    "video": rec.get("video", False),
+                }
+            )
         return recordings
 
     def get_artist_releases(self, artist_mbid: str, limit: int = 25) -> list[dict]:
@@ -198,30 +207,33 @@ class MusicBrainzResolver:
         Returns:
             List of release dicts with id, title, date, track_count
         """
-        result = self._get("artist", {
-            "id": artist_mbid,
-            "fmt": "json",
-            "includes": "releases",
-            "limit": min(limit, 50),
-        })
+        result = self._get(
+            "artist",
+            {
+                "id": artist_mbid,
+                "fmt": "json",
+                "includes": "releases",
+                "limit": min(limit, 50),
+            },
+        )
         releases = []
         for r in result.get("releases", []):
-            releases.append({
-                "id": r.get("id"),
-                "title": r.get("title"),
-                "date": r.get("date", ""),
-                "track_count": (
-                    len(r.get("media", [])) > 0
-                    and r["media"][0].get("track-count", 0)
-                    or 0
-                ),
-                "status": r.get("status"),
-                "type": (
-                    r.get("release-group", {}).get("primary-type")
-                    if isinstance(r.get("release-group"), dict)
-                    else ""
-                ),
-            })
+            releases.append(
+                {
+                    "id": r.get("id"),
+                    "title": r.get("title"),
+                    "date": r.get("date", ""),
+                    "track_count": (
+                        len(r.get("media", [])) > 0 and r["media"][0].get("track-count", 0) or 0
+                    ),
+                    "status": r.get("status"),
+                    "type": (
+                        r.get("release-group", {}).get("primary-type")
+                        if isinstance(r.get("release-group"), dict)
+                        else ""
+                    ),
+                }
+            )
         return releases
 
     def get_release_tracks(self, release_mbid: str) -> list[dict]:
@@ -233,24 +245,29 @@ class MusicBrainzResolver:
         Returns:
             List of track dicts with id, title, artist, duration_ms, track_number
         """
-        result = self._get("release", {
-            "id": release_mbid,
-            "fmt": "json",
-            "includes": "recordings",
-        })
+        result = self._get(
+            "release",
+            {
+                "id": release_mbid,
+                "fmt": "json",
+                "includes": "recordings",
+            },
+        )
         tracks = []
         for media in result.get("media", []):
             for t in media.get("tracks", []):
                 rec = t.get("recording", {})
                 if not isinstance(rec, dict):
                     continue
-                tracks.append({
-                    "id": rec.get("id"),
-                    "title": rec.get("title"),
-                    "artist": self._artist_name(rec.get("artist-credit")),
-                    "duration_ms": rec.get("length", 0),
-                    "track_number": t.get("number") or t.get("position", 0),
-                })
+                tracks.append(
+                    {
+                        "id": rec.get("id"),
+                        "title": rec.get("title"),
+                        "artist": self._artist_name(rec.get("artist-credit")),
+                        "duration_ms": rec.get("length", 0),
+                        "track_number": t.get("number") or t.get("position", 0),
+                    }
+                )
         return tracks
 
     def lookup_release(self, mbid: str) -> dict | None:

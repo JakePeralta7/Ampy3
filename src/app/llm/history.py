@@ -2,6 +2,7 @@
 
 Provides async functions for storing and retrieving chat messages.
 """
+
 from __future__ import annotations
 
 import json

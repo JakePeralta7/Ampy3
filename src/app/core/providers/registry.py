@@ -1,4 +1,5 @@
 """Registry for metadata providers (MusicBrainz, Deezer, etc.)."""
+
 from __future__ import annotations
 
 import logging

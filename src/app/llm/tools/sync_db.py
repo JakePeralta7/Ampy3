@@ -2,6 +2,7 @@
 
 All tools use the async SQLAlchemy session — safe to call from FastAPI/LangGraph context.
 """
+
 from __future__ import annotations
 
 from langchain_core.tools import tool

@@ -6,6 +6,7 @@
 ``canvas_to_yaml`` serialises a canvas dict back to a clean YAML string
 (positions are stripped — they are never stored).
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -28,10 +29,7 @@ def yaml_to_canvas(rule: RuleDefinition) -> dict[str, Any]:
     node_ids = list(rule.nodes.keys())
 
     # Build the edge list in the format expected by auto_layout
-    raw_edges = [
-        {"from": e.from_node, "to": e.to_node}
-        for e in rule.edges
-    ]
+    raw_edges = [{"from": e.from_node, "to": e.to_node} for e in rule.edges]
 
     positions = auto_layout(node_ids, raw_edges)
 

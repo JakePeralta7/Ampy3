@@ -1,4 +1,5 @@
 """Protocol and base class for node-graph node handlers."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod

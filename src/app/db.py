@@ -1,4 +1,5 @@
 """Database configuration and initialization."""
+
 from collections.abc import AsyncGenerator, Generator
 
 from sqlalchemy import create_engine
@@ -76,6 +77,7 @@ async def init_db() -> None:
         await conn.run_sync(Base.metadata.create_all, checkfirst=True)
 
     from src.app.match_rules.loader import seed_default_rules
+
     await seed_default_rules()
 
 

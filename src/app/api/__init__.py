@@ -3,6 +3,7 @@
 Imports and exports all API modules for clean app initialization.
 Each module owns its own prefix and tags on the router.
 """
+
 from fastapi import FastAPI
 
 from src.app.api.audit import router as audit_router

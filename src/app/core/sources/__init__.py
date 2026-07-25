@@ -3,6 +3,7 @@
 All modules in this package are auto-imported so that ``@register_source``
 decorators fire on startup.
 """
+
 import importlib
 import pkgutil
 

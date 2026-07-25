@@ -1,4 +1,5 @@
 """Base class for application services with lifecycle management."""
+
 from __future__ import annotations
 
 import logging

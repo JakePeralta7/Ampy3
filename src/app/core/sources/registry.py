@@ -1,4 +1,5 @@
 """Source adapter registry with plugin-style registration."""
+
 from __future__ import annotations
 
 import logging
@@ -44,9 +45,7 @@ class SourceRegistry:
             return cls._sources[source_id]
         except KeyError:
             available = ", ".join(sorted(cls._sources)) or "(none)"
-            raise KeyError(
-                f"Unknown source '{source_id}'. Available: {available}"
-            ) from None
+            raise KeyError(f"Unknown source '{source_id}'. Available: {available}") from None
 
     @classmethod
     def detect(cls, url: str) -> type[IPlatformSource] | None:

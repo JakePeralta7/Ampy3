@@ -86,11 +86,13 @@ async def create_plex_playlist(title: str, track_descriptions: list[dict]) -> st
 
     for desc in track_descriptions:
         if desc.get("plex_id"):
-            matched_items.append({
-                "plex_id": desc["plex_id"],
-                "title": desc.get("title", ""),
-                "artist_name": desc.get("artist", ""),
-            })
+            matched_items.append(
+                {
+                    "plex_id": desc["plex_id"],
+                    "title": desc.get("title", ""),
+                    "artist_name": desc.get("artist", ""),
+                }
+            )
         else:
             # Extract primary artist from comma-separated artist names
             artist = _extract_primary_artist(desc.get("artist", ""))
@@ -109,8 +111,7 @@ async def create_plex_playlist(title: str, track_descriptions: list[dict]) -> st
                     matched_items.append(fuzzy_match)
                 else:
                     unmatched_tracks.append(
-                        f"{desc.get('artist', 'Unknown')}"
-                        f" - {desc.get('title', 'Unknown')}"
+                        f"{desc.get('artist', 'Unknown')} - {desc.get('title', 'Unknown')}"
                     )
 
     if not matched_items:

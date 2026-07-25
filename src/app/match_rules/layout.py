@@ -11,6 +11,7 @@ The result is a dict mapping node_id -> {"x": float, "y": float}.
 No manual coordinates are ever stored — this is computed fresh whenever
 a canvas is needed (e.g. GET /api/v1/match-rules/:id).
 """
+
 from __future__ import annotations
 
 from collections import deque

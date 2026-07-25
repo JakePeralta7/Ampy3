@@ -1,4 +1,5 @@
 """Valkey/Redis cache service."""
+
 import logging
 
 import valkey.asyncio as valkey_async

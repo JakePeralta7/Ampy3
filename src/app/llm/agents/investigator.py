@@ -6,6 +6,7 @@ verify → create → test_verify.
 
 Each phase has access only to its scoped tool set, enforced via ToolNode composition.
 """
+
 from __future__ import annotations
 
 from langchain_core.tools import BaseTool
@@ -79,4 +80,3 @@ ALL_TOOLS: list[BaseTool] = [
     *TEST_VERIFY_TOOLS,
 ]
 """All tools across all phases (backward compatibility)."""
-

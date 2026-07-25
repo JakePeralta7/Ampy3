@@ -113,21 +113,23 @@ def _save_sync_results(
         if track_rows:
             run_track_rows = []
             for row_data in track_rows:
-                run_track_rows.append({
-                    "run_id": run.id,
-                    "position": row_data.get("position", 0),
-                    "source_title": row_data.get("source_title"),
-                    "source_artist": row_data.get("source_artist"),
-                    "source_album": row_data.get("source_album"),
-                    "source_duration_ms": row_data.get("source_duration_ms"),
-                    "source_id": row_data.get("source_id"),
-                    "match_item_id": row_data.get("match_item_id"),
-                    "match_title": row_data.get("match_title"),
-                    "match_artist": row_data.get("match_artist"),
-                    "match_album": row_data.get("match_album"),
-                    "match_duration": row_data.get("match_duration"),
-                    "match_rule_id": row_data.get("match_rule_id"),
-                })
+                run_track_rows.append(
+                    {
+                        "run_id": run.id,
+                        "position": row_data.get("position", 0),
+                        "source_title": row_data.get("source_title"),
+                        "source_artist": row_data.get("source_artist"),
+                        "source_album": row_data.get("source_album"),
+                        "source_duration_ms": row_data.get("source_duration_ms"),
+                        "source_id": row_data.get("source_id"),
+                        "match_item_id": row_data.get("match_item_id"),
+                        "match_title": row_data.get("match_title"),
+                        "match_artist": row_data.get("match_artist"),
+                        "match_album": row_data.get("match_album"),
+                        "match_duration": row_data.get("match_duration"),
+                        "match_rule_id": row_data.get("match_rule_id"),
+                    }
+                )
             db.execute(insert(SyncRunTrack), run_track_rows)
 
         # Replace playlist tracks with bulk insert

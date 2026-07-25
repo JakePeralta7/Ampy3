@@ -12,6 +12,7 @@ Each phase has:
 The exported ``workflow`` object is consumed by api/chat.py via
 ``workflow.astream_events`` and ``workflow.ainvoke``.
 """
+
 from __future__ import annotations
 
 from langchain_core.messages import SystemMessage
@@ -47,6 +48,7 @@ _test_verify_tools = ToolNode(TEST_VERIFY_TOOLS)
 
 
 # ─── Phase Node Functions ─────────────────────────────────────────────────────
+
 
 async def _gather_context_node(state: AgentState) -> dict:
     """Phase 1: Gather context about syncs and unmatched tracks."""
@@ -170,6 +172,7 @@ async def _test_verify_node(state: AgentState) -> dict:
 
 # ─── Conditional Edge Functions ───────────────────────────────────────────────
 
+
 def _should_continue_gather_context(state: AgentState) -> str:
     """After gather_context, check if LLM made tool calls.
 
@@ -255,6 +258,7 @@ def _should_test_verify_to_end(state: AgentState) -> str:
 
 # ─── Graph Construction ──────────────────────────────────────────────────────
 
+
 def _build_graph() -> StateGraph:
     """Build the 6-phase task-specific workflow graph."""
     graph = StateGraph(AgentState)
@@ -308,4 +312,3 @@ def _build_graph() -> StateGraph:
 
 
 workflow = _build_graph().compile()
-

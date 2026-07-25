@@ -3,6 +3,7 @@
 All database operations use the async SQLAlchemy session.
 `test_match_rule` wires into the same MatchEngine used by the REST API.
 """
+
 from __future__ import annotations
 
 import logging
@@ -313,7 +314,7 @@ async def test_match_rule(
     def _build_steps_trace(steps_list: list) -> list[dict]:
         """Build a clean, readable steps trace for output."""
         trace = []
-        for step in (steps_list or []):
+        for step in steps_list or []:
             if not isinstance(step, dict):
                 continue
 
@@ -338,7 +339,7 @@ async def test_match_rule(
         per_rule = []
         for t in traces:
             match_step = None
-            for step in (t.get("steps") or []):
+            for step in t.get("steps") or []:
                 if isinstance(step, dict) and step.get("outputs"):
                     match_step = step
 
@@ -390,4 +391,3 @@ async def test_match_rule(
     except Exception as exc:
         logger.error("test_match_rule failed: %s", exc, exc_info=True)
         return {"error": str(exc)}
-

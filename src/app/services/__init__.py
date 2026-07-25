@@ -3,6 +3,7 @@
 Manages singleton instances of external services (Plex, Ollama, Celery, Valkey).
 Provides factory functions for creating and retrieving service instances.
 """
+
 import logging
 
 from src.app.services.celery import CeleryService

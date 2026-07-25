@@ -242,18 +242,20 @@ async def test_rules(
         matches = []
         for t in traces:
             match_step = None
-            for step in (t.get("steps") or []):
+            for step in t.get("steps") or []:
                 if isinstance(step, dict) and step.get("outputs"):
                     match_step = step
             result = match_step.get("outputs", {}).get("out") if match_step else None
-            matches.append(MatchRuleTestResult(
-                rule_id=t["rule_id"],
-                rule_name=t["rule_name"],
-                rule_priority=t["rule_priority"],
-                matched=result is not None,
-                result=result,
-                error=t.get("error"),
-            ))
+            matches.append(
+                MatchRuleTestResult(
+                    rule_id=t["rule_id"],
+                    rule_name=t["rule_name"],
+                    rule_priority=t["rule_priority"],
+                    matched=result is not None,
+                    result=result,
+                    error=t.get("error"),
+                )
+            )
 
         match_results = []
         if not body.rule_ids:

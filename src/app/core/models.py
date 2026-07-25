@@ -18,8 +18,7 @@ class IPlatformSource(ABC):
     """Human-readable name, e.g. ``"YouTube Music"``."""
 
     @abstractmethod
-    async def get_playlist(self, playlist_url: str) -> PlaylistMetadata:
-        ...
+    async def get_playlist(self, playlist_url: str) -> PlaylistMetadata: ...
 
     @classmethod
     @abstractmethod

@@ -36,8 +36,12 @@ def sync_playlists_task(
         # Pass a lambda that creates the coroutine, so _run_async can retry with a fresh coroutine
         stats = _run_async(
             lambda: _async_sync_task(
-                playlist_url, source, replace_existing,
-                schedule_id, rules, target_playlist_name,
+                playlist_url,
+                source,
+                replace_existing,
+                schedule_id,
+                rules,
+                target_playlist_name,
             )
         )
         logger.debug(f"Sync completed: {stats['matched']} matched, {stats['failed']} failed")
@@ -79,8 +83,7 @@ async def _async_sync_task(
     playlist_metadata = await source_adapter.get_playlist(playlist_url)
 
     logger.debug(
-        f"Fetched playlist '{playlist_metadata.title}'"
-        f" with {len(playlist_metadata.tracks)} tracks"
+        f"Fetched playlist '{playlist_metadata.title}' with {len(playlist_metadata.tracks)} tracks"
     )
 
     target = await get_sync_target()
@@ -111,6 +114,7 @@ async def _async_sync_task(
 @celery_app.task
 def get_sync_status_task(task_id: str):
     from celery.result import AsyncResult
+
     result = AsyncResult(task_id, app=celery_app)
     return {
         "task_id": task_id,

@@ -166,10 +166,9 @@ async def update_scheduled_sync(
             detail=f"Scheduled sync with ID {sync_id} not found",
         )
 
-    if (
-        body.schedule_interval is not None
-        and body.schedule_interval not in [e.value for e in ScheduleIntervalEnum]
-    ):
+    if body.schedule_interval is not None and body.schedule_interval not in [
+        e.value for e in ScheduleIntervalEnum
+    ]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
@@ -260,9 +259,9 @@ async def bulk_sync_now(
         event_type="sync.bulk_triggered",
         resource_type="schedule",
         summary=(
-        f"Bulk sync triggered for {len(found_ids)} schedule(s): "
-        f"{', '.join(s.target_playlist_name for s in syncs.values())}"
-    ),
+            f"Bulk sync triggered for {len(found_ids)} schedule(s): "
+            f"{', '.join(s.target_playlist_name for s in syncs.values())}"
+        ),
     )
 
     return BulkResponse(processed=len(found_ids), task_ids=task_ids)

@@ -1,4 +1,5 @@
 """Plex Media Server sync target adapter."""
+
 from __future__ import annotations
 
 import logging
@@ -45,7 +46,9 @@ class PlexTarget(BaseTarget):
         custom_metadata: dict | None = None,
     ) -> str | None:
         return await self._client.create_plist_from_results(
-            title=title, items=items, custom_metadata=custom_metadata,
+            title=title,
+            items=items,
+            custom_metadata=custom_metadata,
         )
 
     async def update_playlist(self, playlist_id: str, items: list[dict]) -> bool:
@@ -83,7 +86,10 @@ class PlexTarget(BaseTarget):
         album: str = "",
     ) -> list[dict]:
         return await self._client.search_library(
-            title=title, artist=artist, genre=genre, album=album,
+            title=title,
+            artist=artist,
+            genre=genre,
+            album=album,
         )
 
     async def search_artist_tracks(self, artist: str, genre: str = "") -> list[dict]:

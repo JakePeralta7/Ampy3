@@ -1,4 +1,5 @@
 """Celery task queue service."""
+
 import logging
 
 from src.app.services.base import ServiceBase

@@ -3,6 +3,7 @@
 Each rule has a canvas (nodes + edges) defining a dataflow program.
 The engine executes nodes in dependency order and collects match candidates.
 """
+
 from __future__ import annotations
 
 import contextvars
@@ -64,6 +65,7 @@ def register_node(node_type: str, handler: NodeHandler | NodeHandlerBase | None 
     def decorator(fn: NodeHandler | NodeHandlerBase) -> NodeHandler | NodeHandlerBase:
         _handlers[node_type] = fn
         return fn
+
     return decorator
 
 
@@ -74,7 +76,8 @@ def get_handler(node_type: str) -> NodeHandler | NodeHandlerBase | None:
 # ─── Target Context ───────────────────────────────────────────
 
 current_target: contextvars.ContextVar[BaseTarget | None] = contextvars.ContextVar(
-    "current_target", default=None,
+    "current_target",
+    default=None,
 )
 
 
@@ -93,6 +96,7 @@ def get_current_target() -> BaseTarget:
 
 
 # ─── Graph Executor ────────────────────────────────────────────
+
 
 class NodeGraphExecutor:
     """Executes a single rule's node graph (canvas) for a given track.
@@ -123,7 +127,10 @@ class NodeGraphExecutor:
         token = current_target.set(self._target)
         try:
             return await self._execute_impl(
-                canvas, track, nodes, edges,
+                canvas,
+                track,
+                nodes,
+                edges,
                 collect_trace=collect_trace,
             )
         finally:
@@ -195,7 +202,7 @@ class NodeGraphExecutor:
 
             # Auto-provide reference data for compare nodes
             if node["type"] == "compare" and "reference" not in inputs:
-                for src_nid in reversed(sorted_ids[:sorted_ids.index(nid)]):
+                for src_nid in reversed(sorted_ids[: sorted_ids.index(nid)]):
                     src_output = outputs.get(src_nid, {})
                     for val in src_output.values():
                         if isinstance(val, dict) and "title" in val:
@@ -211,13 +218,15 @@ class NodeGraphExecutor:
             outputs[nid] = result
 
             if collect_trace:
-                trace.append({
-                    "node_id": nid,
-                    "node_type": node["type"],
-                    "config": node.get("config", {}),
-                    "inputs": dict(inputs),
-                    "outputs": dict(result),
-                })
+                trace.append(
+                    {
+                        "node_id": nid,
+                        "node_type": node["type"],
+                        "config": node.get("config", {}),
+                        "inputs": dict(inputs),
+                        "outputs": dict(result),
+                    }
+                )
 
             # Collect match emissions from terminal compare nodes
             if node["type"] == "compare":
@@ -233,6 +242,7 @@ class NodeGraphExecutor:
 
 
 # ─── Match Engine ──────────────────────────────────────────────
+
 
 def _rule_canvas(rule: MatchRule) -> dict:
     """Convert a MatchRule's yaml_content to a canvas dict for the executor."""
@@ -289,22 +299,26 @@ class MatchEngine:
             try:
                 canvas = _rule_canvas(rule)
                 steps = await self._executor.execute(canvas, track, collect_trace=True)
-                traces.append({
-                    "rule_id": rule.id,
-                    "rule_name": rule.name,
-                    "rule_priority": rule.priority,
-                    "steps": steps,
-                    "isinstance": isinstance(steps, list),
-                })
+                traces.append(
+                    {
+                        "rule_id": rule.id,
+                        "rule_name": rule.name,
+                        "rule_priority": rule.priority,
+                        "steps": steps,
+                        "isinstance": isinstance(steps, list),
+                    }
+                )
             except Exception as e:
                 logger.exception("Rule '%s' (id=%d) trace failed: %s", rule.name, rule.id, e)
-                traces.append({
-                    "rule_id": rule.id,
-                    "rule_name": rule.name,
-                    "rule_priority": rule.priority,
-                    "steps": [],
-                    "error": str(e),
-                })
+                traces.append(
+                    {
+                        "rule_id": rule.id,
+                        "rule_name": rule.name,
+                        "rule_priority": rule.priority,
+                        "steps": [],
+                        "error": str(e),
+                    }
+                )
         return traces
 
     async def _load_rules(self, rule_ids: list[int] | None) -> list[MatchRule]:
@@ -348,7 +362,7 @@ def _apply_string_op(value: Any, config: dict, operation: str) -> Any:
     if operation == "uppercase":
         return str(value).upper()
     if operation == "trim":
-        return re.sub(r'\s+', ' ', str(value)).strip()
+        return re.sub(r"\s+", " ", str(value)).strip()
     if operation == "replace":
         find = config.get("find", "")
         replacement = config.get("replacement", "")
@@ -391,9 +405,12 @@ def _apply_string_op(value: Any, config: dict, operation: str) -> Any:
 
 # -- Input / Output --------------------------------------------
 
+
 @register_node("track_source")
 async def _handle_track_source(
-    config: NodeConfig, track: TrackMetadata, inputs: NodeInputs,
+    config: NodeConfig,
+    track: TrackMetadata,
+    inputs: NodeInputs,
 ) -> NodeOutputs:
     return {
         "out": {
@@ -413,23 +430,30 @@ async def _handle_track_source(
 
 @register_node("constant")
 async def _handle_constant(
-    config: NodeConfig, track: TrackMetadata, inputs: NodeInputs,
+    config: NodeConfig,
+    track: TrackMetadata,
+    inputs: NodeInputs,
 ) -> NodeOutputs:
     return {"out": config.get("value", "")}
 
 
 @register_node("match_output")
 async def _handle_match_output(
-    config: NodeConfig, track: TrackMetadata, inputs: NodeInputs,
+    config: NodeConfig,
+    track: TrackMetadata,
+    inputs: NodeInputs,
 ) -> NodeOutputs:
     return {"out": inputs.get("in")}
 
 
 # -- Generic String Op -----------------------------------------
 
+
 @register_node("transform")
 async def _handle_string_op(
-    config: NodeConfig, track: TrackMetadata, inputs: NodeInputs,
+    config: NodeConfig,
+    track: TrackMetadata,
+    inputs: NodeInputs,
 ) -> NodeOutputs:
     field = config.get("field", "value")
     target_field = config.get("target_field", field)
@@ -460,9 +484,12 @@ async def _handle_string_op(
 
 # -- Generic Logic Op -------------------------------------------
 
+
 @register_node("logic_op")
 async def _handle_logic_op(
-    config: NodeConfig, track: TrackMetadata, inputs: NodeInputs,
+    config: NodeConfig,
+    track: TrackMetadata,
+    inputs: NodeInputs,
 ) -> NodeOutputs:
     operation = config.get("operation", "and")
     a = inputs.get("a", inputs.get("in"))
@@ -492,9 +519,12 @@ async def _handle_logic_op(
 
 # -- Similarity / Threshold -------------------------------------
 
+
 @register_node("similarity")
 async def _handle_similarity(
-    config: NodeConfig, track: TrackMetadata, inputs: NodeInputs,
+    config: NodeConfig,
+    track: TrackMetadata,
+    inputs: NodeInputs,
 ) -> NodeOutputs:
     a = str(inputs.get("a", inputs.get("in", "")))
     b = str(inputs.get("b", config.get("value", "")))
@@ -524,6 +554,7 @@ async def _handle_similarity(
         tokens_a = sorted(a_norm.split())
         tokens_b = sorted(b_norm.split())
         from difflib import SequenceMatcher
+
         sm = SequenceMatcher(None, tokens_a, tokens_b)
         return {"out": sm.ratio()}
 
@@ -532,7 +563,9 @@ async def _handle_similarity(
 
 @register_node("threshold")
 async def _handle_threshold(
-    config: NodeConfig, track: TrackMetadata, inputs: NodeInputs,
+    config: NodeConfig,
+    track: TrackMetadata,
+    inputs: NodeInputs,
 ) -> NodeOutputs:
     value = inputs.get("in", 0)
     threshold = config.get("threshold", 0.75)
@@ -545,9 +578,12 @@ async def _handle_threshold(
 
 # -- Generic Plex Search ----------------------------------------
 
+
 @register_node("plex_search")
 async def _handle_plex_search(
-    config: NodeConfig, track: TrackMetadata, inputs: NodeInputs,
+    config: NodeConfig,
+    track: TrackMetadata,
+    inputs: NodeInputs,
 ) -> NodeOutputs:
     target = get_current_target()
     data = inputs.get("in", {})
@@ -602,7 +638,9 @@ async def _handle_plex_search(
 # Also register as 'search' for new system
 @register_node("search")
 async def _handle_search(
-    config: NodeConfig, track: TrackMetadata, inputs: NodeInputs,
+    config: NodeConfig,
+    track: TrackMetadata,
+    inputs: NodeInputs,
 ) -> NodeOutputs:
     """New simplified search node - uses checkbox config."""
     target = get_current_target()
@@ -638,15 +676,21 @@ async def _handle_search(
 
     logger.debug(
         "[SEARCH] Input track: title=%s, artist=%s, album=%s",
-        track.title, track.artist_name, track.album_name,
+        track.title,
+        track.artist_name,
+        track.album_name,
     )
     logger.debug(
         "[SEARCH] Search config: title=%s, artist=%s, album=%s",
-        search_title, search_artist, search_album,
+        search_title,
+        search_artist,
+        search_album,
     )
     logger.debug(
         "[SEARCH] Search params: title=%s, artist=%s, album=%s",
-        title, artist, album,
+        title,
+        artist,
+        album,
     )
 
     # If nothing is checked, return empty
@@ -683,9 +727,12 @@ async def _handle_search(
 
 # -- Generic Filter ----------------------------------------------
 
+
 @register_node("filter")
 async def _handle_filter(
-    config: NodeConfig, track: TrackMetadata, inputs: NodeInputs,
+    config: NodeConfig,
+    track: TrackMetadata,
+    inputs: NodeInputs,
 ) -> NodeOutputs:
     candidates = inputs.get("candidates", inputs.get("in", []))
     field = config.get("field", "artist_name")
@@ -705,10 +752,7 @@ async def _handle_filter(
 
     if field == "album_name":
         ref_norm = _normalize_album(ref_str)
-        filtered = [
-            c for c in candidates
-            if _normalize_album(c.get("album_name", "")) == ref_norm
-        ]
+        filtered = [c for c in candidates if _normalize_album(c.get("album_name", "")) == ref_norm]
         return {"out": filtered}
 
     ref_norm = ref_str.lower().strip()
@@ -736,9 +780,12 @@ async def _handle_filter(
 
 # -- Plex Matching Utilities ------------------------------------
 
+
 @register_node("pick_best")
 async def _handle_pick_best(
-    config: NodeConfig, track: TrackMetadata, inputs: NodeInputs,
+    config: NodeConfig,
+    track: TrackMetadata,
+    inputs: NodeInputs,
 ) -> NodeOutputs:
     candidates = inputs.get("candidates", inputs.get("in", []))
     threshold = config.get("title_threshold", 0.75)
@@ -761,15 +808,19 @@ async def _handle_pick_best(
         return {"out": None}
 
     match = _best_match(
-        search_title, candidates,
-        threshold=threshold, search_artist=search_artist or None,
+        search_title,
+        candidates,
+        threshold=threshold,
+        search_artist=search_artist or None,
     )
     return {"out": match}
 
 
 @register_node("sort_by_score")
 async def _handle_sort_by_score(
-    config: NodeConfig, track: TrackMetadata, inputs: NodeInputs,
+    config: NodeConfig,
+    track: TrackMetadata,
+    inputs: NodeInputs,
 ) -> NodeOutputs:
     candidates = inputs.get("in", [])
     search_title = str(inputs.get("title", track.title or ""))
@@ -788,9 +839,12 @@ async def _handle_sort_by_score(
 
 # -- Compare (unified matching) ------------------------------------
 
+
 @register_node("compare")
 async def _handle_compare(
-    config: NodeConfig, track: TrackMetadata, inputs: NodeInputs,
+    config: NodeConfig,
+    track: TrackMetadata,
+    inputs: NodeInputs,
 ) -> NodeOutputs:
     """Compare search candidates against a reference track and return best match.
 
@@ -810,7 +864,8 @@ async def _handle_compare(
     c_len = len(candidates) if isinstance(candidates, list) else "N/A"
     logger.debug(
         "[COMPARE] Received candidates type: %s, len: %s",
-        type(candidates), c_len,
+        type(candidates),
+        c_len,
     )
 
     if not isinstance(candidates, list):
@@ -848,10 +903,13 @@ async def _handle_compare(
     if isinstance(weights_config, str):
         # Try to parse JSON if it's a string
         import json
+
         try:
-            weights = json.loads(weights_config) if (
-                weights_config and weights_config != "[object Object]"
-            ) else {}
+            weights = (
+                json.loads(weights_config)
+                if (weights_config and weights_config != "[object Object]")
+                else {}
+            )
         except Exception:
             weights = {}
     else:
@@ -883,18 +941,14 @@ async def _handle_compare(
         if "title" in fields:
             ref_title = ref.get("title", "") or track.title or ""
             cand_title = candidate.get("title", "")
-            title_match = (
-                _match_titles(ref_title, cand_title)
-                if ref_title and cand_title else 0.0
-            )
+            title_match = _match_titles(ref_title, cand_title) if ref_title and cand_title else 0.0
             field_scores["title"] = title_match
 
         if "artist_name" in fields:
             ref_artist = ref.get("artist_name", "") or track.artist_name or ""
             cand_artist = candidate.get("artist_name", "")
             artist_match = (
-                _artist_similarity(ref_artist, cand_artist)
-                if ref_artist and cand_artist else 0.0
+                _artist_similarity(ref_artist, cand_artist) if ref_artist and cand_artist else 0.0
             )
             field_scores["artist_name"] = artist_match
 
@@ -910,16 +964,17 @@ async def _handle_compare(
 
         # Compute weighted score
         weighted_score = sum(
-            field_scores.get(f, 0.0) * (normalized_weights.get(f, 0) / 100)
-            for f in fields
+            field_scores.get(f, 0.0) * (normalized_weights.get(f, 0) / 100) for f in fields
         )
 
         c_title = candidate.get("title")
         c_artist = candidate.get("artist_name")
         logger.debug(
-            "[COMPARE] Candidate: %s by %s - score: %.2f,"
-            " field_scores: %s",
-            c_title, c_artist, weighted_score, field_scores,
+            "[COMPARE] Candidate: %s by %s - score: %.2f, field_scores: %s",
+            c_title,
+            c_artist,
+            weighted_score,
+            field_scores,
         )
 
         if weighted_score > best_score:
@@ -929,7 +984,9 @@ async def _handle_compare(
     best_title = best_match.get("title") if best_match else "None"
     logger.debug(
         "[COMPARE] Best match: %s, score: %.2f, threshold: %s",
-        best_title, best_score, threshold,
+        best_title,
+        best_score,
+        threshold,
     )
 
     if best_score >= threshold and best_match:
@@ -940,10 +997,13 @@ async def _handle_compare(
 
 @register_node("search_musicbrainz")
 async def _handle_search_musicbrainz(
-    config: NodeConfig, track: TrackMetadata, inputs: NodeInputs,
+    config: NodeConfig,
+    track: TrackMetadata,
+    inputs: NodeInputs,
 ) -> NodeOutputs:
     """Search MusicBrainz for recording info."""
     from src.app.core.musicbrainz import MusicBrainzResolver
+
     data = inputs.get("in", {})
     title = data.get("title", track.title or "")
     artist = data.get("artist_name", track.artist_name or "")

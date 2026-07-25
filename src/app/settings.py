@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     # Database
     database_url: str = Field(
         default="postgresql://ampy3:ampy3@localhost:5432/ampy3",
-        description="PostgreSQL database URL"
+        description="PostgreSQL database URL",
     )
 
     # Celery / Valkey

@@ -3,6 +3,7 @@
 Provides BaseAgent class, AgentContext for structured state passing,
 and AgentPhase enum for workflow phase tracking.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -15,6 +16,7 @@ from langchain_core.messages import BaseMessage, SystemMessage
 
 class AgentPhase(StrEnum):
     """Workflow phases for agent execution tracking."""
+
     ROUTING = "routing"
     RESEARCH = "research"
     MATCH = "match"
@@ -30,6 +32,7 @@ class AgentContext:
     Enables clean data threading from research → match → create phases
     without implicit state management.
     """
+
     research_results: list[dict] = field(default_factory=list)
     """List of discovered artists: [{artist, mbid, genres}]"""
 
@@ -96,9 +99,7 @@ class BaseAgent(ABC):
         pass
 
     def _inject_system_message(
-        self,
-        messages: list[BaseMessage],
-        system_prompt: str
+        self, messages: list[BaseMessage], system_prompt: str
     ) -> list[BaseMessage]:
         """Replace existing system message with phase-specific one,
         or prepend if none exists.
@@ -171,8 +172,7 @@ def increment_iteration_count(state: dict, max_iterations: int = 5) -> None:
 
     if count > max_iterations:
         raise RuntimeError(
-            f"Agent exceeded max iterations ({max_iterations}). "
-            f"Possible infinite loop detected."
+            f"Agent exceeded max iterations ({max_iterations}). Possible infinite loop detected."
         )
 
 

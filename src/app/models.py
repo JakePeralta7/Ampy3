@@ -57,12 +57,8 @@ class ScheduledPlaylistSync(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     replace_existing: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
-    last_synced_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    next_sync_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    next_sync_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     matched_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     failed_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -88,7 +84,8 @@ class PlaylistTrack(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     sync_id: Mapped[int] = mapped_column(
         ForeignKey("scheduled_playlist_syncs.id", ondelete="CASCADE"),
-        nullable=False, index=True,
+        nullable=False,
+        index=True,
     )
     position: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
@@ -173,7 +170,8 @@ class SyncRun(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     sync_id: Mapped[int] = mapped_column(
         ForeignKey("scheduled_playlist_syncs.id", ondelete="CASCADE"),
-        nullable=False, index=True,
+        nullable=False,
+        index=True,
     )
     matched_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     failed_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
@@ -196,7 +194,8 @@ class SyncRunTrack(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     run_id: Mapped[int] = mapped_column(
         ForeignKey("sync_runs.id", ondelete="CASCADE"),
-        nullable=False, index=True,
+        nullable=False,
+        index=True,
     )
     position: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
@@ -228,9 +227,7 @@ class ChatSession(Base):
     __tablename__ = "chat_sessions"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    plex_user_id: Mapped[str] = mapped_column(
-        String(64), nullable=False, index=True
-    )
+    plex_user_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     preview: Mapped[str] = mapped_column(String(255), nullable=False)
     title: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
@@ -238,13 +235,14 @@ class ChatSession(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(),
-        onupdate=func.now(), nullable=False, index=True
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+        index=True,
     )
 
     def __repr__(self) -> str:
         return (
-            f"<ChatSession(id={self.id}, "
-            f"plex_user_id={self.plex_user_id}, "
-            f"preview={self.preview})>"
+            f"<ChatSession(id={self.id}, plex_user_id={self.plex_user_id}, preview={self.preview})>"
         )

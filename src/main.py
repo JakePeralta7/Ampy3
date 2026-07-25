@@ -1,4 +1,5 @@
 """Main entry point for the Ampy3 API."""
+
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -36,7 +37,7 @@ async def lifespan(app: FastAPI):
     if settings.require_auth and not settings.secret_key:
         msg = (
             "SECRET_KEY must be set when REQUIRE_AUTH=true. "
-            "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\""
+            'Generate one with: python -c "import secrets; print(secrets.token_hex(32))"'
         )
         raise RuntimeError(msg)
 

@@ -106,9 +106,11 @@ async def put_settings(
 
     if "plex_host" in incoming or "plex_token" in incoming:
         from src.app.services.plex import PlexService
+
         PlexService.reset()
     if "ollama_host" in incoming or "ollama_model" in incoming or "ollama_timeout" in incoming:
         from src.app.services.ollama import OllamaService
+
         OllamaService.reset()
 
     return _build_settings_out(overrides)

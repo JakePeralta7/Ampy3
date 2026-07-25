@@ -1,4 +1,5 @@
 """YouTube Music adapter using yt-dlp for playlist extraction."""
+
 from __future__ import annotations
 
 import json
@@ -45,6 +46,7 @@ class YouTubeMusicSource(IPlatformSource):
 
         # Try Valkey cache first (5 min TTL)
         from src.app.services.valkey import ValkeyService
+
         try:
             cache = ValkeyService.get_instance()
             cached = await cache.get(cache_key)
@@ -67,20 +69,21 @@ class YouTubeMusicSource(IPlatformSource):
         cmd.append(playlist_url)
 
         import subprocess
+
         try:
             result = subprocess.run(
-                cmd, capture_output=True, text=True,
+                cmd,
+                capture_output=True,
+                text=True,
                 timeout=settings.yt_dlp_timeout,
             )
         except FileNotFoundError:
             raise RuntimeError(
-                "yt-dlp is not installed."
-                " Install it via pip or ensure PATH contains yt-dlp."
+                "yt-dlp is not installed. Install it via pip or ensure PATH contains yt-dlp."
             ) from None
         except subprocess.TimeoutExpired:
             raise RuntimeError(
-                f"Playlist extraction timed out"
-                f" ({settings.yt_dlp_timeout}s)."
+                f"Playlist extraction timed out ({settings.yt_dlp_timeout}s)."
             ) from None
 
         if result.returncode != 0 and not result.stdout.strip():
@@ -118,22 +121,25 @@ class YouTubeMusicSource(IPlatformSource):
                 album = album_obj.get("name", "")
             else:
                 album = entry.get("album", "") or ""
-            if album and title and (
-                album.lower() == title.lower()
-                or title.lower().find(album.lower()) >= 0
+            if (
+                album
+                and title
+                and (album.lower() == title.lower() or title.lower().find(album.lower()) >= 0)
             ):
                 album = ""
             duration = entry.get("duration") or None
             mbid = entry.get("musicbrainz_id", None)
 
-            tracks.append(TrackMetadata(
-                mbid=mbid,
-                title=title_val if title_val else None,
-                artist_name=artist if artist else None,
-                album_name=album if album else None,
-                duration_ms=int(duration * 1000) if duration else None,
-                source_id=entry.get("id") or None,
-            ))
+            tracks.append(
+                TrackMetadata(
+                    mbid=mbid,
+                    title=title_val if title_val else None,
+                    artist_name=artist if artist else None,
+                    album_name=album if album else None,
+                    duration_ms=int(duration * 1000) if duration else None,
+                    source_id=entry.get("id") or None,
+                )
+            )
 
         return PlaylistMetadata(
             source_id=pl_id,
@@ -143,5 +149,3 @@ class YouTubeMusicSource(IPlatformSource):
             tracks=tracks,
             external_url=playlist_url,
         )
-
-

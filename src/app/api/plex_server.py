@@ -69,14 +69,16 @@ async def list_plex_servers(user: dict = Depends(get_current_user)):  # noqa: B0
         if device.get("provides", "") != "server":
             continue
         for conn in device.findall("Connection"):
-            servers.append({
-                "name": device.get("name", "Unknown"),
-                "host": conn.get("address", ""),
-                "port": int(conn.get("port", "32400")),
-                "protocol": conn.get("protocol", "http"),
-                "machine_identifier": device.get("machineIdentifier", ""),
-                "local": conn.get("local", "0") == "1",
-            })
+            servers.append(
+                {
+                    "name": device.get("name", "Unknown"),
+                    "host": conn.get("address", ""),
+                    "port": int(conn.get("port", "32400")),
+                    "protocol": conn.get("protocol", "http"),
+                    "machine_identifier": device.get("machineIdentifier", ""),
+                    "local": conn.get("local", "0") == "1",
+                }
+            )
 
     return {"servers": servers}
 
@@ -124,9 +126,9 @@ async def save_server_config(
     async with AsyncSessionLocal() as session:
         from sqlalchemy import select
 
-        row = (await session.execute(
-            select(Config).where(Config.key == "plex_server_url")
-        )).scalar_one_or_none()
+        row = (
+            await session.execute(select(Config).where(Config.key == "plex_server_url"))
+        ).scalar_one_or_none()
 
         if row:
             row.value = url
@@ -134,9 +136,9 @@ async def save_server_config(
             session.add(Config(key="plex_server_url", value=url))
 
         if body.plex_token and not await get_owner_plex_token():
-            token_row = (await session.execute(
-                select(Config).where(Config.key == "owner_plex_token")
-            )).scalar_one_or_none()
+            token_row = (
+                await session.execute(select(Config).where(Config.key == "owner_plex_token"))
+            ).scalar_one_or_none()
             if token_row:
                 token_row.value = body.plex_token
             else:

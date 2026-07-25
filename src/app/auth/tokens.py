@@ -57,15 +57,17 @@ async def create_session(
     session_id = secrets.token_hex(SESSION_ID_BYTES)
 
     async with AsyncSessionLocal() as db:
-        db.add(UserSession(
-            id=session_id,
-            plex_user_id=user_data["plex_user_id"],
-            username=user_data["username"],
-            email=user_data.get("email"),
-            thumb=user_data.get("thumb"),
-            plex_token=plex_token,
-            expires_at=datetime.now(UTC) + timedelta(hours=ttl_hours),
-        ))
+        db.add(
+            UserSession(
+                id=session_id,
+                plex_user_id=user_data["plex_user_id"],
+                username=user_data["username"],
+                email=user_data.get("email"),
+                thumb=user_data.get("thumb"),
+                plex_token=plex_token,
+                expires_at=datetime.now(UTC) + timedelta(hours=ttl_hours),
+            )
+        )
         await db.commit()
 
     sig = _sign(session_id, secret)
@@ -83,9 +85,9 @@ async def verify_session(cookie_value: str, secret: str) -> dict | None:
         return None
 
     async with AsyncSessionLocal() as db:
-        row = (await db.execute(
-            select(UserSession).where(UserSession.id == session_id)
-        )).scalar_one_or_none()
+        row = (
+            await db.execute(select(UserSession).where(UserSession.id == session_id))
+        ).scalar_one_or_none()
 
         if row is None:
             return None
@@ -115,7 +117,5 @@ async def destroy_session(session_id: str) -> None:
 async def purge_expired_sessions() -> None:
     """Remove all expired sessions from the database."""
     async with AsyncSessionLocal() as db:
-        await db.execute(
-            delete(UserSession).where(UserSession.expires_at < datetime.now(UTC))
-        )
+        await db.execute(delete(UserSession).where(UserSession.expires_at < datetime.now(UTC)))
         await db.commit()

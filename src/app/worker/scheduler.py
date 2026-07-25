@@ -25,8 +25,7 @@ def check_and_trigger_scheduled_syncs(self):
         db = SessionLocal()
         try:
             stmt = select(ScheduledPlaylistSync).where(
-                (ScheduledPlaylistSync.is_active) &
-                (ScheduledPlaylistSync.next_sync_at <= now)
+                (ScheduledPlaylistSync.is_active) & (ScheduledPlaylistSync.next_sync_at <= now)
             )
             result = db.execute(stmt)
             due_syncs = result.scalars().all()
@@ -61,8 +60,10 @@ def scheduled_sync_task(self, schedule_id: int):
             )
             return {"status": "FAILED", "error": "Sync not found"}
         source_url, source, replace_existing, title = (
-            sync.source_url, sync.source,
-            sync.replace_existing, sync.target_playlist_name,
+            sync.source_url,
+            sync.source,
+            sync.replace_existing,
+            sync.target_playlist_name,
         )
     finally:
         db.close()
@@ -82,8 +83,12 @@ def scheduled_sync_task(self, schedule_id: int):
         # Pass a lambda that creates the coroutine, so _run_async can retry with a fresh coroutine
         stats = _run_async(
             lambda: _async_sync_task(
-                source_url, source, replace_existing,
-                schedule_id, rules, title,
+                source_url,
+                source,
+                replace_existing,
+                schedule_id,
+                rules,
+                title,
             )
         )
         logger.debug(f"Sync successful for {title}: {stats}")

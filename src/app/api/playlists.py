@@ -191,25 +191,29 @@ async def get_sync_diff(
                 else:
                     unchanged.append(item)
             else:
-                added.append(SyncDiffItem(
-                    source_title=track.source_title,
-                    source_artist=track.source_artist,
-                    source_album=track.source_album,
-                    match_item_id=track.match_item_id,
-                    match_title=track.match_title,
-                    match_artist=track.match_artist,
-                ))
+                added.append(
+                    SyncDiffItem(
+                        source_title=track.source_title,
+                        source_artist=track.source_artist,
+                        source_album=track.source_album,
+                        match_item_id=track.match_item_id,
+                        match_title=track.match_title,
+                        match_artist=track.match_artist,
+                    )
+                )
 
         for key, track in old_keys.items():
             if key not in new_keys:
-                removed.append(SyncDiffItem(
-                    source_title=track.source_title,
-                    source_artist=track.source_artist,
-                    source_album=track.source_album,
-                    match_item_id=track.match_item_id,
-                    match_title=track.match_title,
-                    match_artist=track.match_artist,
-                ))
+                removed.append(
+                    SyncDiffItem(
+                        source_title=track.source_title,
+                        source_artist=track.source_artist,
+                        source_album=track.source_album,
+                        match_item_id=track.match_item_id,
+                        match_title=track.match_title,
+                        match_artist=track.match_artist,
+                    )
+                )
 
         return SyncDiffResponse(
             added=added,
@@ -285,8 +289,7 @@ async def trigger_playlist_sync(
             resource_type="playlist",
             resource_id=sync_request.schedule_id and str(sync_request.schedule_id),
             summary=(
-                f"Sync triggered for {sync_request.source}"
-                f" playlist — {sync_request.playlist_url}"
+                f"Sync triggered for {sync_request.source} playlist — {sync_request.playlist_url}"
             ),
             details={
                 "playlist_url": sync_request.playlist_url,
@@ -364,60 +367,66 @@ async def get_playlist_tracks(
 
             if plex_tracks:
                 formatted_matched = [
-                    {**t, "status": "matched", "match_rate": "✓ Matched"}
-                    for t in plex_tracks
+                    {**t, "status": "matched", "match_rate": "✓ Matched"} for t in plex_tracks
                 ]
                 for t in formatted_matched:
                     db_row = matched_by_id.get(t.get("plex_id"))
-                    track_details.append(TrackDetail(
-                        source=TrackSource(
-                            title=db_row.source_title,
-                            artist_name=db_row.source_artist,
-                            album_name=db_row.source_album,
-                            duration_ms=db_row.source_duration_ms,
-                            source_id=db_row.source_id,
-                        ) if db_row else None,
-                        match=TrackMatch(
-                            plex_id=t.get("plex_id"),
-                            title=t.get("title"),
-                            artist_name=t.get("artist_name"),
-                            album_name=t.get("album_name"),
-                            duration=t.get("duration"),
-                        ),
-                    ))
+                    track_details.append(
+                        TrackDetail(
+                            source=TrackSource(
+                                title=db_row.source_title,
+                                artist_name=db_row.source_artist,
+                                album_name=db_row.source_album,
+                                duration_ms=db_row.source_duration_ms,
+                                source_id=db_row.source_id,
+                            )
+                            if db_row
+                            else None,
+                            match=TrackMatch(
+                                plex_id=t.get("plex_id"),
+                                title=t.get("title"),
+                                artist_name=t.get("artist_name"),
+                                album_name=t.get("album_name"),
+                                duration=t.get("duration"),
+                            ),
+                        )
+                    )
             else:
                 formatted_matched = []
                 for r in matched_rows:
-                    formatted_matched.append({
-                        "plex_id": r.match_item_id,
-                        "title": r.match_title or r.source_title or "Unknown",
-                        "artist_name": r.match_artist or r.source_artist or "Unknown",
-                        "album_name": r.match_album or r.source_album or "Unknown",
-                        "duration": (
-                            r.match_duration
-                            if r.match_duration is not None
-                            else (r.source_duration_ms // 1000
-                                  if r.source_duration_ms else 0)
-                        ),
-                        "status": "matched",
-                        "match_rate": "✓ Matched",
-                    })
-                    track_details.append(TrackDetail(
-                        source=TrackSource(
-                            title=r.source_title,
-                            artist_name=r.source_artist,
-                            album_name=r.source_album,
-                            duration_ms=r.source_duration_ms,
-                            source_id=r.source_id,
-                        ),
-                        match=TrackMatch(
-                            plex_id=r.match_item_id,
-                            title=r.match_title,
-                            artist_name=r.match_artist,
-                            album_name=r.match_album,
-                            duration=r.match_duration,
-                        ),
-                    ))
+                    formatted_matched.append(
+                        {
+                            "plex_id": r.match_item_id,
+                            "title": r.match_title or r.source_title or "Unknown",
+                            "artist_name": r.match_artist or r.source_artist or "Unknown",
+                            "album_name": r.match_album or r.source_album or "Unknown",
+                            "duration": (
+                                r.match_duration
+                                if r.match_duration is not None
+                                else (r.source_duration_ms // 1000 if r.source_duration_ms else 0)
+                            ),
+                            "status": "matched",
+                            "match_rate": "✓ Matched",
+                        }
+                    )
+                    track_details.append(
+                        TrackDetail(
+                            source=TrackSource(
+                                title=r.source_title,
+                                artist_name=r.source_artist,
+                                album_name=r.source_album,
+                                duration_ms=r.source_duration_ms,
+                                source_id=r.source_id,
+                            ),
+                            match=TrackMatch(
+                                plex_id=r.match_item_id,
+                                title=r.match_title,
+                                artist_name=r.match_artist,
+                                album_name=r.match_album,
+                                duration=r.match_duration,
+                            ),
+                        )
+                    )
 
             formatted_unmatched = [
                 {
@@ -432,16 +441,18 @@ async def get_playlist_tracks(
             ]
 
             for r in unmatched_rows:
-                track_details.append(TrackDetail(
-                    source=TrackSource(
-                        title=r.source_title,
-                        artist_name=r.source_artist,
-                        album_name=r.source_album,
-                        duration_ms=r.source_duration_ms,
-                        source_id=r.source_id,
-                    ),
-                    match=None,
-                ))
+                track_details.append(
+                    TrackDetail(
+                        source=TrackSource(
+                            title=r.source_title,
+                            artist_name=r.source_artist,
+                            album_name=r.source_album,
+                            duration_ms=r.source_duration_ms,
+                            source_id=r.source_id,
+                        ),
+                        match=None,
+                    )
+                )
 
             total_tracks = matched_count + failed_count
             match_rate = f"{matched_count}/{total_tracks}" if total_tracks > 0 else "0/0"
@@ -505,36 +516,39 @@ async def get_sync_tracks(
 
             formatted_matched = []
             for r in matched_rows:
-                formatted_matched.append({
-                    "plex_id": r.match_item_id,
-                    "title": r.match_title or r.source_title or "Unknown",
-                    "artist_name": r.match_artist or r.source_artist or "Unknown",
-                    "album_name": r.match_album or r.source_album or "Unknown",
-                    "duration": (
-                        r.match_duration
-                        if r.match_duration is not None
-                        else (r.source_duration_ms // 1000
-                              if r.source_duration_ms else 0)
-                    ),
-                    "status": "matched",
-                    "match_rate": "✓ Matched",
-                })
-                track_details.append(TrackDetail(
-                    source=TrackSource(
-                        title=r.source_title,
-                        artist_name=r.source_artist,
-                        album_name=r.source_album,
-                        duration_ms=r.source_duration_ms,
-                        source_id=r.source_id,
-                    ),
-                    match=TrackMatch(
-                        plex_id=r.match_item_id,
-                        title=r.match_title,
-                        artist_name=r.match_artist,
-                        album_name=r.match_album,
-                        duration=r.match_duration,
-                    ),
-                ))
+                formatted_matched.append(
+                    {
+                        "plex_id": r.match_item_id,
+                        "title": r.match_title or r.source_title or "Unknown",
+                        "artist_name": r.match_artist or r.source_artist or "Unknown",
+                        "album_name": r.match_album or r.source_album or "Unknown",
+                        "duration": (
+                            r.match_duration
+                            if r.match_duration is not None
+                            else (r.source_duration_ms // 1000 if r.source_duration_ms else 0)
+                        ),
+                        "status": "matched",
+                        "match_rate": "✓ Matched",
+                    }
+                )
+                track_details.append(
+                    TrackDetail(
+                        source=TrackSource(
+                            title=r.source_title,
+                            artist_name=r.source_artist,
+                            album_name=r.source_album,
+                            duration_ms=r.source_duration_ms,
+                            source_id=r.source_id,
+                        ),
+                        match=TrackMatch(
+                            plex_id=r.match_item_id,
+                            title=r.match_title,
+                            artist_name=r.match_artist,
+                            album_name=r.match_album,
+                            duration=r.match_duration,
+                        ),
+                    )
+                )
 
             formatted_unmatched = [
                 {
@@ -549,16 +563,18 @@ async def get_sync_tracks(
             ]
 
             for r in unmatched_rows:
-                track_details.append(TrackDetail(
-                    source=TrackSource(
-                        title=r.source_title,
-                        artist_name=r.source_artist,
-                        album_name=r.source_album,
-                        duration_ms=r.source_duration_ms,
-                        source_id=r.source_id,
-                    ),
-                    match=None,
-                ))
+                track_details.append(
+                    TrackDetail(
+                        source=TrackSource(
+                            title=r.source_title,
+                            artist_name=r.source_artist,
+                            album_name=r.source_album,
+                            duration_ms=r.source_duration_ms,
+                            source_id=r.source_id,
+                        ),
+                        match=None,
+                    )
+                )
 
             total_tracks = matched_count + failed_count
             match_rate = f"{matched_count}/{total_tracks}" if total_tracks > 0 else "0/0"
@@ -642,7 +658,8 @@ async def rematch_sync_track(
             if not match:
                 msg = f"No match found for '{body.title}'"
                 return RematchTrackResponse(
-                    matched=False, message=msg,
+                    matched=False,
+                    message=msg,
                 )
 
             plex_id = match.get("plex_id")

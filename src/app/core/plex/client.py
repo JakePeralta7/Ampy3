@@ -1,4 +1,5 @@
 """Handles all interaction with the Plex Media Server API."""
+
 import logging
 import re
 import urllib.parse
@@ -27,11 +28,11 @@ def _normalize_for_compare(text: str) -> str:
 
 def _normalize_search_query(query: str) -> str:
     """Strip characters that cause Plex search API issues."""
-    query = re.sub(r"\(.*?\)", "", query)   # remove parenthesized groups
-    query = re.sub(r"\[.*?\]", "", query)   # remove bracketed groups
-    query = re.sub(r"\{.*?\}", "", query)   # remove braced groups
+    query = re.sub(r"\(.*?\)", "", query)  # remove parenthesized groups
+    query = re.sub(r"\[.*?\]", "", query)  # remove bracketed groups
+    query = re.sub(r"\{.*?\}", "", query)  # remove braced groups
     query = re.sub(r"[(){}\[\]]", "", query)  # remove stray parens/brackets
-    query = re.sub(r"\.{2,}", " ", query)   # collapse ellipses
+    query = re.sub(r"\.{2,}", " ", query)  # collapse ellipses
     # Replace commas with spaces — Plex search API returns no results for
     # comma-separated multi-artist queries like "Post Malone, Swae Lee".
     query = query.replace(",", " ")
@@ -40,21 +41,22 @@ def _normalize_search_query(query: str) -> str:
     # stored in its database.  Stripping all quotes avoids this mismatch.
     query = query.replace("\u2018", "'").replace("\u2019", "'")
     query = query.replace("\u201c", '"').replace("\u201d", '"')
-    query = re.sub(r"['''`]", " ", query)   # strip all quote chars
-    query = re.sub(r"\s{2,}", " ", query)   # collapse whitespace
+    query = re.sub(r"['''`]", " ", query)  # strip all quote chars
+    query = re.sub(r"\s{2,}", " ", query)  # collapse whitespace
     return query.strip()
 
 
 class PlexClient:
-
     def __init__(self, token: str, base_url: str):
         self._token = token
         self._base_url = base_url
         self.client = httpx.AsyncClient(base_url=self._base_url, timeout=10.0)
-        self.client.headers.update({
-            "X-Plex-Token": self._token,
-            "Content-Type": "application/json",
-        })
+        self.client.headers.update(
+            {
+                "X-Plex-Token": self._token,
+                "Content-Type": "application/json",
+            }
+        )
         self._machine_identifier: str | None = None
 
     async def _ensure_machine_id(self) -> str:
@@ -87,12 +89,14 @@ class PlexClient:
             root = ET.fromstring(response.text)
             sections = []
             for dir_elem in root.findall(".//Directory"):
-                sections.append({
-                    "key": dir_elem.get("key"),
-                    "title": dir_elem.get("title"),
-                    "type": dir_elem.get("type"),
-                    "agent": dir_elem.get("agent"),
-                })
+                sections.append(
+                    {
+                        "key": dir_elem.get("key"),
+                        "title": dir_elem.get("title"),
+                        "type": dir_elem.get("type"),
+                        "agent": dir_elem.get("agent"),
+                    }
+                )
             return sections
         except httpx.HTTPStatusError as e:
             logger.error(f"HTTP error getting sections: {e}")
@@ -204,13 +208,15 @@ class PlexClient:
             for pl in root.findall(".//Playlist"):
                 title = pl.get("title", "")
                 if not query or query.lower() in title.lower():
-                    results.append({
-                        "title": title,
-                        "rating_key": pl.get("ratingKey"),
-                        "playlist_id": pl.get("ratingKey"),
-                        "summary": pl.get("summary", ""),
-                        "track_count": int(pl.get("leafCount", 0)),
-                    })
+                    results.append(
+                        {
+                            "title": title,
+                            "rating_key": pl.get("ratingKey"),
+                            "playlist_id": pl.get("ratingKey"),
+                            "summary": pl.get("summary", ""),
+                            "track_count": int(pl.get("leafCount", 0)),
+                        }
+                    )
 
             logger.debug(f"Found {len(results)} playlists matching query: {query or '*'}")
             return results
@@ -240,7 +246,7 @@ class PlexClient:
         payload = {
             "items": [
                 {
-                    "media_type": "music", # Or video/tv depending on content source
+                    "media_type": "music",  # Or video/tv depending on content source
                     "title": item_metadata["title"],
                     "artist": item_metadata.get("artist"),
                 }
@@ -272,15 +278,17 @@ class PlexClient:
 
                 logger.debug(
                     "Playlist %s: Retrieved %d tracks at offset %d",
-                    playlist_id, len(tracks), offset,
+                    playlist_id,
+                    len(tracks),
+                    offset,
                 )
 
                 if not tracks:
                     # No more items returned, exit the loop
                     logger.debug(
-                        "Playlist %s: No more tracks at offset %s,"
-                        " stopping pagination",
-                        playlist_id, offset,
+                        "Playlist %s: No more tracks at offset %s, stopping pagination",
+                        playlist_id,
+                        offset,
                     )
                     break
 
@@ -289,20 +297,23 @@ class PlexClient:
                     artist_name = track.get("grandparentTitle", "")
                     raw_dur = track.get("duration", 0)
                     dur = int(raw_dur) // 1000 if track.get("duration") else 0
-                    items.append({
-                        "plex_id": track.get("key"),
-                        "title": track.get("title"),
-                        "artist_name": artist_name,
-                        "album_name": track.get("parentTitle"),
-                        "duration": dur,
-                    })
+                    items.append(
+                        {
+                            "plex_id": track.get("key"),
+                            "title": track.get("title"),
+                            "artist_name": artist_name,
+                            "album_name": track.get("parentTitle"),
+                            "duration": dur,
+                        }
+                    )
 
                 # If we got fewer items than the limit, we've reached the end
                 if len(tracks) < limit:
                     logger.debug(
-                        "Playlist %s: Got %d tracks (less than limit %s),"
-                        " stopping pagination",
-                        playlist_id, len(tracks), limit,
+                        "Playlist %s: Got %d tracks (less than limit %s), stopping pagination",
+                        playlist_id,
+                        len(tracks),
+                        limit,
                     )
                     break
 
@@ -327,15 +338,19 @@ class PlexClient:
                 leaf_root = ET.fromstring(leaf_resp.text)
                 for track in leaf_root.findall(".//Track"):
                     duration_ms = int(track.get("duration", 0))
-                    results.append({
-                        "plex_id": track.get("key"),
-                        "title": track.get("title"),
-                        "artist_name": track.get("grandparentTitle") or artist_name,
-                        "album_name": track.get("parentTitle") or "",
-                        "duration_ms": duration_ms,
-                        "track_number": int(track.get("index", 0)) if track.get("index") else None,
-                        "genre": genre or None,
-                    })
+                    results.append(
+                        {
+                            "plex_id": track.get("key"),
+                            "title": track.get("title"),
+                            "artist_name": track.get("grandparentTitle") or artist_name,
+                            "album_name": track.get("parentTitle") or "",
+                            "duration_ms": duration_ms,
+                            "track_number": int(track.get("index", 0))
+                            if track.get("index")
+                            else None,
+                            "genre": genre or None,
+                        }
+                    )
             except Exception as e:
                 logger.warning(f"Failed to fetch tracks for artist {artist_name}: {e}")
         return results
@@ -361,9 +376,7 @@ class PlexClient:
             if len(words) > 1:
                 fallback_query = words[0]
                 params = {"query": fallback_query, "limit": "50"}
-                qs = "&".join(
-                    f"{k}={urllib.parse.quote(str(v))}" for k, v in params.items()
-                )
+                qs = "&".join(f"{k}={urllib.parse.quote(str(v))}" for k, v in params.items())
                 artist_resp = await self.client.get(f"/search?{qs}")
                 artist_resp.raise_for_status()
                 artist_root = ET.fromstring(artist_resp.text)
@@ -383,8 +396,11 @@ class PlexClient:
         return self._parse_tracks(tracks) if tracks else []
 
     async def search_library(
-        self, title: str = "", artist: str = "",
-        genre: str = "", album: str = "",
+        self,
+        title: str = "",
+        artist: str = "",
+        genre: str = "",
+        album: str = "",
     ) -> list[dict]:
         """Searches the Plex music library for tracks matching the criteria.
 
@@ -414,15 +430,17 @@ class PlexClient:
                 dirs = root.findall(".//Directory")
                 results = []
                 for d in dirs:
-                    results.append({
-                        "plex_id": d.get("ratingKey"),
-                        "title": f"[Artist] {d.get('title', '')}",
-                        "artist_name": d.get("title", ""),
-                        "album_name": "",
-                        "duration_ms": 0,
-                        "track_number": None,
-                        "genre": genre,
-                    })
+                    results.append(
+                        {
+                            "plex_id": d.get("ratingKey"),
+                            "title": f"[Artist] {d.get('title', '')}",
+                            "artist_name": d.get("title", ""),
+                            "album_name": "",
+                            "duration_ms": 0,
+                            "track_number": None,
+                            "genre": genre,
+                        }
+                    )
                     logger.debug(f"Found {len(results)} artists matching genre '{genre}'")
                 return results
 
@@ -442,10 +460,9 @@ class PlexClient:
                     if album:
                         norm_album = _normalize_album(album)
                         album_tracks = [
-                            t for t in result_tracks
-                            if _normalize_album(
-                                t.get("album_name", "")
-                            ) == norm_album
+                            t
+                            for t in result_tracks
+                            if _normalize_album(t.get("album_name", "")) == norm_album
                         ]
                         logger.debug(f"Found {len(album_tracks)} tracks in album '{album}'")
                         if album_tracks:
@@ -453,7 +470,9 @@ class PlexClient:
                             if match:
                                 logger.debug(
                                     "Album match: '%s' -> '%s' in '%s'",
-                                    title, match.get("title"), album,
+                                    title,
+                                    match.get("title"),
+                                    album,
                                 )
                                 return [match]
 
@@ -462,7 +481,8 @@ class PlexClient:
                     if match:
                         logger.debug(
                             "Matched '%s' -> '%s' by %s",
-                            title, match.get("title"),
+                            title,
+                            match.get("title"),
                             match.get("artist_name", ""),
                         )
                         return [match]
@@ -472,8 +492,7 @@ class PlexClient:
 
                 # No artist directory found — fall back to title-only search
                 logger.debug(
-                    "Artist directory not found: '%s'"
-                    " - falling back to title-only search",
+                    "Artist directory not found: '%s' - falling back to title-only search",
                     artist,
                 )
                 if title:
@@ -481,15 +500,15 @@ class PlexClient:
                     if results:
                         norm_artist = _normalize_for_compare(artist)
                         filtered = [
-                            t for t in results
+                            t
+                            for t in results
                             if norm_artist in _normalize_for_compare(t.get("artist_name", ""))
                             or _normalize_for_compare(t.get("artist_name", "")) in norm_artist
                         ]
                         if filtered:
                             return filtered
                         logger.debug(
-                            "No results matching artist '%s'"
-                            " in title-only fallback",
+                            "No results matching artist '%s' in title-only fallback",
                             artist,
                         )
                         return []
@@ -527,14 +546,16 @@ class PlexClient:
         results = []
         for track in track_elements:
             duration_ms = int(track.get("duration", 0))
-            results.append({
-                "plex_id": track.get("key"),
-                "title": track.get("title"),
-                "artist_name": track.get("grandparentTitle") or "",
-                "album_name": track.get("parentTitle") or "",
-                "duration_ms": duration_ms,
-                "track_number": int(track.get("index", 0)) if track.get("index") else None,
-            })
+            results.append(
+                {
+                    "plex_id": track.get("key"),
+                    "title": track.get("title"),
+                    "artist_name": track.get("grandparentTitle") or "",
+                    "album_name": track.get("parentTitle") or "",
+                    "duration_ms": duration_ms,
+                    "track_number": int(track.get("index", 0)) if track.get("index") else None,
+                }
+            )
         return results
 
     async def get_library_playlist(self, source_id: str) -> dict | None:
@@ -573,7 +594,9 @@ class PlexClient:
             return None
 
     async def create_plist_from_results(
-        self, title: str, items: list[dict],
+        self,
+        title: str,
+        items: list[dict],
         custom_metadata: dict | None = None,
     ) -> str | None:
         """Creates a new Plex playlist and adds matched tracks to it.
@@ -600,13 +623,16 @@ class PlexClient:
             ]
             if custom_metadata:
                 import json
+
                 params.append(("summary", json.dumps(custom_metadata)))
 
             # Plex accepts only one uri during creation — include just the first track
             if items:
                 key = self._rating_key(items[0].get("plex_id", ""))
                 if key:
-                    params.append(("uri", f"server://{mi}/com.plexapp.plugins.library/library/metadata/{key}"))
+                    params.append(
+                        ("uri", f"server://{mi}/com.plexapp.plugins.library/library/metadata/{key}")
+                    )
 
             qs = "&".join(f"{k}={urllib.parse.quote(str(v))}" for k, v in params)
             request = self.client.build_request("POST", f"/playlists?{qs}")
@@ -676,7 +702,8 @@ class PlexClient:
             if current_ids == desired_ids:
                 logger.debug(
                     "Playlist %s already up to date (%d items)",
-                    playlist_id, len(current_ids),
+                    playlist_id,
+                    len(current_ids),
                 )
                 return True
 
@@ -708,7 +735,9 @@ class PlexClient:
                     await self.add_items_to_playlist(playlist_id, to_add_ids)
                 logger.info(
                     "Updated playlist %s: removed %d, added %d",
-                    playlist_id, len(to_remove), len(to_add_ids),
+                    playlist_id,
+                    len(to_remove),
+                    len(to_add_ids),
                 )
 
             return True
@@ -718,7 +747,8 @@ class PlexClient:
 
     @staticmethod
     def _playlist_needs_reorder(
-        remaining_ids: list[str], to_add_ids: list[str],
+        remaining_ids: list[str],
+        to_add_ids: list[str],
         desired_ids: list[str],
     ) -> bool:
         """Check if the playlist needs a full reorder to match desired order.
@@ -835,4 +865,3 @@ async def get_plex_user(plex_token: str) -> dict | None:
             "email": data.get("email"),
             "thumb": data.get("thumb"),
         }
-

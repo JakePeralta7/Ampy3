@@ -1,4 +1,5 @@
 """Sync target registry with plugin-style registration."""
+
 from __future__ import annotations
 
 import logging
@@ -42,9 +43,7 @@ class TargetRegistry:
             return cls._targets[target_id]
         except KeyError:
             available = ", ".join(sorted(cls._targets)) or "(none)"
-            raise KeyError(
-                f"Unknown target '{target_id}'. Available: {available}"
-            ) from None
+            raise KeyError(f"Unknown target '{target_id}'. Available: {available}") from None
 
     @classmethod
     def list_targets(cls) -> list[dict[str, str]]:

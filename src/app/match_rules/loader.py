@@ -9,6 +9,7 @@ Rules are identified by their ``name`` field. On each startup:
 - If it already exists **and** the YAML has changed, it is updated.
 - Default rules are never deleted automatically.
 """
+
 from __future__ import annotations
 
 import logging

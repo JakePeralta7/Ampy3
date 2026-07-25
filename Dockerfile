@@ -6,7 +6,7 @@ RUN npm i -g pnpm@11.16.0
 WORKDIR /app/web
 
 # Install dependencies first (cached until lockfile changes)
-COPY web/package.json web/pnpm-lock.yaml ./
+COPY web/package.json web/pnpm-lock.yaml web/pnpm-workspace.yaml ./
 ENV PNPM_CONFIG_STRICT_DEP_BUILDS=false
 RUN CI=true pnpm install --frozen-lockfile
 

@@ -12,6 +12,7 @@ Checks performed (in order):
 Rules that fail any check are rejected at the API boundary; they are never
 persisted to the database.
 """
+
 from __future__ import annotations
 
 from collections import deque
@@ -124,10 +125,7 @@ def validate_rule_yaml(yaml_content: str) -> RuleDefinition:
         for parent in parents.get(cur, []):
             q.append(parent)
 
-    orphaned = [
-        n for n in node_ids
-        if n not in forward_reachable or n not in backward_reachable
-    ]
+    orphaned = [n for n in node_ids if n not in forward_reachable or n not in backward_reachable]
     if orphaned:
         errors.append(
             f"Orphaned node(s) detected (not connected to both a source and an output): "

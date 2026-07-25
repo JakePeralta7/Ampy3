@@ -5,10 +5,9 @@ from pydantic import BaseModel, Field
 
 class PlaylistSyncRequest(BaseModel):
     """Request body for triggering a playlist sync."""
+
     playlist_url: str = Field(..., description="URL of the source playlist")
-    source: str = Field(
-        default="youtube_music", description="Source platform"
-    )
+    source: str = Field(default="youtube_music", description="Source platform")
     replace_existing: bool = Field(
         default=False, description="Delete existing playlist and recreate"
     )
@@ -23,6 +22,7 @@ class PlaylistSyncRequest(BaseModel):
 
 class PlaylistSyncResponse(BaseModel):
     """Response after triggering a playlist sync."""
+
     message: str
     task_id: str
     status_url: str
@@ -30,12 +30,14 @@ class PlaylistSyncResponse(BaseModel):
 
 class PlaylistSearchResponse(BaseModel):
     """Response from playlist search."""
+
     message: str
     playlists: list[dict]
 
 
 class TrackSource(BaseModel):
     """Source track metadata."""
+
     title: str | None = None
     artist_name: str | None = None
     album_name: str | None = None
@@ -45,6 +47,7 @@ class TrackSource(BaseModel):
 
 class TrackMatch(BaseModel):
     """Matched Plex track metadata."""
+
     plex_id: str | None = None
     title: str | None = None
     artist_name: str | None = None
@@ -54,12 +57,14 @@ class TrackMatch(BaseModel):
 
 class TrackDetail(BaseModel):
     """Detailed track info with source and match."""
+
     source: TrackSource | None = None
     match: TrackMatch | None = None
 
 
 class PlaylistTrackEntry(BaseModel):
     """A single playlist track with status."""
+
     plex_id: str | None = None
     title: str
     artist_name: str
@@ -71,6 +76,7 @@ class PlaylistTrackEntry(BaseModel):
 
 class PlaylistTracksResponse(BaseModel):
     """Full track listing for a playlist."""
+
     playlist_id: str
     source: str
     tracks: list[dict]
@@ -87,6 +93,7 @@ class PlaylistTracksResponse(BaseModel):
 
 class RematchTrackInput(BaseModel):
     """Input for rematching a track to Plex."""
+
     title: str
     artist_name: str = ""
     album_name: str | None = None
@@ -94,6 +101,7 @@ class RematchTrackInput(BaseModel):
 
 class RematchTrackResponse(BaseModel):
     """Response after rematching a track."""
+
     matched: bool
     message: str
     track: dict | None = None
@@ -101,6 +109,7 @@ class RematchTrackResponse(BaseModel):
 
 class UnmatchedTrackOut(BaseModel):
     """An unmatched track from a recent sync."""
+
     sync_id: int
     sync_name: str
     source_title: str | None = None
@@ -111,6 +120,7 @@ class UnmatchedTrackOut(BaseModel):
 
 class SyncRunOut(BaseModel):
     """A single sync run record."""
+
     id: int
     sync_id: int
     matched_count: int
@@ -120,6 +130,7 @@ class SyncRunOut(BaseModel):
 
 class SyncDiffItem(BaseModel):
     """A single track in a sync diff."""
+
     source_title: str | None = None
     source_artist: str | None = None
     source_album: str | None = None
@@ -130,6 +141,7 @@ class SyncDiffItem(BaseModel):
 
 class SyncDiffResponse(BaseModel):
     """Diff between two sync runs."""
+
     added: list[SyncDiffItem]
     removed: list[SyncDiffItem]
     unchanged: list[SyncDiffItem]

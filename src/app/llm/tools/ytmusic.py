@@ -50,13 +50,15 @@ async def search_youtube_music(query: str) -> dict:
             )
             if not re.match(valid_ids, playlist_id):
                 continue
-            playlists.append({
-                "title": entry.get("title", "Unknown"),
-                "playlist_id": playlist_id,
-                "url": f"https://music.youtube.com/playlist?list={playlist_id}",
-                "description": entry.get("description", ""),
-                "track_count": entry.get("playlist_count", 0) or entry.get("n_entries", 0),
-            })
+            playlists.append(
+                {
+                    "title": entry.get("title", "Unknown"),
+                    "playlist_id": playlist_id,
+                    "url": f"https://music.youtube.com/playlist?list={playlist_id}",
+                    "description": entry.get("description", ""),
+                    "track_count": entry.get("playlist_count", 0) or entry.get("n_entries", 0),
+                }
+            )
 
         return {
             "query": query,

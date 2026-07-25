@@ -1,4 +1,5 @@
 """Plex Media Server service."""
+
 import logging
 
 from src.app.services.base import ServiceBase

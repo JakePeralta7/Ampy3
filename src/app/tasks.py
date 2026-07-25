@@ -2,6 +2,7 @@
 
 Use `from src.app.worker.xxx import yyy` directly in new code.
 """
+
 from src.app.worker import (
     celery_app,
     check_and_trigger_scheduled_syncs,

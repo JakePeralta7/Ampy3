@@ -1,4 +1,5 @@
 """Ollama LLM client service."""
+
 import logging
 
 from src.app.services.base import ServiceBase

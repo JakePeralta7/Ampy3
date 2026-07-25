@@ -37,9 +37,9 @@ async def _get_client_id() -> str:
     async with AsyncSessionLocal() as session:
         from sqlalchemy import select
 
-        row = (await session.execute(
-            select(Config).where(Config.key == "plex_client_id")
-        )).scalar_one_or_none()
+        row = (
+            await session.execute(select(Config).where(Config.key == "plex_client_id"))
+        ).scalar_one_or_none()
 
         if row:
             _client_id_cache = row.value
@@ -57,9 +57,9 @@ async def _get_owner_id() -> str | None:
     async with AsyncSessionLocal() as session:
         from sqlalchemy import select
 
-        row = (await session.execute(
-            select(Config).where(Config.key == "owner_plex_user_id")
-        )).scalar_one_or_none()
+        row = (
+            await session.execute(select(Config).where(Config.key == "owner_plex_user_id"))
+        ).scalar_one_or_none()
         return row.value if row else None
 
 
@@ -68,9 +68,9 @@ async def get_owner_plex_token() -> str | None:
     async with AsyncSessionLocal() as session:
         from sqlalchemy import select
 
-        row = (await session.execute(
-            select(Config).where(Config.key == "owner_plex_token")
-        )).scalar_one_or_none()
+        row = (
+            await session.execute(select(Config).where(Config.key == "owner_plex_token"))
+        ).scalar_one_or_none()
         return row.value if row else None
 
 
@@ -79,9 +79,9 @@ async def get_plex_server_url() -> str | None:
     async with AsyncSessionLocal() as session:
         from sqlalchemy import select
 
-        row = (await session.execute(
-            select(Config).where(Config.key == "plex_server_url")
-        )).scalar_one_or_none()
+        row = (
+            await session.execute(select(Config).where(Config.key == "plex_server_url"))
+        ).scalar_one_or_none()
         return row.value if row else None
 
 

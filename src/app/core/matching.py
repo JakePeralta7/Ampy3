@@ -43,7 +43,7 @@ def _strip_token_punctuation(token: str) -> str:
     which handles cases like 'Stronger (What Doesn't Kill You)' vs
     'What Doesn't Kill You (Stronger)' where parentheses attach to words.
     """
-    return re.sub(r'^[^a-z0-9]+|[^a-z0-9]+$', '', token)
+    return re.sub(r"^[^a-z0-9]+|[^a-z0-9]+$", "", token)
 
 
 def _match_titles(search: str, candidate: str) -> float:

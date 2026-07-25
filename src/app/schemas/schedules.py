@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 class CreateScheduledSyncInput(BaseModel):
     """Input schema for creating a scheduled sync."""
+
     source: str = Field(..., description="Source platform (e.g. youtube_music)")
     source_url: str = Field(..., description="URL of the source playlist")
     target_playlist_name: str = Field(..., description="Name for the Plex playlist")
@@ -14,6 +15,7 @@ class CreateScheduledSyncInput(BaseModel):
 
 class UpdateScheduledSyncInput(BaseModel):
     """Input schema for updating a scheduled sync."""
+
     target_playlist_name: str | None = None
     schedule_interval: str | None = None
     is_active: bool | None = None
@@ -22,6 +24,7 @@ class UpdateScheduledSyncInput(BaseModel):
 
 class ScheduledSyncOut(BaseModel):
     """Output schema for a scheduled sync."""
+
     id: int
     source: str
     source_url: str
@@ -39,12 +42,14 @@ class ScheduledSyncOut(BaseModel):
 
 class SyncNowResponse(BaseModel):
     """Response after manually triggering a sync."""
+
     task_id: str
     message: str
 
 
 class SchedulerReloadResponse(BaseModel):
     """Response after reloading the scheduler."""
+
     message: str
 
 
@@ -53,21 +58,25 @@ class SchedulerReloadResponse(BaseModel):
 
 class BulkSyncNowInput(BaseModel):
     """Input for bulk sync-now action."""
+
     ids: list[int] = Field(..., min_length=1, description="Schedule IDs to sync")
 
 
 class BulkToggleActiveInput(BaseModel):
     """Input for bulk toggle-active action."""
+
     ids: list[int] = Field(..., min_length=1, description="Schedule IDs to update")
     is_active: bool = Field(..., description="New active state")
 
 
 class BulkDeleteInput(BaseModel):
     """Input for bulk delete action."""
+
     ids: list[int] = Field(..., min_length=1, description="Schedule IDs to delete")
 
 
 class BulkResponse(BaseModel):
     """Response after a bulk action."""
+
     processed: int
     task_ids: list[str] | None = None

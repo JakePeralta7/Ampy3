@@ -1,4 +1,5 @@
 """MusicBrainz metadata provider."""
+
 from __future__ import annotations
 
 from src.app.core.musicbrainz import MusicBrainzResolver

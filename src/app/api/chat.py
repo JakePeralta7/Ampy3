@@ -104,15 +104,17 @@ async def _generate_title(session_id: str, history: list[dict]) -> str | None:
         if not summary_messages:
             return None
 
-        response = await llm.ainvoke([
-            SystemMessage(
-                content=(
-                    "Generate a very short title (max 5 words) for this conversation. "
-                    "Reply with only the title, no quotes, no punctuation, no explanation."
-                )
-            ),
-            *summary_messages,
-        ])
+        response = await llm.ainvoke(
+            [
+                SystemMessage(
+                    content=(
+                        "Generate a very short title (max 5 words) for this conversation. "
+                        "Reply with only the title, no quotes, no punctuation, no explanation."
+                    )
+                ),
+                *summary_messages,
+            ]
+        )
         title = response.content.strip().strip('"').strip("'")
         if title:
             await set_title(session_id, title)
@@ -120,9 +122,6 @@ async def _generate_title(session_id: str, history: list[dict]) -> str | None:
     except Exception as e:
         logger.warning("Title generation failed: %s", e)
         return None
-
-
-
 
 
 async def _stream_agent_events(
@@ -158,6 +157,7 @@ async def _stream_agent_events(
             version="v2",
         ):
             try:
+
                 def serialize_event(obj):
                     if hasattr(obj, "type"):
                         result = {"type": getattr(obj, "type", None)}
@@ -274,7 +274,10 @@ async def _stream_agent_events(
 
                             if content and content.strip():
                                 # If this is different from what we streamed, update it
-                                if content != last_persisted_content and content not in persisted_contents:  # noqa: E501
+                                if (
+                                    content != last_persisted_content
+                                    and content not in persisted_contents
+                                ):  # noqa: E501
                                     persisted_contents.add(content)
                                     flow = completed_flow_items if completed_flow_items else None
                                     await append_message(
