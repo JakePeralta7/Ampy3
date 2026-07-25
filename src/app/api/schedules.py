@@ -65,7 +65,7 @@ def _calculate_next_sync(interval: str) -> datetime:
 @router.post("/", response_model=ScheduledSyncOut, status_code=201)
 async def create_scheduled_sync(
     body: CreateScheduledSyncInput,
-    db: AsyncSession = Depends(get_async_session),
+    db: AsyncSession = Depends(get_async_session),  # noqa: B008
     _user: dict = Depends(get_current_user),  # noqa: B008
 ):
     """Create a new scheduled playlist sync."""
@@ -77,7 +77,10 @@ async def create_scheduled_sync(
     if body.schedule_interval not in [e.value for e in ScheduleIntervalEnum]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid schedule_interval. Must be one of: {[e.value for e in ScheduleIntervalEnum]}",
+            detail=(
+                "Invalid schedule_interval. Must be one of: "
+                f"{[e.value for e in ScheduleIntervalEnum]}"
+            ),
         )
 
     db_sync = ScheduledPlaylistSync(
@@ -94,13 +97,17 @@ async def create_scheduled_sync(
 
     from src.app.tasks import scheduled_sync_task
 
-    task = scheduled_sync_task.delay(db_sync.id)
+    scheduled_sync_task.delay(db_sync.id)
 
     await log_event(
         event_type="schedule.created",
         resource_type="schedule",
         resource_id=str(db_sync.id),
-        summary=f"Schedule created — {body.source} → {db_sync.target_playlist_name}, every {body.schedule_interval}",
+        summary=(
+            f"Schedule created — {body.source} → "
+            f"{db_sync.target_playlist_name}, "
+            f"every {body.schedule_interval}"
+        ),
     )
 
     result = _sync_to_out(db_sync)
@@ -109,7 +116,7 @@ async def create_scheduled_sync(
 
 @router.get("/", response_model=list[ScheduledSyncOut])
 async def list_scheduled_syncs(
-    db: AsyncSession = Depends(get_async_session),
+    db: AsyncSession = Depends(get_async_session),  # noqa: B008
     active_only: bool = Query(False, description="Filter by active schedules only"),
     _user: dict = Depends(get_current_user),  # noqa: B008
 ):
@@ -125,7 +132,7 @@ async def list_scheduled_syncs(
 @router.get("/{sync_id}", response_model=ScheduledSyncOut)
 async def get_scheduled_sync(
     sync_id: int,
-    db: AsyncSession = Depends(get_async_session),
+    db: AsyncSession = Depends(get_async_session),  # noqa: B008
     _user: dict = Depends(get_current_user),  # noqa: B008
 ):
     """Get a specific scheduled sync by ID."""
@@ -145,7 +152,7 @@ async def get_scheduled_sync(
 async def update_scheduled_sync(
     sync_id: int,
     body: UpdateScheduledSyncInput,
-    db: AsyncSession = Depends(get_async_session),
+    db: AsyncSession = Depends(get_async_session),  # noqa: B008
     _user: dict = Depends(get_current_user),  # noqa: B008
 ):
     """Update a scheduled sync's configuration."""
@@ -159,10 +166,16 @@ async def update_scheduled_sync(
             detail=f"Scheduled sync with ID {sync_id} not found",
         )
 
-    if body.schedule_interval is not None and body.schedule_interval not in [e.value for e in ScheduleIntervalEnum]:
+    if (
+        body.schedule_interval is not None
+        and body.schedule_interval not in [e.value for e in ScheduleIntervalEnum]
+    ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid schedule_interval. Must be one of: {[e.value for e in ScheduleIntervalEnum]}",
+            detail=(
+                "Invalid schedule_interval. Must be one of: "
+                f"{[e.value for e in ScheduleIntervalEnum]}"
+            ),
         )
 
     for field, value in body.model_dump(exclude_unset=True).items():
@@ -187,7 +200,7 @@ async def update_scheduled_sync(
 @router.delete("/{sync_id}")
 async def delete_scheduled_sync(
     sync_id: int,
-    db: AsyncSession = Depends(get_async_session),
+    db: AsyncSession = Depends(get_async_session),  # noqa: B008
     _user: dict = Depends(get_current_user),  # noqa: B008
 ):
     """Delete a scheduled sync."""
@@ -220,7 +233,7 @@ async def delete_scheduled_sync(
 @router.post("/bulk/sync-now", response_model=BulkResponse)
 async def bulk_sync_now(
     body: BulkSyncNowInput,
-    db: AsyncSession = Depends(get_async_session),
+    db: AsyncSession = Depends(get_async_session),  # noqa: B008
     _user: dict = Depends(get_current_user),  # noqa: B008
 ):
     """Trigger an immediate sync for multiple scheduled syncs."""
@@ -246,7 +259,10 @@ async def bulk_sync_now(
     await log_event(
         event_type="sync.bulk_triggered",
         resource_type="schedule",
-        summary=f"Bulk sync triggered for {len(found_ids)} schedule(s): {', '.join(s.target_playlist_name for s in syncs.values())}",
+        summary=(
+        f"Bulk sync triggered for {len(found_ids)} schedule(s): "
+        f"{', '.join(s.target_playlist_name for s in syncs.values())}"
+    ),
     )
 
     return BulkResponse(processed=len(found_ids), task_ids=task_ids)
@@ -255,7 +271,7 @@ async def bulk_sync_now(
 @router.post("/bulk/toggle-active", response_model=BulkResponse)
 async def bulk_toggle_active(
     body: BulkToggleActiveInput,
-    db: AsyncSession = Depends(get_async_session),
+    db: AsyncSession = Depends(get_async_session),  # noqa: B008
     _user: dict = Depends(get_current_user),  # noqa: B008
 ):
     """Pause or resume multiple scheduled syncs."""
@@ -288,7 +304,7 @@ async def bulk_toggle_active(
 @router.post("/bulk/delete", response_model=BulkResponse)
 async def bulk_delete(
     body: BulkDeleteInput,
-    db: AsyncSession = Depends(get_async_session),
+    db: AsyncSession = Depends(get_async_session),  # noqa: B008
     _user: dict = Depends(get_current_user),  # noqa: B008
 ):
     """Delete multiple scheduled syncs."""
@@ -323,7 +339,7 @@ async def bulk_delete(
 @router.post("/{sync_id}/sync-now", response_model=SyncNowResponse)
 async def trigger_sync_now(
     sync_id: int,
-    db: AsyncSession = Depends(get_async_session),
+    db: AsyncSession = Depends(get_async_session),  # noqa: B008
     _user: dict = Depends(get_current_user),  # noqa: B008
 ):
     """Manually trigger an immediate sync for a scheduled sync."""
@@ -371,4 +387,4 @@ async def reload_scheduler(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to reload scheduler: {str(e)}",
-        )
+        ) from e

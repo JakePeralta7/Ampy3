@@ -5,7 +5,6 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from src.app.auth.dependencies import get_current_user
-
 from src.app.core.models import TrackMetadata
 from src.app.core.services.matcher import MatchEngine, get_active_rules
 from src.app.core.sources.registry import SourceRegistry
@@ -65,7 +64,10 @@ async def get_unmatched_tracks(
                 PlaylistTrack.sync_id == ScheduledPlaylistSync.id,
             )
             .where(PlaylistTrack.match_item_id.is_(None))
-            .order_by(ScheduledPlaylistSync.last_synced_at.desc().nullslast(), PlaylistTrack.position)
+            .order_by(
+                ScheduledPlaylistSync.last_synced_at.desc().nullslast(),
+                PlaylistTrack.position,
+            )
             .limit(limit)
         )
         result = await session.execute(stmt)
@@ -262,7 +264,11 @@ async def trigger_playlist_sync(
 ):
     """Initiate a background sync job for a playlist."""
     try:
-        if sync_request.source == "youtube_music" and "music.youtube.com" not in sync_request.playlist_url:
+        is_yt_music = (
+            sync_request.source == "youtube_music"
+            and "music.youtube.com" not in sync_request.playlist_url
+        )
+        if is_yt_music:
             raise HTTPException(status_code=422, detail="Invalid YouTube Music URL format.")
 
         task = sync_playlists_task.delay(
@@ -270,6 +276,7 @@ async def trigger_playlist_sync(
             sync_request.source,
             sync_request.replace_existing,
             sync_request.schedule_id,
+            sync_request.target_playlist_name,
         )
         logger.info(f"Triggered sync task {task.id} for {sync_request.source} playlist")
 
@@ -277,7 +284,10 @@ async def trigger_playlist_sync(
             event_type="sync.manually_triggered",
             resource_type="playlist",
             resource_id=sync_request.schedule_id and str(sync_request.schedule_id),
-            summary=f"Sync triggered for {sync_request.source} playlist — {sync_request.playlist_url}",
+            summary=(
+                f"Sync triggered for {sync_request.source}"
+                f" playlist — {sync_request.playlist_url}"
+            ),
             details={
                 "playlist_url": sync_request.playlist_url,
                 "source": sync_request.source,
@@ -383,7 +393,12 @@ async def get_playlist_tracks(
                         "title": r.match_title or r.source_title or "Unknown",
                         "artist_name": r.match_artist or r.source_artist or "Unknown",
                         "album_name": r.match_album or r.source_album or "Unknown",
-                        "duration": r.match_duration if r.match_duration is not None else (r.source_duration_ms // 1000 if r.source_duration_ms else 0),
+                        "duration": (
+                            r.match_duration
+                            if r.match_duration is not None
+                            else (r.source_duration_ms // 1000
+                                  if r.source_duration_ms else 0)
+                        ),
                         "status": "matched",
                         "match_rate": "✓ Matched",
                     })
@@ -452,7 +467,10 @@ async def get_playlist_tracks(
         raise
     except Exception as e:
         logger.error(f"Error getting playlist tracks: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get playlist tracks: {str(e)}") from e
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get playlist tracks: {str(e)}",
+        ) from e
 
 
 @router.get("/by-sync/{sync_id}/tracks", response_model=PlaylistTracksResponse)
@@ -492,7 +510,12 @@ async def get_sync_tracks(
                     "title": r.match_title or r.source_title or "Unknown",
                     "artist_name": r.match_artist or r.source_artist or "Unknown",
                     "album_name": r.match_album or r.source_album or "Unknown",
-                    "duration": r.match_duration if r.match_duration is not None else (r.source_duration_ms // 1000 if r.source_duration_ms else 0),
+                    "duration": (
+                        r.match_duration
+                        if r.match_duration is not None
+                        else (r.source_duration_ms // 1000
+                              if r.source_duration_ms else 0)
+                    ),
                     "status": "matched",
                     "match_rate": "✓ Matched",
                 })
@@ -617,7 +640,10 @@ async def rematch_sync_track(
                     match = hits[0]
 
             if not match:
-                return RematchTrackResponse(matched=False, message=f"No match found for '{body.title}'")
+                msg = f"No match found for '{body.title}'"
+                return RematchTrackResponse(
+                    matched=False, message=msg,
+                )
 
             plex_id = match.get("plex_id")
 
@@ -648,7 +674,11 @@ async def rematch_sync_track(
                 event_type="track.rematched",
                 resource_type="track",
                 resource_id=plex_id,
-                summary=f"Track '{body.title}' by {body.artist_name or '?'} rematched to '{match.get('title', '')}' in sync {sync_id}",
+                summary=(
+                    f"Track '{body.title}' by {body.artist_name or '?'}"
+                    f" rematched to '{match.get('title', '')}'"
+                    f" in sync {sync_id}"
+                ),
             )
 
             return RematchTrackResponse(
@@ -745,7 +775,11 @@ async def rematch_track(
             event_type="track.rematched",
             resource_type="track",
             resource_id=plex_id,
-            summary=f"Track '{body.title}' by {body.artist_name or '?'} rematched to '{match.get('title', '')}' in playlist {playlist_id}",
+            summary=(
+                f"Track '{body.title}' by {body.artist_name or '?'}"
+                f" rematched to '{match.get('title', '')}'"
+                f" in playlist {playlist_id}"
+            ),
         )
 
         return RematchTrackResponse(

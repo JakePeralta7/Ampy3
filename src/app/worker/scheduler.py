@@ -60,7 +60,10 @@ def scheduled_sync_task(self, schedule_id: int):
                 summary=f"Scheduled sync #{schedule_id} failed — sync not found",
             )
             return {"status": "FAILED", "error": "Sync not found"}
-        source_url, source, replace_existing, title = sync.source_url, sync.source, sync.replace_existing, sync.target_playlist_name
+        source_url, source, replace_existing, title = (
+            sync.source_url, sync.source,
+            sync.replace_existing, sync.target_playlist_name,
+        )
     finally:
         db.close()
 
@@ -77,13 +80,22 @@ def scheduled_sync_task(self, schedule_id: int):
         # Load rules synchronously FIRST to avoid asyncio.run() conflicts with asyncpg
         rules = get_active_rules_sync()
         # Pass a lambda that creates the coroutine, so _run_async can retry with a fresh coroutine
-        stats = _run_async(lambda: _async_sync_task(source_url, source, replace_existing, schedule_id, rules))
+        stats = _run_async(
+            lambda: _async_sync_task(
+                source_url, source, replace_existing,
+                schedule_id, rules, title,
+            )
+        )
         logger.debug(f"Sync successful for {title}: {stats}")
         log_event_sync(
             event_type="sync.completed",
             resource_type="schedule",
             resource_id=str(schedule_id),
-            summary=f"Scheduled sync completed for '{title}': {stats.get('matched', 0)} matched, {stats.get('failed', 0)} failed",
+            summary=(
+                f"Scheduled sync completed for '{title}': "
+                f"{stats.get('matched', 0)} matched, "
+                f"{stats.get('failed', 0)} failed"
+            ),
             details=stats,
         )
         return {"status": "SUCCESS", "stats": stats}

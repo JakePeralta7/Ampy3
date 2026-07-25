@@ -186,9 +186,7 @@ export class ChatClient {
   /**
    * Create a new chat session.
    */
-  async createSession(
-    request: ChatSessionCreateRequest
-  ): Promise<ChatSessionCreateResponse> {
+  async createSession(request: ChatSessionCreateRequest): Promise<ChatSessionCreateResponse> {
     return apiRequest<ChatSessionCreateResponse>("/v1/chat/sessions", {
       method: "POST",
       body: JSON.stringify(request),

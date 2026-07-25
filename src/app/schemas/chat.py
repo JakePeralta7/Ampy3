@@ -21,7 +21,7 @@ class ChatRequest(BaseModel):
 
 class ChatFlowItem(BaseModel):
     """A tool call item within an assistant message.
-    
+
     Classification: BACKEND PERSISTED
     - Tool calls are persisted to Valkey for audit, replay, and debugging
     - Includes execution traces and results
@@ -34,12 +34,12 @@ class ChatFlowItem(BaseModel):
 
 class ChatMessage(BaseModel):
     """Single chat message.
-    
+
     Message Types (backend-managed classification):
-    
+
     "user" → Persisted to Valkey
     "assistant" → Persisted to Valkey (backend skips ephemeral thinking)
-    
+
     Frontend receives all messages in real-time, but only non-thinking responses
     are persisted to backend history via Valkey.
     """

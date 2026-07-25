@@ -1,7 +1,7 @@
 """Investigator agent tools and utilities for diagnosing sync track mismatches.
 
 Tools are organized by workflow phase. The multi-phase LangGraph workflow in workflows.py
-orchestrates these tools across phases: gather_context → diagnose → group_patterns → 
+orchestrates these tools across phases: gather_context → diagnose → group_patterns →
 verify → create → test_verify.
 
 Each phase has access only to its scoped tool set, enforced via ToolNode composition.

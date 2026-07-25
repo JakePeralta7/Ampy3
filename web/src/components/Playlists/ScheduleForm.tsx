@@ -129,9 +129,7 @@ export function ScheduleForm({
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-fg-muted mb-1">
-            Plex Playlist Name *
-          </label>
+          <label className="block text-sm font-medium text-fg-muted mb-1">Playlist Name *</label>
           <input
             type="text"
             value={targetPlaylistName}

@@ -114,7 +114,6 @@ export const AgentChatUI: React.FC<AgentChatUIProps> = ({
     error,
     sendMessage,
     clearHistory,
-    resetSession,
     stopStreaming,
     sessionTitle,
   } = useAgentChat({ autoLoadHistory, sessionId: propSessionId });

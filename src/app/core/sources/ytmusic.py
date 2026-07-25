@@ -5,7 +5,6 @@ import json
 import logging
 import re
 from pathlib import Path
-from typing import List
 
 import requests
 
@@ -69,11 +68,20 @@ class YouTubeMusicSource(IPlatformSource):
 
         import subprocess
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=settings.yt_dlp_timeout)
+            result = subprocess.run(
+                cmd, capture_output=True, text=True,
+                timeout=settings.yt_dlp_timeout,
+            )
         except FileNotFoundError:
-            raise RuntimeError("yt-dlp is not installed. Install it via pip or ensure PATH contains yt-dlp.")
+            raise RuntimeError(
+                "yt-dlp is not installed."
+                " Install it via pip or ensure PATH contains yt-dlp."
+            ) from None
         except subprocess.TimeoutExpired:
-            raise RuntimeError(f"Playlist extraction timed out ({settings.yt_dlp_timeout}s).")
+            raise RuntimeError(
+                f"Playlist extraction timed out"
+                f" ({settings.yt_dlp_timeout}s)."
+            ) from None
 
         if result.returncode != 0 and not result.stdout.strip():
             raise RuntimeError(f"yt-dlp failed: {result.stderr.strip()}")
@@ -105,8 +113,15 @@ class YouTubeMusicSource(IPlatformSource):
                 continue
 
             artist = entry.get("creator", "") or entry.get("uploader", "") or ""
-            album = entry.get("album", {}).get("name", "") if isinstance(entry.get("album"), dict) else (entry.get("album", "") or "")
-            if album and title and (album.lower() == title.lower() or title.lower().find(album.lower()) >= 0):
+            album_obj = entry.get("album")
+            if isinstance(album_obj, dict):
+                album = album_obj.get("name", "")
+            else:
+                album = entry.get("album", "") or ""
+            if album and title and (
+                album.lower() == title.lower()
+                or title.lower().find(album.lower()) >= 0
+            ):
                 album = ""
             duration = entry.get("duration") or None
             mbid = entry.get("musicbrainz_id", None)

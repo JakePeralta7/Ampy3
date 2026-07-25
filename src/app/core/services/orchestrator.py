@@ -19,7 +19,13 @@ class SyncOrchestrator:
         self._target = target
         self._match_engine = MatchEngine(target)
 
-    async def sync_playlist(self, playlist: PlaylistMetadata, replace_existing: bool = False, rules: list[MatchRule] | None = None) -> dict:
+    async def sync_playlist(
+        self,
+        playlist: PlaylistMetadata,
+        replace_existing: bool = False,
+        rules: list[MatchRule] | None = None,
+        target_playlist_name: str | None = None,
+    ) -> dict:
         if rules is None:
             rules = await get_active_rules()
         if not rules:
@@ -27,8 +33,10 @@ class SyncOrchestrator:
         else:
             logger.debug("Loaded %d active match rule(s) for this sync run", len(rules))
 
+        playlist_name = target_playlist_name or playlist.title
+
         stats = {
-            "playlist": playlist.title,
+            "playlist": playlist_name,
             "source_id": playlist.source_id,
             "target_playlist_id": None,
             "total_tracks": len(playlist.tracks),
@@ -41,11 +49,11 @@ class SyncOrchestrator:
             "failed_tracks": [],
         }
 
-        existing = await self._target.get_playlist_by_name(playlist.title)
+        existing = await self._target.get_playlist_by_name(playlist_name)
         if existing and replace_existing:
             try:
                 await self._target.delete_playlist(existing["rating_key"])
-                logger.debug("Deleted existing playlist '%s' for replacement", playlist.title)
+                logger.debug("Deleted existing playlist '%s' for replacement", playlist_name)
                 existing = None
             except Exception as e:
                 stats["errors"].append(f"Failed to delete existing: {e}")
@@ -53,7 +61,9 @@ class SyncOrchestrator:
         # Resolve all tracks in parallel with bounded concurrency
         semaphore = asyncio.Semaphore(10)
 
-        async def _resolve_one(position: int, track: TrackMetadata) -> tuple[int, TrackMetadata, dict | None]:
+        async def _resolve_one(
+            position: int, track: TrackMetadata,
+        ) -> tuple[int, TrackMetadata, dict | None]:
             async with semaphore:
                 result = await self._resolve_track(track, rules)
                 return position, track, result
@@ -79,7 +89,9 @@ class SyncOrchestrator:
                 row["match_title"] = hit.get("title")
                 row["match_artist"] = hit.get("artist_name")
                 row["match_album"] = hit.get("album_name")
-                row["match_duration"] = hit.get("duration") or (hit.get("duration_ms", 0) // 1000 if hit.get("duration_ms") else None)
+                dur_ms = hit.get("duration_ms", 0)
+                dur_s = dur_ms // 1000 if dur_ms else None
+                row["match_duration"] = hit.get("duration") or dur_s
                 row["match_rule_id"] = result.get("rule_id")
                 matched_results.append(result)
                 stats["matched"] += 1
@@ -111,7 +123,7 @@ class SyncOrchestrator:
                         stats["updated"] = len(matched_results)
                 else:
                     playlist_id = await self._target.create_playlist(
-                        title=playlist.title,
+                        title=playlist_name,
                         items=[t["match"] for t in matched_results],
                         custom_metadata={"source_playlist_id": playlist.source_id},
                     )
@@ -123,9 +135,14 @@ class SyncOrchestrator:
 
         return stats
 
-    async def _resolve_track(self, track: TrackMetadata, rules: list[MatchRule] | None = None) -> dict | None:
+    async def _resolve_track(
+        self, track: TrackMetadata, rules: list[MatchRule] | None = None,
+    ) -> dict | None:
         if not track.is_matchable:
-            logger.warning("Track missing required metadata for matching: title=%s artist=%s", track.title, track.artist_name)
+            logger.warning(
+                "Track missing required metadata for matching:"
+                " title=%s artist=%s", track.title, track.artist_name,
+            )
             return None
 
         if not rules:
@@ -149,5 +166,8 @@ class SyncOrchestrator:
             logger.debug("No match found for '%s' by '%s'", track.title, track.artist_name)
             return None
         except Exception as e:
-            logger.error("MatchEngine failed for '%s' by '%s': %s", track.title, track.artist_name, e)
+            logger.error(
+                "MatchEngine failed for '%s' by '%s': %s",
+                track.title, track.artist_name, e,
+            )
             return None

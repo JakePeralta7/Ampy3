@@ -15,7 +15,14 @@ logger = logging.getLogger(__name__)
 
 
 @celery_app.task(bind=True)
-def sync_playlists_task(self, playlist_url: str, source: str = "youtube_music", replace_existing: bool = False, schedule_id: int | None = None):
+def sync_playlists_task(
+    self,
+    playlist_url: str,
+    source: str = "youtube_music",
+    replace_existing: bool = False,
+    schedule_id: int | None = None,
+    target_playlist_name: str | None = None,
+):
     try:
         logger.debug(f"Starting sync for playlist from {source}: {playlist_url}")
         log_event_sync(
@@ -27,13 +34,22 @@ def sync_playlists_task(self, playlist_url: str, source: str = "youtube_music", 
         # Load rules synchronously FIRST to avoid asyncio.run() conflicts
         rules = get_active_rules_sync()
         # Pass a lambda that creates the coroutine, so _run_async can retry with a fresh coroutine
-        stats = _run_async(lambda: _async_sync_task(playlist_url, source, replace_existing, schedule_id, rules))
+        stats = _run_async(
+            lambda: _async_sync_task(
+                playlist_url, source, replace_existing,
+                schedule_id, rules, target_playlist_name,
+            )
+        )
         logger.debug(f"Sync completed: {stats['matched']} matched, {stats['failed']} failed")
         log_event_sync(
             event_type="sync.completed",
             resource_type="playlist",
             resource_id=str(schedule_id) if schedule_id else None,
-            summary=f"Sync completed: {stats.get('matched', 0)} matched, {stats.get('failed', 0)} failed — {playlist_url}",
+            summary=(
+                f"Sync completed: {stats.get('matched', 0)} matched,"
+                f" {stats.get('failed', 0)} failed"
+                f" — {playlist_url}"
+            ),
             details=stats,
         )
         return {"status": "SUCCESS", "stats": stats}
@@ -49,13 +65,23 @@ def sync_playlists_task(self, playlist_url: str, source: str = "youtube_music", 
         raise self.retry(exc=e, countdown=60, max_retries=3) from e
 
 
-async def _async_sync_task(playlist_url: str, source: str, replace_existing: bool, schedule_id: int | None = None, rules=None) -> dict:
+async def _async_sync_task(
+    playlist_url: str,
+    source: str,
+    replace_existing: bool,
+    schedule_id: int | None = None,
+    rules=None,
+    target_playlist_name: str | None = None,
+) -> dict:
     # Resolve source adapter via registry
     source_cls = SourceRegistry.get(source)
     source_adapter = source_cls()
     playlist_metadata = await source_adapter.get_playlist(playlist_url)
 
-    logger.debug(f"Fetched playlist '{playlist_metadata.title}' with {len(playlist_metadata.tracks)} tracks")
+    logger.debug(
+        f"Fetched playlist '{playlist_metadata.title}'"
+        f" with {len(playlist_metadata.tracks)} tracks"
+    )
 
     target = await get_sync_target()
     orchestrator = SyncOrchestrator(target=target)
@@ -63,7 +89,8 @@ async def _async_sync_task(playlist_url: str, source: str, replace_existing: boo
     stats = await orchestrator.sync_playlist(
         playlist=playlist_metadata,
         replace_existing=replace_existing,
-        rules=rules
+        rules=rules,
+        target_playlist_name=target_playlist_name,
     )
 
     track_rows = stats.pop("track_rows", [])

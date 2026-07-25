@@ -7,14 +7,20 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import delete, insert, select
 
 from src.app.db import SessionLocal
-from src.app.models import PlaylistTrack, ScheduledPlaylistSync, ScheduleIntervalEnum, SyncRun, SyncRunTrack
+from src.app.models import (
+    PlaylistTrack,
+    ScheduledPlaylistSync,
+    ScheduleIntervalEnum,
+    SyncRun,
+    SyncRunTrack,
+)
 
 logger = logging.getLogger(__name__)
 
 
 def _run_async(coro_func):
     """Run an async coroutine function in a new event loop.
-    
+
     Args:
         coro_func: A callable that returns a coroutine, or a coroutine object.
                    If it's a callable, it will be called to create a fresh coroutine
@@ -22,17 +28,14 @@ def _run_async(coro_func):
     """
     try:
         # If it's a callable, call it to get the coroutine
-        if callable(coro_func):
-            coro = coro_func()
-        else:
-            coro = coro_func
+        coro = coro_func() if callable(coro_func) else coro_func
         return asyncio.run(coro)
     except RuntimeError as e:
         # If asyncio.run() fails, try creating a new loop
         # For callables, we can create a fresh coroutine; for coroutines, we cannot retry
         if not callable(coro_func):
             raise e
-        
+
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
@@ -72,7 +75,9 @@ def _save_sync_results(
         if schedule_id:
             stmt = select(ScheduledPlaylistSync).where(ScheduledPlaylistSync.id == schedule_id)
         else:
-            stmt = select(ScheduledPlaylistSync).where(ScheduledPlaylistSync.source_url == playlist_url)
+            stmt = select(ScheduledPlaylistSync).where(
+                ScheduledPlaylistSync.source_url == playlist_url
+            )
 
         result = db.execute(stmt)
         sync_record = result.scalars().first()

@@ -283,7 +283,7 @@ async def test_match_rule(
     def _extract_failure_reason(trace_data: dict) -> str:
         """Extract human-readable failure reason from trace data."""
         steps = trace_data.get("steps") or []
-        
+
         # Find first failed step or last step
         for step in steps:
             if not isinstance(step, dict):
@@ -291,11 +291,11 @@ async def test_match_rule(
             step_name = step.get("name", "unknown")
             error = step.get("error")
             outputs = step.get("outputs", {})
-            
+
             # Check if this step failed
             if error:
                 return f"{step_name} step failed: {error}"
-            
+
             # For outputs, check for "false" or empty results
             if outputs:
                 if outputs.get("out") is False:
@@ -304,10 +304,10 @@ async def test_match_rule(
                     return f"{step_name} step returned no results"
                 if outputs.get("match") is False:
                     return f"{step_name} step did not match"
-        
+
         if trace_data.get("error"):
             return f"Rule execution error: {trace_data['error']}"
-        
+
         return "Unknown failure reason"
 
     def _build_steps_trace(steps_list: list) -> list[dict]:
@@ -316,7 +316,7 @@ async def test_match_rule(
         for step in (steps_list or []):
             if not isinstance(step, dict):
                 continue
-            
+
             step_item = {
                 "node": step.get("name", "unknown"),
                 "inputs": step.get("inputs", {}),
@@ -324,9 +324,9 @@ async def test_match_rule(
             }
             if step.get("error"):
                 step_item["error"] = step["error"]
-            
+
             trace.append(step_item)
-        
+
         return trace
 
     try:
@@ -341,32 +341,32 @@ async def test_match_rule(
             for step in (t.get("steps") or []):
                 if isinstance(step, dict) and step.get("outputs"):
                     match_step = step
-            
+
             result = match_step.get("outputs", {}).get("out") if match_step else None
             matched = result is not None
-            
+
             rule_result = {
                 "rule_id": t["rule_id"],
                 "rule_name": t["rule_name"],
                 "rule_priority": t["rule_priority"],
                 "matched": matched,
             }
-            
+
             # Include detailed trace if requested
             if trace_detail:
                 rule_result["steps_trace"] = _build_steps_trace(t.get("steps", []))
-            
+
             # Add match result if found
             if matched:
                 rule_result["match_result"] = result
             else:
                 # Extract failure reason
                 rule_result["failure_reason"] = _extract_failure_reason(t)
-            
+
             # Include error if rule execution failed
             if t.get("error"):
                 rule_result["error"] = t["error"]
-            
+
             per_rule.append(rule_result)
 
         # If no specific rule_ids, also run the full engine to get the winning match

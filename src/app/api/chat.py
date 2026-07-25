@@ -130,7 +130,7 @@ async def _stream_agent_events(
     config: dict,
 ) -> AsyncGenerator[str, None]:
     """Stream events from the agent as JSON lines.
-    
+
     All messages are persisted to Valkey (thinking, responses, tool results).
     Persistence Strategy:
     - Eager: Persist on first 50+ chars (survive page refresh during streaming)
@@ -145,12 +145,12 @@ async def _stream_agent_events(
     }
     pending_flow_items: dict[str, dict] = {}
     completed_flow_items: list[dict] = []
-    
+
     # Track streamed content for persistence
     current_ai_content = ""
     ai_message_persisted = False
     last_persisted_content = ""
-    
+
     try:
         async for event in workflow.astream_events(
             input=state,
@@ -220,7 +220,7 @@ async def _stream_agent_events(
                 try:
                     data = event.get("data", {})
                     chunk = data.get("chunk")
-                    
+
                     # Extract content from chunk
                     chunk_content = ""
                     if isinstance(chunk, str):
@@ -229,10 +229,10 @@ async def _stream_agent_events(
                         chunk_content = chunk.get("content", "")
                     elif hasattr(chunk, "content"):
                         chunk_content = str(chunk.content)
-                    
+
                     if chunk_content:
                         current_ai_content += chunk_content
-                        
+
                         # Persist eagerly on first meaningful content (>50 chars)
                         if (
                             not ai_message_persisted
@@ -248,7 +248,8 @@ async def _stream_agent_events(
                             )
                             ai_message_persisted = True
                             logger.debug(
-                                f"Early-persisted assistant message ({len(current_ai_content)} chars)"
+                                "Early-persisted assistant message (%d chars)",
+                                len(current_ai_content),
                             )
                 except Exception as e:
                     logger.warning(f"Failed to process stream chunk: {e}")
@@ -258,28 +259,31 @@ async def _stream_agent_events(
                 try:
                     data = event.get("data", {})
                     output = data.get("output")
-                    
+
                     if output and isinstance(output, dict):
                         msgs = output.get("messages", [])
-                        
+
                         # Find the final AI message
                         for msg in reversed(msgs):
                             content = None
-                            
+
                             if hasattr(msg, "type") and msg.type == "ai":
                                 content = msg.content if hasattr(msg, "content") else ""
                             elif isinstance(msg, dict) and msg.get("type") == "ai":
                                 content = msg.get("content", "")
-                            
+
                             if content and content.strip():
                                 # If this is different from what we streamed, update it
-                                if content != last_persisted_content and content not in persisted_contents:
+                                if content != last_persisted_content and content not in persisted_contents:  # noqa: E501
                                     persisted_contents.add(content)
                                     flow = completed_flow_items if completed_flow_items else None
                                     await append_message(
                                         session_id, "assistant", content, flow_items=flow
                                     )
-                                    logger.debug(f"Final-persisted assistant message ({len(content)} chars)")
+                                    logger.debug(
+                                        "Final-persisted assistant message (%d chars)",
+                                        len(content),
+                                    )
                                 elif not ai_message_persisted and content not in persisted_contents:
                                     # Never persisted during streaming, do it now
                                     persisted_contents.add(content)
@@ -287,18 +291,21 @@ async def _stream_agent_events(
                                     await append_message(
                                         session_id, "assistant", content, flow_items=flow
                                     )
-                                    logger.debug(f"Fallback-persisted assistant message ({len(content)} chars)")
+                                    logger.debug(
+                                        "Fallback-persisted assistant message (%d chars)",
+                                        len(content),
+                                    )
                                 break
-                    
+
                     # Generate and emit title
                     title = await _generate_title(session_id, await get_history(session_id))
                     if title:
                         title_event = json.dumps({"event": "on_title", "data": {"title": title}})
                         yield title_event + "\n"
-                        
+
                 except Exception as e:
                     logger.warning("Error during chain end: %s", e)
-                    
+
     except Exception as e:
         error_event = json.dumps({"error": str(e), "event": "error"})
         yield f"{error_event}\n"

@@ -15,7 +15,6 @@ The exported ``workflow`` object is consumed by api/chat.py via
 from __future__ import annotations
 
 from langchain_core.messages import SystemMessage
-
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 
@@ -54,7 +53,7 @@ async def _gather_context_node(state: AgentState) -> dict:
     from src.app.llm.ollama import get_llm
 
     llm_bound = get_llm().bind_tools(GATHER_CONTEXT_TOOLS)
-    
+
     messages = list(state["messages"])
     if messages and not isinstance(messages[0], SystemMessage):
         messages.insert(0, SystemMessage(content=GATHER_CONTEXT_PROMPT))
@@ -62,7 +61,7 @@ async def _gather_context_node(state: AgentState) -> dict:
         messages[0] = SystemMessage(content=GATHER_CONTEXT_PROMPT)
 
     response = await llm_bound.ainvoke(messages)
-    
+
     return {
         "messages": [response],
         "current_phase": "gather_context",
@@ -74,7 +73,7 @@ async def _diagnose_node(state: AgentState) -> dict:
     from src.app.llm.ollama import get_llm
 
     llm_bound = get_llm().bind_tools(DIAGNOSE_TOOLS)
-    
+
     messages = list(state["messages"])
     if messages and isinstance(messages[0], SystemMessage):
         messages[0] = SystemMessage(content=DIAGNOSE_PROMPT)
@@ -82,7 +81,7 @@ async def _diagnose_node(state: AgentState) -> dict:
         messages.insert(0, SystemMessage(content=DIAGNOSE_PROMPT))
 
     response = await llm_bound.ainvoke(messages)
-    
+
     return {
         "messages": [response],
         "current_phase": "diagnose",
@@ -94,7 +93,7 @@ async def _group_patterns_node(state: AgentState) -> dict:
     from src.app.llm.ollama import get_llm
 
     llm = get_llm()  # No tool binding needed
-    
+
     messages = list(state["messages"])
     if messages and isinstance(messages[0], SystemMessage):
         messages[0] = SystemMessage(content=GROUP_PATTERNS_PROMPT)
@@ -102,7 +101,7 @@ async def _group_patterns_node(state: AgentState) -> dict:
         messages.insert(0, SystemMessage(content=GROUP_PATTERNS_PROMPT))
 
     response = await llm.ainvoke(messages)
-    
+
     return {
         "messages": [response],
         "current_phase": "group_patterns",
@@ -114,7 +113,7 @@ async def _verify_node(state: AgentState) -> dict:
     from src.app.llm.ollama import get_llm
 
     llm_bound = get_llm().bind_tools(VERIFY_TOOLS)
-    
+
     messages = list(state["messages"])
     if messages and isinstance(messages[0], SystemMessage):
         messages[0] = SystemMessage(content=VERIFY_PROMPT)
@@ -122,7 +121,7 @@ async def _verify_node(state: AgentState) -> dict:
         messages.insert(0, SystemMessage(content=VERIFY_PROMPT))
 
     response = await llm_bound.ainvoke(messages)
-    
+
     return {
         "messages": [response],
         "current_phase": "verify",
@@ -134,7 +133,7 @@ async def _create_node(state: AgentState) -> dict:
     from src.app.llm.ollama import get_llm
 
     llm_bound = get_llm().bind_tools(CREATE_TOOLS)
-    
+
     messages = list(state["messages"])
     if messages and isinstance(messages[0], SystemMessage):
         messages[0] = SystemMessage(content=CREATE_PROMPT)
@@ -142,7 +141,7 @@ async def _create_node(state: AgentState) -> dict:
         messages.insert(0, SystemMessage(content=CREATE_PROMPT))
 
     response = await llm_bound.ainvoke(messages)
-    
+
     return {
         "messages": [response],
         "current_phase": "create",
@@ -154,7 +153,7 @@ async def _test_verify_node(state: AgentState) -> dict:
     from src.app.llm.ollama import get_llm
 
     llm_bound = get_llm().bind_tools(TEST_VERIFY_TOOLS)
-    
+
     messages = list(state["messages"])
     if messages and isinstance(messages[0], SystemMessage):
         messages[0] = SystemMessage(content=TEST_VERIFY_PROMPT)
@@ -162,7 +161,7 @@ async def _test_verify_node(state: AgentState) -> dict:
         messages.insert(0, SystemMessage(content=TEST_VERIFY_PROMPT))
 
     response = await llm_bound.ainvoke(messages)
-    
+
     return {
         "messages": [response],
         "current_phase": "test_verify",
@@ -173,7 +172,7 @@ async def _test_verify_node(state: AgentState) -> dict:
 
 def _should_continue_gather_context(state: AgentState) -> str:
     """After gather_context, check if LLM made tool calls.
-    
+
     If no tool calls, assume context gathering failed; otherwise proceed to diagnose.
     """
     last = state["messages"][-1]
@@ -184,7 +183,7 @@ def _should_continue_gather_context(state: AgentState) -> str:
 
 def _should_gather_context_to_diagnose(state: AgentState) -> str:
     """After gather_context tools, return to gather_context node or proceed to diagnose.
-    
+
     For now, always proceed to diagnose (no looping within phase).
     """
     return "diagnose"
@@ -200,7 +199,7 @@ def _should_continue_diagnose(state: AgentState) -> str:
 
 def _should_diagnose_to_group(state: AgentState) -> str:
     """After diagnose tools, return to diagnose node or proceed to group_patterns.
-    
+
     For now, always proceed to group_patterns (no looping within phase).
     """
     return "group_patterns"
@@ -216,7 +215,7 @@ def _should_continue_verify(state: AgentState) -> str:
 
 def _should_verify_to_create(state: AgentState) -> str:
     """After verify tools, return to verify node or proceed to create.
-    
+
     For now, always proceed to create (no looping within phase).
     """
     return "create"
@@ -232,7 +231,7 @@ def _should_continue_create(state: AgentState) -> str:
 
 def _should_create_to_test(state: AgentState) -> str:
     """After create tools, return to create node or proceed to test_verify.
-    
+
     For now, always proceed to test_verify (no looping within phase).
     """
     return "test_verify"
@@ -248,7 +247,7 @@ def _should_continue_test_verify(state: AgentState) -> str:
 
 def _should_test_verify_to_end(state: AgentState) -> str:
     """After test_verify tools, return to test_verify node or end.
-    
+
     For now, always end (no looping within phase).
     """
     return END

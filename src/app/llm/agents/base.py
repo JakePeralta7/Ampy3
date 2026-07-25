@@ -7,13 +7,13 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import Enum, StrEnum
 from typing import Any, Optional
 
 from langchain_core.messages import BaseMessage, SystemMessage
 
 
-class AgentPhase(str, Enum):
+class AgentPhase(StrEnum):
     """Workflow phases for agent execution tracking."""
     ROUTING = "routing"
     RESEARCH = "research"
@@ -26,7 +26,7 @@ class AgentPhase(str, Enum):
 @dataclass
 class AgentContext:
     """Structured context passed between agents in a workflow.
-    
+
     Enables clean data threading from research → match → create phases
     without implicit state management.
     """
@@ -64,7 +64,7 @@ class AgentContext:
 
 class BaseAgent(ABC):
     """Base class for all LangGraph agents.
-    
+
     Defines the contract that all agents must fulfill:
     - name: Unique agent identifier
     - system_prompt: Phase-specific prompt
@@ -85,11 +85,11 @@ class BaseAgent(ABC):
     @abstractmethod
     async def run(self, state: dict, llm: Any) -> dict:
         """Execute agent logic with given LLM and state.
-        
+
         Args:
             state: AgentState dict containing messages, context, phase, etc.
             llm: ChatModel instance to use for generation
-        
+
         Returns:
             dict with updated fields (messages, context, phase, etc.)
         """
@@ -102,11 +102,11 @@ class BaseAgent(ABC):
     ) -> list[BaseMessage]:
         """Replace existing system message with phase-specific one,
         or prepend if none exists.
-        
+
         Args:
             messages: List of messages to modify
             system_prompt: System prompt content to inject/replace
-        
+
         Returns:
             Updated messages list
         """
@@ -126,10 +126,10 @@ class BaseAgent(ABC):
 
 def get_context_summary(context: AgentContext) -> str:
     """Format AgentContext for prompt injection into agent messages.
-    
+
     Args:
         context: AgentContext to summarize
-    
+
     Returns:
         Formatted string describing context state
     """
@@ -158,11 +158,11 @@ def get_context_summary(context: AgentContext) -> str:
 
 def increment_iteration_count(state: dict, max_iterations: int = 5) -> None:
     """Increment iteration counter and raise if exceeded.
-    
+
     Args:
         state: AgentState dict
         max_iterations: Maximum allowed iterations
-    
+
     Raises:
         RuntimeError: If iteration count exceeds max
     """
@@ -178,7 +178,7 @@ def increment_iteration_count(state: dict, max_iterations: int = 5) -> None:
 
 def push_workflow_stack(state: dict, phase: str) -> None:
     """Record phase transition for debugging.
-    
+
     Args:
         state: AgentState dict
         phase: AgentPhase or phase name
@@ -190,7 +190,7 @@ def push_workflow_stack(state: dict, phase: str) -> None:
 
 def clear_iteration_count(state: dict) -> None:
     """Reset iteration count for a new phase.
-    
+
     Args:
         state: AgentState dict
     """

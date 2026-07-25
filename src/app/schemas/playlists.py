@@ -6,9 +6,19 @@ from pydantic import BaseModel, Field
 class PlaylistSyncRequest(BaseModel):
     """Request body for triggering a playlist sync."""
     playlist_url: str = Field(..., description="URL of the source playlist")
-    source: str = Field(default="youtube_music", description="Source platform")
-    replace_existing: bool = Field(default=False, description="Delete existing playlist and recreate")
-    schedule_id: int | None = Field(default=None, description="Link result to an existing scheduled sync record")
+    source: str = Field(
+        default="youtube_music", description="Source platform"
+    )
+    replace_existing: bool = Field(
+        default=False, description="Delete existing playlist and recreate"
+    )
+    target_playlist_name: str | None = Field(
+        default=None, description="Name for the target playlist"
+    )
+    schedule_id: int | None = Field(
+        default=None,
+        description="Link result to an existing scheduled sync record",
+    )
 
 
 class PlaylistSyncResponse(BaseModel):

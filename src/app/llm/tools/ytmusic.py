@@ -44,7 +44,11 @@ async def search_youtube_music(query: str) -> dict:
             playlist_id = entry.get("playlist_id")
             if not playlist_id:
                 continue
-            if not re.match(r"^(PL|OLAK5uy_|RD|RDCLAK5uy_|FL|LM|WL|UU|LL)[A-Za-z0-9_-]+$", playlist_id):
+            valid_ids = (
+                r"^(PL|OLAK5uy_|RD|RDCLAK5uy_|FL|LM|WL|UU|LL)"
+                r"[A-Za-z0-9_-]+$"
+            )
+            if not re.match(valid_ids, playlist_id):
                 continue
             playlists.append({
                 "title": entry.get("title", "Unknown"),

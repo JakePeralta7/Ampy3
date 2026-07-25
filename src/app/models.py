@@ -238,8 +238,13 @@ class ChatSession(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False, index=True
+        DateTime(timezone=True), server_default=func.now(),
+        onupdate=func.now(), nullable=False, index=True
     )
 
     def __repr__(self) -> str:
-        return f"<ChatSession(id={self.id}, plex_user_id={self.plex_user_id}, preview={self.preview})>"
+        return (
+            f"<ChatSession(id={self.id}, "
+            f"plex_user_id={self.plex_user_id}, "
+            f"preview={self.preview})>"
+        )

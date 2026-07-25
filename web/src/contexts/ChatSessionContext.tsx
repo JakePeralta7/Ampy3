@@ -45,36 +45,39 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
     loadSessions();
   }, []);
 
-  const addOrUpdateSession = useCallback(async (id: string, preview: string) => {
-    try {
-      const existing = sessions.find((s) => s.id === id);
-      if (!existing) {
-        // Create new session
-        const response = await chatClient.createSession({ id, preview });
-        const entry: ChatSessionEntry = {
-          id: response.id,
-          preview: response.preview,
-          created_at: new Date(response.created_at).getTime(),
-          updatedAt: new Date(response.updated_at).getTime(),
-        };
-        setSessions((prev) => [entry, ...prev].slice(0, 20));
-      } else {
-        // Update existing session (update preview)
-        const now = Date.now();
-        const updated: ChatSessionEntry = {
-          ...existing,
-          preview,
-          updatedAt: now,
-        };
-        setSessions((prev) => {
-          const filtered = prev.filter((s) => s.id !== id);
-          return [updated, ...filtered].sort((a, b) => b.updatedAt - a.updatedAt);
-        });
+  const addOrUpdateSession = useCallback(
+    async (id: string, preview: string) => {
+      try {
+        const existing = sessions.find((s) => s.id === id);
+        if (!existing) {
+          // Create new session
+          const response = await chatClient.createSession({ id, preview });
+          const entry: ChatSessionEntry = {
+            id: response.id,
+            preview: response.preview,
+            created_at: new Date(response.created_at).getTime(),
+            updatedAt: new Date(response.updated_at).getTime(),
+          };
+          setSessions((prev) => [entry, ...prev].slice(0, 20));
+        } else {
+          // Update existing session (update preview)
+          const now = Date.now();
+          const updated: ChatSessionEntry = {
+            ...existing,
+            preview,
+            updatedAt: now,
+          };
+          setSessions((prev) => {
+            const filtered = prev.filter((s) => s.id !== id);
+            return [updated, ...filtered].sort((a, b) => b.updatedAt - a.updatedAt);
+          });
+        }
+      } catch (error) {
+        console.error("Failed to add/update session:", error);
       }
-    } catch (error) {
-      console.error("Failed to add/update session:", error);
-    }
-  }, [sessions]);
+    },
+    [sessions],
+  );
 
   const removeSession = useCallback(async (id: string) => {
     try {

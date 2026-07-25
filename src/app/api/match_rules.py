@@ -45,7 +45,7 @@ async def list_rules(
             return [_model_to_out(r) for r in rules]
     except Exception as e:
         logger.error(f"Error listing rules: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to list rules: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to list rules: {str(e)}") from e
 
 
 @router.get("/{rule_id}", response_model=MatchRuleOut)
@@ -68,7 +68,7 @@ async def get_rule(
         raise
     except Exception as e:
         logger.error(f"Error getting rule {rule_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to get rule: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get rule: {str(e)}") from e
 
 
 @router.post("", response_model=MatchRuleOut, status_code=201)
@@ -83,7 +83,7 @@ async def create_rule(
     try:
         validate_rule_yaml(body.yaml_content)
     except ValidationError as exc:
-        raise HTTPException(status_code=422, detail={"yaml_errors": exc.errors})
+        raise HTTPException(status_code=422, detail={"yaml_errors": exc.errors}) from exc
 
     try:
         async with AsyncSessionLocal() as session:
@@ -113,7 +113,7 @@ async def create_rule(
             return _model_to_out(rule)
     except Exception as e:
         logger.error(f"Error creating rule: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to create rule: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to create rule: {str(e)}") from e
 
 
 @router.post("/{rule_id}/clone", response_model=MatchRuleOut, status_code=201)
@@ -166,7 +166,7 @@ async def clone_rule(
         raise
     except Exception as e:
         logger.error(f"Error cloning rule {rule_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to clone rule: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to clone rule: {str(e)}") from e
 
 
 @router.put("/reorder", response_model=list[MatchRuleOut])
@@ -216,7 +216,7 @@ async def reorder_rules(
             return [_model_to_out(r) for r in rules]
     except Exception as e:
         logger.error(f"Error reordering rules: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to reorder rules: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to reorder rules: {str(e)}") from e
 
 
 @router.post("/test", response_model=MatchRuleTestResponse)
@@ -266,7 +266,7 @@ async def test_rules(
         )
     except Exception as e:
         logger.error(f"Error testing rules: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to test rules: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to test rules: {str(e)}") from e
 
 
 @router.put("/{rule_id}", response_model=MatchRuleOut)
@@ -310,7 +310,10 @@ async def update_rule(
                 try:
                     validate_rule_yaml(body.yaml_content)
                 except ValidationError as exc:
-                    raise HTTPException(status_code=422, detail={"yaml_errors": exc.errors})
+                    raise HTTPException(
+                        status_code=422,
+                        detail={"yaml_errors": exc.errors},
+                    ) from exc
 
             old_name = rule.name
             old_active = rule.is_active
@@ -351,7 +354,7 @@ async def update_rule(
         raise
     except Exception as e:
         logger.error(f"Error updating rule {rule_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to update rule: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to update rule: {str(e)}") from e
 
 
 @router.delete("/{rule_id}", response_model=MatchRuleDeleteResponse)
@@ -394,4 +397,4 @@ async def delete_rule(
         raise
     except Exception as e:
         logger.error(f"Error deleting rule {rule_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to delete rule: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete rule: {str(e)}") from e

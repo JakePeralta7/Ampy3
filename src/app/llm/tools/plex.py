@@ -49,9 +49,11 @@ async def search_plex_library(query: str = "", artist: str = "", genre: str = ""
     artist_name, album_name, and duration_ms.
 
     Args:
-        query: Track title to search for (e.g. "Bohemian Rhapsody"). Leave empty to search by artist/genre only.
+        query: Track title to search for (e.g. "Bohemian Rhapsody").
+            Leave empty to search by artist/genre only.
         artist: Optional artist name to narrow results (e.g. "Queen")
-        genre: Optional genre to filter by (e.g. "Electronic", "Jazz", "Rock"). Searches Plex genre tags.
+        genre: Optional genre to filter by (e.g. "Electronic",
+            "Jazz", "Rock"). Searches Plex genre tags.
     """
     plex_client = await get_plex_client()
     return await plex_client.search_library(title=query, artist=artist, genre=genre)
@@ -66,9 +68,13 @@ async def create_plex_playlist(title: str, track_descriptions: list[dict]) -> st
 
     Args:
         title: The name for the new playlist
-        track_descriptions: List of dicts with 'title' and 'artist', and optionally 'plex_id'.
-            Use plex_id when you already know the exact track from a prior Plex search.
-            Example: [{"title": "Bohemian Rhapsody", "artist": "Queen"}, {"title": "Bye Bye Bye", "artist": "*NSYNC", "plex_id": "97300"}]
+        track_descriptions: List of dicts with 'title' and 'artist',
+            and optionally 'plex_id'.
+            Use plex_id when you already know the exact track
+            from a prior Plex search.
+            Example: [{"title": "Bohemian Rhapsody", "artist": "Queen"},
+            {"title": "Bye Bye Bye", "artist": "*NSYNC",
+            "plex_id": "97300"}]
     """
     import json
 
@@ -102,7 +108,10 @@ async def create_plex_playlist(title: str, track_descriptions: list[dict]) -> st
                 if fuzzy_match:
                     matched_items.append(fuzzy_match)
                 else:
-                    unmatched_tracks.append(f"{desc.get('artist', 'Unknown')} - {desc.get('title', 'Unknown')}")
+                    unmatched_tracks.append(
+                        f"{desc.get('artist', 'Unknown')}"
+                        f" - {desc.get('title', 'Unknown')}"
+                    )
 
     if not matched_items:
         return "No matching tracks found in your Plex library for any of the given descriptions."
@@ -112,12 +121,21 @@ async def create_plex_playlist(title: str, track_descriptions: list[dict]) -> st
         success = await plex_client.update_plist_in_place(existing["rating_key"], matched_items)
         if not success:
             return f"Failed to update existing playlist '{title}'."
-        result_msg = f"Updated existing playlist '{title}' with {len(matched_items)}/{len(track_descriptions)} tracks matched."
+        result_msg = (
+            f"Updated existing playlist '{title}' with "
+            f"{len(matched_items)}/{len(track_descriptions)}"
+            f" tracks matched."
+        )
     else:
         playlist_id = await plex_client.create_plist_from_results(title, matched_items)
         if not playlist_id:
             return "Failed to create playlist."
-        result_msg = f"Created playlist '{title}' with {len(matched_items)}/{len(track_descriptions)} tracks matched. Playlist ID: {playlist_id}."
+        result_msg = (
+            f"Created playlist '{title}' with "
+            f"{len(matched_items)}/{len(track_descriptions)}"
+            f" tracks matched."
+            f" Playlist ID: {playlist_id}."
+        )
 
     if unmatched_tracks:
         result_msg += "\n\nTracks not found in your Plex library:\n"

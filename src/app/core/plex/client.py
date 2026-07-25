@@ -270,27 +270,40 @@ class PlexClient:
                 root = ET.fromstring(response.text)
                 tracks = root.findall(".//Track")
 
-                logger.debug("Playlist %s: Retrieved %d tracks at offset %d", playlist_id, len(tracks), offset)
+                logger.debug(
+                    "Playlist %s: Retrieved %d tracks at offset %d",
+                    playlist_id, len(tracks), offset,
+                )
 
                 if not tracks:
                     # No more items returned, exit the loop
-                    logger.debug(f"Playlist {playlist_id}: No more tracks at offset {offset}, stopping pagination")
+                    logger.debug(
+                        "Playlist %s: No more tracks at offset %s,"
+                        " stopping pagination",
+                        playlist_id, offset,
+                    )
                     break
 
                 for track in tracks:
                     # Get artist name from grandparentTitle attribute or fallback to empty
                     artist_name = track.get("grandparentTitle", "")
+                    raw_dur = track.get("duration", 0)
+                    dur = int(raw_dur) // 1000 if track.get("duration") else 0
                     items.append({
                         "plex_id": track.get("key"),
                         "title": track.get("title"),
                         "artist_name": artist_name,
                         "album_name": track.get("parentTitle"),
-                        "duration": int(track.get("duration", 0)) // 1000 if track.get("duration") else 0,
+                        "duration": dur,
                     })
 
                 # If we got fewer items than the limit, we've reached the end
                 if len(tracks) < limit:
-                    logger.debug(f"Playlist {playlist_id}: Got {len(tracks)} tracks (less than limit {limit}), stopping pagination")
+                    logger.debug(
+                        "Playlist %s: Got %d tracks (less than limit %s),"
+                        " stopping pagination",
+                        playlist_id, len(tracks), limit,
+                    )
                     break
 
                 offset += limit
@@ -369,7 +382,10 @@ class PlexClient:
         tracks = root.findall(".//Track")
         return self._parse_tracks(tracks) if tracks else []
 
-    async def search_library(self, title: str = "", artist: str = "", genre: str = "", album: str = "") -> list[dict]:
+    async def search_library(
+        self, title: str = "", artist: str = "",
+        genre: str = "", album: str = "",
+    ) -> list[dict]:
         """Searches the Plex music library for tracks matching the criteria.
 
         Strategy: Always search by artist first to get exact artist Directory entry.
@@ -425,25 +441,41 @@ class PlexClient:
                     # Album-scoped match first
                     if album:
                         norm_album = _normalize_album(album)
-                        album_tracks = [t for t in result_tracks if _normalize_album(t.get("album_name", "")) == norm_album]
+                        album_tracks = [
+                            t for t in result_tracks
+                            if _normalize_album(
+                                t.get("album_name", "")
+                            ) == norm_album
+                        ]
                         logger.debug(f"Found {len(album_tracks)} tracks in album '{album}'")
                         if album_tracks:
                             match = _best_match(title, album_tracks)
                             if match:
-                                logger.debug(f"Album match: '{title}' → '{match.get('title')}' in '{album}'")
+                                logger.debug(
+                                    "Album match: '%s' -> '%s' in '%s'",
+                                    title, match.get("title"), album,
+                                )
                                 return [match]
 
                     # All-artist-tracks match
                     match = _best_match(title, result_tracks)
                     if match:
-                        logger.debug(f"Matched '{title}' → '{match.get('title')}' by {match.get('artist_name', '')}")
+                        logger.debug(
+                            "Matched '%s' -> '%s' by %s",
+                            title, match.get("title"),
+                            match.get("artist_name", ""),
+                        )
                         return [match]
 
                     logger.debug(f"No match found for '{title}' by '{artist}'")
                     return []
 
                 # No artist directory found — fall back to title-only search
-                logger.debug(f"Artist directory not found: '{artist}' - falling back to title-only search")
+                logger.debug(
+                    "Artist directory not found: '%s'"
+                    " - falling back to title-only search",
+                    artist,
+                )
                 if title:
                     results = await self.search_title_only(title)
                     if results:
@@ -455,7 +487,11 @@ class PlexClient:
                         ]
                         if filtered:
                             return filtered
-                        logger.debug(f"No results matching artist '{artist}' in title-only fallback")
+                        logger.debug(
+                            "No results matching artist '%s'"
+                            " in title-only fallback",
+                            artist,
+                        )
                         return []
                 return []
 
@@ -503,10 +539,10 @@ class PlexClient:
 
     async def get_library_playlist(self, source_id: str) -> dict | None:
         """Retrieves a playlist by source_id stored in custom metadata.
-        
+
         Args:
             source_id: The source platform ID (e.g., YouTube playlist ID)
-            
+
         Returns:
             Playlist dict with rating_key if found, None otherwise
         """
@@ -536,18 +572,22 @@ class PlexClient:
             logger.error(f"XML parse error in get_library_playlist: {e}")
             return None
 
-    async def create_plist_from_results(self, title: str, items: list[dict], custom_metadata: dict | None = None) -> str | None:
+    async def create_plist_from_results(
+        self, title: str, items: list[dict],
+        custom_metadata: dict | None = None,
+    ) -> str | None:
         """Creates a new Plex playlist and adds matched tracks to it.
-        
+
         Creates the playlist with all items in a single request by passing
         multiple uri parameters. Plex API requires at least one uri, and
         rejects Content-Type: application/json.
-        
+
         Args:
             title: Playlist title
             items: List of dicts with plex_id and other track metadata
-            custom_metadata: Custom metadata to store in summary (e.g., {"source_playlist_id": "..."})
-            
+            custom_metadata: Custom metadata to store in summary
+                (e.g., {"source_playlist_id": "..."})
+
         Returns:
             Newly created playlist ID (rating_key) or None on failure
         """
@@ -634,7 +674,10 @@ class PlexClient:
 
             # Early exit if nothing changed
             if current_ids == desired_ids:
-                logger.debug(f"Playlist {playlist_id} already up to date ({len(current_ids)} items)")
+                logger.debug(
+                    "Playlist %s already up to date (%d items)",
+                    playlist_id, len(current_ids),
+                )
                 return True
 
             current_set = set(current_ids)
@@ -663,7 +706,10 @@ class PlexClient:
             else:
                 if to_add_ids:
                     await self.add_items_to_playlist(playlist_id, to_add_ids)
-                logger.info(f"Updated playlist {playlist_id}: removed {len(to_remove)}, added {len(to_add_ids)}")
+                logger.info(
+                    "Updated playlist %s: removed %d, added %d",
+                    playlist_id, len(to_remove), len(to_add_ids),
+                )
 
             return True
         except Exception as e:
@@ -671,7 +717,10 @@ class PlexClient:
             return False
 
     @staticmethod
-    def _playlist_needs_reorder(remaining_ids: list[str], to_add_ids: list[str], desired_ids: list[str]) -> bool:
+    def _playlist_needs_reorder(
+        remaining_ids: list[str], to_add_ids: list[str],
+        desired_ids: list[str],
+    ) -> bool:
         """Check if the playlist needs a full reorder to match desired order.
 
         A reorder is needed if:
@@ -711,10 +760,10 @@ class PlexClient:
 
     async def delete_plist(self, playlist_id: str) -> bool:
         """Deletes a playlist from Plex.
-        
+
         Args:
             playlist_id: The playlist rating_key to delete
-            
+
         Returns:
             True if deletion successful, False otherwise
         """

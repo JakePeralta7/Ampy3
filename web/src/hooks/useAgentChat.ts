@@ -29,7 +29,12 @@ export interface UseAgentChatOptions {
 interface HistoryMessage {
   role: string;
   content: string;
-  flow_items?: { name?: string; args?: Record<string, unknown>; result?: string; status?: string }[];
+  flow_items?: {
+    name?: string;
+    args?: Record<string, unknown>;
+    result?: string;
+    status?: string;
+  }[];
 }
 
 interface StreamEvent {
@@ -93,13 +98,16 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
   const abortControllerRef = useRef<AbortController | null>(null);
 
   // Save/restore streaming content to sessionStorage for recovery on page refresh
-  const saveStreamingContent = useCallback((content: string) => {
-    try {
-      sessionStorage.setItem(`streaming_${sessionId}`, content);
-    } catch {
-      // Ignore sessionStorage errors
-    }
-  }, [sessionId]);
+  const saveStreamingContent = useCallback(
+    (content: string) => {
+      try {
+        sessionStorage.setItem(`streaming_${sessionId}`, content);
+      } catch {
+        // Ignore sessionStorage errors
+      }
+    },
+    [sessionId],
+  );
 
   const getStreamingContent = useCallback((): string | null => {
     try {
@@ -142,7 +150,7 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
 
       // Check if there's streaming content that wasn't persisted yet
       const streamingContent = getStreamingContent();
-      if (streamingContent && streamingContent.trim()) {
+      if (streamingContent?.trim()) {
         const hasStreamingMessage = loadedMessages.some(
           (m) => m.role === "assistant" && m.content === streamingContent,
         );
@@ -154,7 +162,9 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
             content: streamingContent,
             timestamp: Date.now(),
           });
-          console.debug(`Recovered streaming content from sessionStorage: ${streamingContent.length} chars`);
+          console.debug(
+            `Recovered streaming content from sessionStorage: ${streamingContent.length} chars`,
+          );
         }
       }
 
@@ -173,40 +183,44 @@ export function useAgentChat(options: UseAgentChatOptions = {}) {
     }
   }, [sessionId, autoLoadHistory, loadHistory]);
 
-  const updateOrCreateAssistantMessage = useCallback((content: string = "") => {
-    if (!currentAssistantMessageIdRef.current) {
-      const messageId = generateId();
-      currentAssistantMessageIdRef.current = messageId;
-      const newMessage: Message = {
-        id: messageId,
-        role: "assistant",
-        content,
-        timestamp: Date.now(),
-        flowItems: flowItemsRef.current.length > 0 ? [...flowItemsRef.current] : undefined,
-      };
-      setMessages((prev) => [...prev, newMessage]);
-      // Save to sessionStorage for recovery
-      if (content) {
-        saveStreamingContent(content);
+  const updateOrCreateAssistantMessage = useCallback(
+    (content: string = "") => {
+      if (!currentAssistantMessageIdRef.current) {
+        const messageId = generateId();
+        currentAssistantMessageIdRef.current = messageId;
+        const newMessage: Message = {
+          id: messageId,
+          role: "assistant",
+          content,
+          timestamp: Date.now(),
+          flowItems: flowItemsRef.current.length > 0 ? [...flowItemsRef.current] : undefined,
+        };
+        setMessages((prev) => [...prev, newMessage]);
+        // Save to sessionStorage for recovery
+        if (content) {
+          saveStreamingContent(content);
+        }
+      } else {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === currentAssistantMessageIdRef.current
+              ? {
+                  ...msg,
+                  content: content || msg.content,
+                  flowItems:
+                    flowItemsRef.current.length > 0 ? [...flowItemsRef.current] : undefined,
+                }
+              : msg,
+          ),
+        );
+        // Update sessionStorage
+        if (content) {
+          saveStreamingContent(content);
+        }
       }
-    } else {
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === currentAssistantMessageIdRef.current
-            ? {
-                ...msg,
-                content: content || msg.content,
-                flowItems: flowItemsRef.current.length > 0 ? [...flowItemsRef.current] : undefined,
-              }
-            : msg,
-        ),
-      );
-      // Update sessionStorage
-      if (content) {
-        saveStreamingContent(content);
-      }
-    }
-  }, [saveStreamingContent]);
+    },
+    [saveStreamingContent],
+  );
 
   const sendMessage = useCallback(
     async (content: string) => {

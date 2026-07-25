@@ -8,7 +8,7 @@ from langgraph.graph.message import add_messages
 
 class AgentState(TypedDict):
     """Workflow state for the LangGraph investigator agent.
-    
+
     The state tracks both conversation history and structured phase-specific outputs.
     Each phase populates its own state fields as the workflow progresses through:
     gather_context → diagnose → group_patterns → verify → create → test_verify
@@ -22,12 +22,13 @@ class AgentState(TypedDict):
 
     # Phase tracking
     current_phase: NotRequired[str]
-    """Current workflow phase: gather_context|diagnose|group_patterns|verify|create|test_verify|end"""
+    """Current workflow phase: gather_context|diagnose|
+    group_patterns|verify|create|test_verify|end"""
 
     # Phase outputs - populated as workflow progresses
     context: NotRequired[dict[str, Any]]
     """Results from gather_context phase.
-    
+
     Structure:
     {
         "syncs": [...],              # List of scheduled syncs
@@ -39,7 +40,7 @@ class AgentState(TypedDict):
 
     diagnosed_tracks: NotRequired[list[dict[str, Any]]]
     """Results from diagnose phase.
-    
+
     Structure: List of:
     {
         "track_id": int,
@@ -53,7 +54,7 @@ class AgentState(TypedDict):
 
     grouped_patterns: NotRequired[dict[str, Any]]
     """Results from group_patterns phase.
-    
+
     Structure:
     {
         "missing_from_plex": [...],           # Tracks not in Plex
@@ -66,7 +67,7 @@ class AgentState(TypedDict):
 
     verified_fixes: NotRequired[dict[str, Any]]
     """Results from verify phase.
-    
+
     Structure:
     {
         "pattern_1": {
@@ -81,7 +82,7 @@ class AgentState(TypedDict):
 
     created_rules: NotRequired[dict[str, Any]]
     """Results from create phase.
-    
+
     Structure:
     {
         "rule_1": {
@@ -97,7 +98,7 @@ class AgentState(TypedDict):
 
     test_results: NotRequired[dict[str, Any]]
     """Results from test_verify phase.
-    
+
     Structure:
     {
         "rule_1": {
