@@ -1,5 +1,7 @@
 # Ampy3
 
+[![CI](https://github.com/JakePeralta7/Ampy3/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/JakePeralta7/Ampy3/actions/workflows/ci.yml)
+
 Syncs YouTube Music playlists to Plex using MusicBrainz IDs for metadata matching.
 
 ## Quick Start
