@@ -8,7 +8,7 @@ from typing import Any
 
 import httpx
 
-from src.app.core.matching import _best_match, _extract_primary_artist, _normalize_album
+from src.app.core.matching import _best_match, _extract_primary_artist, _normalize_album, normalize
 
 logger = logging.getLogger(__name__)
 
@@ -20,10 +20,7 @@ def _normalize_for_compare(text: str) -> str:
     sends straight quotes (U+0027).  This strips all quote characters so
     comparisons succeed regardless of the Unicode code point used.
     """
-    text = text.replace("\u2018", "'").replace("\u2019", "'")
-    text = text.replace("\u201c", '"').replace("\u201d", '"')
-    text = re.sub(r"['''`]", "", text)
-    return text.lower().strip()
+    return normalize(text, strip_quotes=True)
 
 
 def _normalize_search_query(query: str) -> str:
@@ -36,14 +33,7 @@ def _normalize_search_query(query: str) -> str:
     # Replace commas with spaces — Plex search API returns no results for
     # comma-separated multi-artist queries like "Post Malone, Swae Lee".
     query = query.replace(",", " ")
-    # Normalize Unicode quotes to straight equivalents.  Plex's search API
-    # cannot match straight quotes (U+0027) against curly quotes (U+2018/19)
-    # stored in its database.  Stripping all quotes avoids this mismatch.
-    query = query.replace("\u2018", "'").replace("\u2019", "'")
-    query = query.replace("\u201c", '"').replace("\u201d", '"')
-    query = re.sub(r"['''`]", " ", query)  # strip all quote chars
-    query = re.sub(r"\s{2,}", " ", query)  # collapse whitespace
-    return query.strip()
+    return normalize(query, strip_quotes=True, collapse_whitespace=True)
 
 
 class PlexClient:

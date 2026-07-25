@@ -101,45 +101,36 @@ export interface SyncDiffResponse {
   to_run_id: number;
 }
 
-class PlaylistsAPI {
-  async getPlaylistTracks(playlistId: string): Promise<PlaylistDetailsResponse> {
-    return apiRequest<PlaylistDetailsResponse>(`/v1/playlists/${playlistId}/tracks`, {
+export const playlistsAPI = {
+  getPlaylistTracks: (playlistId: string): Promise<PlaylistDetailsResponse> =>
+    apiRequest<PlaylistDetailsResponse>(`/v1/playlists/${playlistId}/tracks`, {
       method: "GET",
-    });
-  }
+    }),
 
-  async getSyncTracks(syncId: number): Promise<PlaylistDetailsResponse> {
-    return apiRequest<PlaylistDetailsResponse>(`/v1/playlists/by-sync/${syncId}/tracks`, {
+  getSyncTracks: (syncId: number): Promise<PlaylistDetailsResponse> =>
+    apiRequest<PlaylistDetailsResponse>(`/v1/playlists/by-sync/${syncId}/tracks`, {
       method: "GET",
-    });
-  }
+    }),
 
-  async rematchTrack(playlistId: string, input: RematchTrackInput): Promise<RematchTrackResponse> {
-    return apiPost<RematchTrackResponse>(`/v1/playlists/${playlistId}/rematch-track`, input);
-  }
+  rematchTrack: (playlistId: string, input: RematchTrackInput): Promise<RematchTrackResponse> =>
+    apiPost<RematchTrackResponse>(`/v1/playlists/${playlistId}/rematch-track`, input),
 
-  async rematchSyncTrack(syncId: number, input: RematchTrackInput): Promise<RematchTrackResponse> {
-    return apiPost<RematchTrackResponse>(`/v1/playlists/by-sync/${syncId}/rematch-track`, input);
-  }
+  rematchSyncTrack: (syncId: number, input: RematchTrackInput): Promise<RematchTrackResponse> =>
+    apiPost<RematchTrackResponse>(`/v1/playlists/by-sync/${syncId}/rematch-track`, input),
 
-  async getUnmatchedTracks(limit: number = 50): Promise<UnmatchedTrack[]> {
-    return apiRequest<UnmatchedTrack[]>(`/v1/playlists/unmatched-tracks?limit=${limit}`, {
+  getUnmatchedTracks: (limit: number = 50): Promise<UnmatchedTrack[]> =>
+    apiRequest<UnmatchedTrack[]>(`/v1/playlists/unmatched-tracks?limit=${limit}`, {
       method: "GET",
-    });
-  }
+    }),
 
-  async getSyncHistory(syncId: number): Promise<SyncRun[]> {
-    return apiRequest<SyncRun[]>(`/v1/playlists/by-sync/${syncId}/history`, {
+  getSyncHistory: (syncId: number): Promise<SyncRun[]> =>
+    apiRequest<SyncRun[]>(`/v1/playlists/by-sync/${syncId}/history`, {
       method: "GET",
-    });
-  }
+    }),
 
-  async getSyncDiff(syncId: number, fromRun: number, toRun: number): Promise<SyncDiffResponse> {
-    return apiRequest<SyncDiffResponse>(
+  getSyncDiff: (syncId: number, fromRun: number, toRun: number): Promise<SyncDiffResponse> =>
+    apiRequest<SyncDiffResponse>(
       `/v1/playlists/by-sync/${syncId}/diff?from_run=${fromRun}&to_run=${toRun}`,
       { method: "GET" },
-    );
-  }
-}
-
-export const playlistsAPI = new PlaylistsAPI();
+    ),
+};

@@ -1,3 +1,7 @@
+/**
+ * API client for audit log endpoints
+ */
+
 import { apiGet } from "../client";
 
 export interface AuditLogEntry {
@@ -17,17 +21,15 @@ export interface AuditLogResponse {
   offset: number;
 }
 
-class AuditLogsAPI {
-  async list(
+export const auditLogsAPI = {
+  list: (
     params: { limit?: number; offset?: number; event_type?: string } = {},
-  ): Promise<AuditLogResponse> {
+  ): Promise<AuditLogResponse> => {
     const query = new URLSearchParams();
     if (params.limit) query.set("limit", String(params.limit));
     if (params.offset) query.set("offset", String(params.offset));
     if (params.event_type) query.set("event_type", params.event_type);
     const qs = query.toString();
     return apiGet<AuditLogResponse>(`/v1/audit/logs${qs ? `?${qs}` : ""}`);
-  }
-}
-
-export const auditLogsAPI = new AuditLogsAPI();
+  },
+};

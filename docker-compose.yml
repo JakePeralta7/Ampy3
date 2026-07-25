@@ -42,7 +42,7 @@ services:
     build:
       context: .
       target: worker
-    command: sh -c "celery -A src.app.tasks worker --loglevel=${CELERY_LOG_LEVEL:-info} --concurrency=${CELERY_WORKER_CONCURRENCY:-1}"
+    command: sh -c "celery -A app.worker.app worker --loglevel=${CELERY_LOG_LEVEL:-info} --concurrency=${CELERY_WORKER_CONCURRENCY:-1}"
     depends_on:
       valkey:
         condition: service_healthy

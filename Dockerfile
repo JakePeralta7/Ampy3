@@ -62,4 +62,4 @@ CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 
 # --- Worker image (no frontend) ---
 FROM base AS worker
-CMD ["celery", "-A", "src.app.tasks", "worker"]
+CMD ["celery", "-A", "app.worker.app", "worker"]

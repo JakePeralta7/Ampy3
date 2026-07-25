@@ -69,29 +69,24 @@ export interface ChatSessionCreateResponse {
   updated_at: string;
 }
 
-export class ChatClient {
-  private baseUrl: string;
+const BASE_URL = "/api";
 
-  constructor(baseUrl: string = "/api") {
-    this.baseUrl = baseUrl;
-  }
-
+export const chatAPI = {
   /**
    * Invoke the agent synchronously (single turn, no streaming).
    */
-  async invoke(request: ChatRequest): Promise<ChatResponse> {
-    return apiRequest<ChatResponse>("/v1/chat/invoke", {
+  invoke: (request: ChatRequest): Promise<ChatResponse> =>
+    apiRequest<ChatResponse>("/v1/chat/invoke", {
       method: "POST",
       body: JSON.stringify(request),
-    });
-  }
+    }),
 
   /**
    * Stream agent events in real-time.
    * Yields JSON-parsed events as they are received.
    */
-  async *streamEvents(request: ChatRequest): AsyncGenerator<StreamEvent, void, unknown> {
-    const response = await fetch(`${this.baseUrl}/v1/chat/stream_events`, {
+  streamEvents: async function* (request: ChatRequest): AsyncGenerator<StreamEvent, void, unknown> {
+    const response = await fetch(`${BASE_URL}/v1/chat/stream_events`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(request),
@@ -117,7 +112,6 @@ export class ChatClient {
 
         buffer += decoder.decode(value, { stream: true });
 
-        // Process complete lines
         const lines = buffer.split("\n");
         buffer = lines.pop() || "";
 
@@ -125,9 +119,8 @@ export class ChatClient {
           if (line.trim()) {
             try {
               let jsonStr = line;
-              // Handle both "data: " prefix and raw JSON formats
               if (line.startsWith("data: ")) {
-                jsonStr = line.slice(6); // Remove "data: "
+                jsonStr = line.slice(6);
               }
               const event = JSON.parse(jsonStr);
               yield event;
@@ -138,7 +131,6 @@ export class ChatClient {
         }
       }
 
-      // Process remaining buffer
       if (buffer.trim()) {
         try {
           let jsonStr = buffer.trim();
@@ -154,54 +146,49 @@ export class ChatClient {
     } finally {
       reader.releaseLock();
     }
-  }
+  },
 
   /**
    * Get chat history for a session.
    */
-  async getHistory(sessionId: string, limit: number = 50): Promise<ChatHistoryResponse> {
-    return apiRequest<ChatHistoryResponse>(`/v1/chat/history/${sessionId}?limit=${limit}`, {
+  getHistory: (sessionId: string, limit: number = 50): Promise<ChatHistoryResponse> =>
+    apiRequest<ChatHistoryResponse>(`/v1/chat/history/${sessionId}?limit=${limit}`, {
       method: "GET",
-    });
-  }
+    }),
 
   /**
    * Clear chat history for a session.
    */
-  async clearHistory(sessionId: string): Promise<void> {
-    await apiRequest(`/v1/chat/history/${sessionId}`, {
+  clearHistory: (sessionId: string): Promise<void> =>
+    apiRequest(`/v1/chat/history/${sessionId}`, {
       method: "DELETE",
-    });
-  }
+    }),
 
   /**
    * List all chat sessions for the current user.
    */
-  async listSessions(): Promise<ChatSessionsListResponse> {
-    return apiRequest<ChatSessionsListResponse>("/v1/chat/sessions", {
+  listSessions: (): Promise<ChatSessionsListResponse> =>
+    apiRequest<ChatSessionsListResponse>("/v1/chat/sessions", {
       method: "GET",
-    });
-  }
+    }),
 
   /**
    * Create a new chat session.
    */
-  async createSession(request: ChatSessionCreateRequest): Promise<ChatSessionCreateResponse> {
-    return apiRequest<ChatSessionCreateResponse>("/v1/chat/sessions", {
+  createSession: (request: ChatSessionCreateRequest): Promise<ChatSessionCreateResponse> =>
+    apiRequest<ChatSessionCreateResponse>("/v1/chat/sessions", {
       method: "POST",
       body: JSON.stringify(request),
-    });
-  }
+    }),
 
   /**
    * Delete a chat session and its history.
    */
-  async deleteSession(sessionId: string): Promise<{ status: string; session_id: string }> {
-    return apiRequest(`/v1/chat/sessions/${sessionId}`, {
+  deleteSession: (sessionId: string): Promise<{ status: string; session_id: string }> =>
+    apiRequest(`/v1/chat/sessions/${sessionId}`, {
       method: "DELETE",
-    });
-  }
-}
+    }),
+};
 
-export const chatClient = new ChatClient();
-export default ChatClient;
+/** @deprecated Use chatAPI instead */
+export const chatClient = chatAPI;

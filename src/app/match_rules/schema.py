@@ -36,26 +36,15 @@ stored in YAML — the auto-layout algorithm generates them at render time.
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-# All registered node types.
-NodeType = Literal[
-    "track_source",
-    "constant",
-    "transform",
-    "search",
-    "compare",
-    "filter",
-    "pick_best",
-    "sort_by_score",
-    "similarity",
-    "threshold",
-    "logic_op",
-    "match_output",
-    "search_musicbrainz",
-]
+# Import node submodules so the registry is populated, then build the type.
+import src.app.core.nodes  # noqa: F401
+from src.app.core.nodes.registry import build_node_type_literal
+
+NodeType = build_node_type_literal()
 
 
 class NodeDef(BaseModel):

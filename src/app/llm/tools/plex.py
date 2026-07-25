@@ -4,7 +4,7 @@ from langchain_core.tools import tool
 
 from src.app.services import get_plex_client
 from src.app.services.audit import log_event_sync
-from src.app.tasks import sync_playlists_task
+from src.app.worker.tasks import sync_playlists_task
 
 
 @tool
@@ -78,7 +78,7 @@ async def create_plex_playlist(title: str, track_descriptions: list[dict]) -> st
     """
     import json
 
-    from src.app.core.plex.matching import _extract_primary_artist, _fuzzy_match
+    from src.app.core.matching import _best_match, _extract_primary_artist
 
     plex_client = await get_plex_client()
     matched_items = []
@@ -106,7 +106,7 @@ async def create_plex_playlist(title: str, track_descriptions: list[dict]) -> st
             else:
                 # Try fuzzy matching as fallback when no exact matches found
                 all_library = await plex_client.search_library(artist=artist)
-                fuzzy_match = _fuzzy_match(desc.get("title", ""), all_library, threshold=0.70)
+                fuzzy_match = _best_match(desc.get("title", ""), all_library, threshold=0.70)
                 if fuzzy_match:
                     matched_items.append(fuzzy_match)
                 else:
@@ -164,7 +164,7 @@ async def add_tracks_to_plex_playlist(playlist_id: str, track_descriptions: list
         track_descriptions: List of dicts with at minimum 'title', optionally 'artist'.
             Example: [{"title": "Bohemian Rhapsody", "artist": "Queen"}, ...]
     """
-    from src.app.core.plex.matching import _extract_primary_artist
+    from src.app.core.matching import _extract_primary_artist
 
     plex_client = await get_plex_client()
     matched_plex_ids = []
@@ -236,7 +236,7 @@ async def get_sync_status(task_id: str) -> dict:
     """
     from celery.result import AsyncResult
 
-    from src.app.tasks import celery_app as app
+    from src.app.worker.app import celery_app as app
 
     result = AsyncResult(task_id, app=app)
     return {

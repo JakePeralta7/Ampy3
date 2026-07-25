@@ -10,30 +10,56 @@ import re
 logger = logging.getLogger(__name__)
 
 
-def _normalize_title(title: str) -> str:
-    if not title:
+# ─── Unified Text Normalizer ─────────────────────────────────────
+
+
+def normalize(
+    text: str,
+    *,
+    strip_brackets: bool = False,
+    strip_quotes: bool = False,
+    collapse_whitespace: bool = False,
+) -> str:
+    """Unified text normalizer for comparison purposes.
+
+    Performs Unicode quote and dash normalization, lowercasing, and optional
+    bracket/quote stripping and whitespace collapsing.
+    """
+    if not text:
         return ""
-    title = title.replace("\u2018", "'").replace("\u2019", "'")
-    title = title.replace("\u201c", '"').replace("\u201d", '"')
-    title = title.replace("\u2010", "-").replace("\u2011", "-").replace("\u2012", "-")
-    title = title.replace("\u2013", "-").replace("\u2014", "-").replace("\u2212", "-")
-    title = title.replace("\u2026", "...")  # ellipsis → three dots
-    return title.lower().strip()
+    # Unicode normalization
+    text = text.replace("\u2018", "'").replace("\u2019", "'")
+    text = text.replace("\u201c", '"').replace("\u201d", '"')
+    text = text.replace("\u2010", "-").replace("\u2011", "-").replace("\u2012", "-")
+    text = text.replace("\u2013", "-").replace("\u2014", "-").replace("\u2212", "-")
+    text = text.replace("\u2026", "...")
+    if strip_brackets:
+        text = re.sub(r"[()\[\]]", "", text)
+    if strip_quotes:
+        text = re.sub(r"['''`]", "", text)
+    text = text.lower().strip()
+    if collapse_whitespace:
+        text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+# ─── Legacy Wrappers ─────────────────────────────────────────────
+
+
+def _normalize_title(title: str) -> str:
+    """Normalize a track title for comparison (full Unicode normalization)."""
+    return normalize(title)
+
+
+def _normalize_album(album: str) -> str:
+    """Normalize an album name for comparison."""
+    return normalize(album)
 
 
 def _extract_primary_artist(artist: str) -> str:
     if not artist:
         return ""
     return artist.strip()
-
-
-def _normalize_album(album: str) -> str:
-    if not album:
-        return ""
-    album = album.replace("\u2018", "'").replace("\u2019", "'")
-    album = album.replace("\u201c", '"').replace("\u201d", '"')
-    album = album.replace("\u2013", "-").replace("\u2014", "-")
-    return album.lower().strip()
 
 
 def _strip_token_punctuation(token: str) -> str:

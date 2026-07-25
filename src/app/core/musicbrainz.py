@@ -8,6 +8,8 @@ import urllib.parse
 
 import requests
 
+from src.app.core.matching import normalize
+
 logger = logging.getLogger(__name__)
 
 
@@ -293,10 +295,7 @@ class MusicBrainzResolver:
 
     @staticmethod
     def _normalize(text: str) -> str:
-        text = text.lower().strip()
-        text = re.sub(r"[()\[\]\-]", "", text)
-        text = re.sub(r"\s+", " ", text)
-        return text.strip()
+        return normalize(text, strip_brackets=True, collapse_whitespace=True)
 
     def _best_match(
         self, recordings: list[dict], title: str, artist: str | None, duration_ms: int | None

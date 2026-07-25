@@ -3,6 +3,7 @@
 import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from sqlalchemy import delete, insert, select
 
@@ -14,6 +15,7 @@ from src.app.models import (
     SyncRun,
     SyncRunTrack,
 )
+from src.app.services.audit import log_event_sync
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +45,58 @@ def _run_async(coro_func):
             return loop.run_until_complete(coro)
         finally:
             loop.close()
+
+
+def _execute_sync(
+    *,
+    resource_type: str,
+    resource_id: str | None,
+    summary_prefix: str,
+    coro_factory: Any,
+    retry_countdown: int = 60,
+) -> dict:
+    """Run an async sync task with audit logging and error handling.
+
+    Shared by both ad-hoc and scheduled sync tasks.
+
+    Args:
+        resource_type: Audit log resource type (``"playlist"`` or ``"schedule"``).
+        resource_id: Audit log resource ID (schedule ID or ``None``).
+        summary_prefix: Human-readable prefix for log summaries.
+        coro_factory: Zero-arg callable returning a new coroutine each invocation.
+        retry_countdown: Seconds before Celery retries on failure.
+
+    Returns:
+        ``{"status": "SUCCESS", "stats": stats}`` on success.
+
+    Raises:
+        Re-raises the original exception for the caller to handle retry.
+    """
+    try:
+        stats = _run_async(coro_factory)
+        logger.debug("%s completed: %s", summary_prefix, stats)
+        log_event_sync(
+            event_type="sync.completed",
+            resource_type=resource_type,
+            resource_id=resource_id,
+            summary=(
+                f"{summary_prefix} completed: "
+                f"{stats.get('matched', 0)} matched, "
+                f"{stats.get('failed', 0)} failed"
+            ),
+            details=stats,
+        )
+        return {"status": "SUCCESS", "stats": stats}
+    except Exception as exc:
+        logger.error("%s failed: %s", summary_prefix, exc, exc_info=True)
+        log_event_sync(
+            event_type="sync.failed",
+            resource_type=resource_type,
+            resource_id=resource_id,
+            summary=f"{summary_prefix} failed: {exc}",
+            details={"error": str(exc)},
+        )
+        raise
 
 
 def _mark_sync_failed(schedule_id: int, error_message: str):

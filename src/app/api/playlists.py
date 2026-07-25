@@ -3,6 +3,8 @@
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from src.app.auth.dependencies import get_current_user
 from src.app.core.models import TrackMetadata
@@ -27,11 +29,232 @@ from src.app.schemas.playlists import (
 )
 from src.app.services import get_plex_client, get_sync_target
 from src.app.services.audit import log_event
-from src.app.tasks import sync_playlists_task
+from src.app.worker.tasks import sync_playlists_task
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/playlists", tags=["playlists"])
+
+
+# ─── Shared Helpers ──────────────────────────────────────────────
+
+
+def _build_track_response(
+    sync_record: ScheduledPlaylistSync,
+    playlist_id: str,
+) -> PlaylistTracksResponse:
+    """Build a PlaylistTracksResponse from a sync record's tracks (DB-only path)."""
+    all_rows: list[PlaylistTrack] = list(sync_record.tracks)
+    matched_rows = [r for r in all_rows if r.match_item_id is not None]
+    unmatched_rows = [r for r in all_rows if r.match_item_id is None]
+    matched_count = len(matched_rows)
+    failed_count = len(unmatched_rows)
+
+    track_details: list[TrackDetail] = []
+    formatted_matched: list[dict] = []
+    for r in matched_rows:
+        formatted_matched.append(
+            {
+                "plex_id": r.match_item_id,
+                "title": r.match_title or r.source_title or "Unknown",
+                "artist_name": r.match_artist or r.source_artist or "Unknown",
+                "album_name": r.match_album or r.source_album or "Unknown",
+                "duration": (
+                    r.match_duration
+                    if r.match_duration is not None
+                    else (r.source_duration_ms // 1000 if r.source_duration_ms else 0)
+                ),
+                "status": "matched",
+                "match_rate": "✓ Matched",
+            }
+        )
+        track_details.append(
+            TrackDetail(
+                source=TrackSource(
+                    title=r.source_title,
+                    artist_name=r.source_artist,
+                    album_name=r.source_album,
+                    duration_ms=r.source_duration_ms,
+                    source_id=r.source_id,
+                ),
+                match=TrackMatch(
+                    plex_id=r.match_item_id,
+                    title=r.match_title,
+                    artist_name=r.match_artist,
+                    album_name=r.match_album,
+                    duration=r.match_duration,
+                ),
+            )
+        )
+
+    formatted_unmatched = [
+        {
+            "title": r.source_title or "Unknown",
+            "artist_name": r.source_artist or "Unknown",
+            "album_name": r.source_album or "Unknown",
+            "duration": (r.source_duration_ms // 1000) if r.source_duration_ms else 0,
+            "status": "unmatched",
+            "match_rate": "✗ Unmatched",
+        }
+        for r in unmatched_rows
+    ]
+
+    for r in unmatched_rows:
+        track_details.append(
+            TrackDetail(
+                source=TrackSource(
+                    title=r.source_title,
+                    artist_name=r.source_artist,
+                    album_name=r.source_album,
+                    duration_ms=r.source_duration_ms,
+                    source_id=r.source_id,
+                ),
+                match=None,
+            )
+        )
+
+    total_tracks = matched_count + failed_count
+    match_rate = f"{matched_count}/{total_tracks}" if total_tracks > 0 else "0/0"
+    match_percentage = int(matched_count / total_tracks * 100) if total_tracks > 0 else 0
+
+    return PlaylistTracksResponse(
+        playlist_id=playlist_id,
+        source=sync_record.source,
+        tracks=formatted_matched + formatted_unmatched,
+        matched_tracks=formatted_matched,
+        unmatched_tracks=formatted_unmatched,
+        track_details=track_details,
+        total_count=total_tracks,
+        matched_count=matched_count,
+        failed_count=failed_count,
+        total_source_tracks=total_tracks,
+        match_rate=match_rate,
+        match_percentage=match_percentage,
+    )
+
+
+async def _find_match_for_track(
+    target, body: RematchTrackInput
+) -> dict | None:
+    """Find a Plex match for a track using MatchEngine with fallback to direct search."""
+    track = TrackMetadata(
+        title=body.title,
+        artist_name=body.artist_name,
+        album_name=body.album_name or "",
+    )
+
+    match = None
+    try:
+        rules = await get_active_rules()
+        if rules:
+            engine = MatchEngine(target)
+            matches = await engine.run(track)
+            if matches:
+                match = matches[0]
+    except Exception:
+        logger.warning("MatchEngine failed during rematch, falling back to direct search")
+
+    if not match:
+        hits = await target.search_library(
+            title=body.title,
+            artist=body.artist_name,
+            album=body.album_name,
+        )
+        if hits:
+            match = hits[0]
+
+    return match
+
+
+async def _update_track_match_in_db(
+    session,
+    sync_id: int,
+    body: RematchTrackInput,
+    plex_id: str | None,
+    match: dict,
+) -> bool:
+    """Update an unmatched PlaylistTrack row with match data. Returns True if a row was updated."""
+    stmt = select(PlaylistTrack).where(
+        PlaylistTrack.sync_id == sync_id,
+        PlaylistTrack.match_item_id.is_(None),
+        PlaylistTrack.source_title == body.title,
+    )
+    if body.artist_name:
+        stmt = stmt.where(PlaylistTrack.source_artist == body.artist_name)
+    stmt = stmt.limit(1)
+    result = await session.execute(stmt)
+    if db_row := result.scalars().first():
+        db_row.match_item_id = plex_id
+        db_row.match_title = match.get("title")
+        db_row.match_artist = match.get("artist_name")
+        db_row.match_album = match.get("album_name")
+        match_duration = match.get("duration") or (
+            match.get("duration_ms", 0) // 1000 if match.get("duration_ms") else None
+        )
+        db_row.match_duration = match_duration
+        await session.commit()
+        return True
+    return False
+
+
+def _build_track_response_with_plex(
+    sync_record: ScheduledPlaylistSync,
+    playlist_id: str,
+    plex_tracks: list[dict],
+) -> PlaylistTracksResponse:
+    """Build a PlaylistTracksResponse using Plex track data enriched with DB match info."""
+    all_rows: list[PlaylistTrack] = list(sync_record.tracks)
+    matched_rows = [r for r in all_rows if r.match_item_id is not None]
+    matched_by_id: dict[str, PlaylistTrack] = {
+        r.match_item_id: r for r in matched_rows if r.match_item_id
+    }
+
+    track_details: list[TrackDetail] = []
+    formatted_matched: list[dict] = []
+    for t in plex_tracks:
+        formatted_matched.append({**t, "status": "matched", "match_rate": "✓ Matched"})
+        db_row = matched_by_id.get(t.get("plex_id"))
+        track_details.append(
+            TrackDetail(
+                source=TrackSource(
+                    title=db_row.source_title,
+                    artist_name=db_row.source_artist,
+                    album_name=db_row.source_album,
+                    duration_ms=db_row.source_duration_ms,
+                    source_id=db_row.source_id,
+                )
+                if db_row
+                else None,
+                match=TrackMatch(
+                    plex_id=t.get("plex_id"),
+                    title=t.get("title"),
+                    artist_name=t.get("artist_name"),
+                    album_name=t.get("album_name"),
+                    duration=t.get("duration"),
+                ),
+            )
+        )
+
+    total = len(plex_tracks)
+    matched_count = len(matched_rows)
+    failed_count = total - matched_count
+    match_rate = f"{matched_count}/{total}" if total > 0 else "0/0"
+    match_percentage = int(matched_count / total * 100) if total > 0 else 0
+
+    return PlaylistTracksResponse(
+        playlist_id=playlist_id,
+        source=sync_record.source,
+        tracks=formatted_matched,
+        matched_tracks=formatted_matched,
+        unmatched_tracks=[],
+        track_details=track_details,
+        total_count=total,
+        matched_count=matched_count,
+        failed_count=failed_count,
+        total_source_tracks=total,
+        match_rate=match_rate,
+        match_percentage=match_percentage,
+    )
 
 
 # ─── Sources ────────────────────────────────────────────────────
@@ -317,7 +540,7 @@ async def get_sync_status(
     _user: dict = Depends(get_current_user),  # noqa: B008
 ):
     """Poll the Celery backend for sync job status and result."""
-    from src.app.tasks import get_sync_status_task
+    from src.app.worker.tasks import get_sync_status_task
 
     return get_sync_status_task(task_id)
 
@@ -336,9 +559,6 @@ async def get_playlist_tracks(
         plex_tracks = await plex_client.get_items_in_playlist(playlist_id)
 
         async with AsyncSessionLocal() as session:
-            from sqlalchemy import select
-            from sqlalchemy.orm import selectinload
-
             stmt = (
                 select(ScheduledPlaylistSync)
                 .where(ScheduledPlaylistSync.target_playlist_id == playlist_id)
@@ -348,131 +568,41 @@ async def get_playlist_tracks(
             sync_record = result.scalars().first()
 
             if sync_record and len(sync_record.tracks) > 0:
-                all_rows: list[PlaylistTrack] = list(sync_record.tracks)
-                matched_rows = [r for r in all_rows if r.match_item_id is not None]
-                unmatched_rows = [r for r in all_rows if r.match_item_id is None]
-                matched_count = len(matched_rows)
-                failed_count = len(unmatched_rows)
-            else:
-                matched_rows = []
-                unmatched_rows = []
-                matched_count = 0
-                failed_count = len(plex_tracks)
-
-            matched_by_id: dict[str, PlaylistTrack] = {
-                r.match_item_id: r for r in matched_rows if r.match_item_id
-            }
-
-            track_details: list[TrackDetail] = []
-
-            if plex_tracks:
-                formatted_matched = [
-                    {**t, "status": "matched", "match_rate": "✓ Matched"} for t in plex_tracks
-                ]
-                for t in formatted_matched:
-                    db_row = matched_by_id.get(t.get("plex_id"))
-                    track_details.append(
-                        TrackDetail(
-                            source=TrackSource(
-                                title=db_row.source_title,
-                                artist_name=db_row.source_artist,
-                                album_name=db_row.source_album,
-                                duration_ms=db_row.source_duration_ms,
-                                source_id=db_row.source_id,
-                            )
-                            if db_row
-                            else None,
-                            match=TrackMatch(
-                                plex_id=t.get("plex_id"),
-                                title=t.get("title"),
-                                artist_name=t.get("artist_name"),
-                                album_name=t.get("album_name"),
-                                duration=t.get("duration"),
-                            ),
-                        )
+                if plex_tracks:
+                    return _build_track_response_with_plex(
+                        sync_record, playlist_id, plex_tracks
                     )
-            else:
-                formatted_matched = []
-                for r in matched_rows:
-                    formatted_matched.append(
-                        {
-                            "plex_id": r.match_item_id,
-                            "title": r.match_title or r.source_title or "Unknown",
-                            "artist_name": r.match_artist or r.source_artist or "Unknown",
-                            "album_name": r.match_album or r.source_album or "Unknown",
-                            "duration": (
-                                r.match_duration
-                                if r.match_duration is not None
-                                else (r.source_duration_ms // 1000 if r.source_duration_ms else 0)
-                            ),
-                            "status": "matched",
-                            "match_rate": "✓ Matched",
-                        }
-                    )
-                    track_details.append(
-                        TrackDetail(
-                            source=TrackSource(
-                                title=r.source_title,
-                                artist_name=r.source_artist,
-                                album_name=r.source_album,
-                                duration_ms=r.source_duration_ms,
-                                source_id=r.source_id,
-                            ),
-                            match=TrackMatch(
-                                plex_id=r.match_item_id,
-                                title=r.match_title,
-                                artist_name=r.match_artist,
-                                album_name=r.match_album,
-                                duration=r.match_duration,
-                            ),
-                        )
-                    )
+                return _build_track_response(sync_record, playlist_id)
 
-            formatted_unmatched = [
-                {
-                    "title": r.source_title or "Unknown",
-                    "artist_name": r.source_artist or "Unknown",
-                    "album_name": r.source_album or "Unknown",
-                    "duration": (r.source_duration_ms // 1000) if r.source_duration_ms else 0,
-                    "status": "unmatched",
-                    "match_rate": "✗ Unmatched",
-                }
-                for r in unmatched_rows
-            ]
-
-            for r in unmatched_rows:
-                track_details.append(
-                    TrackDetail(
-                        source=TrackSource(
-                            title=r.source_title,
-                            artist_name=r.source_artist,
-                            album_name=r.source_album,
-                            duration_ms=r.source_duration_ms,
-                            source_id=r.source_id,
-                        ),
-                        match=None,
-                    )
-                )
-
-            total_tracks = matched_count + failed_count
-            match_rate = f"{matched_count}/{total_tracks}" if total_tracks > 0 else "0/0"
-            match_percentage = int(matched_count / total_tracks * 100) if total_tracks > 0 else 0
-
+            # No sync record — fall back to plex-only display
             source_name = sync_record.source if sync_record else "unknown"
-
+            track_details = [
+                TrackDetail(
+                    source=None,
+                    match=TrackMatch(
+                        plex_id=t.get("plex_id"),
+                        title=t.get("title"),
+                        artist_name=t.get("artist_name"),
+                        album_name=t.get("album_name"),
+                        duration=t.get("duration"),
+                    ),
+                )
+                for t in plex_tracks
+            ]
+            total = len(plex_tracks)
             return PlaylistTracksResponse(
                 playlist_id=playlist_id,
                 source=source_name,
-                tracks=formatted_matched + formatted_unmatched,
-                matched_tracks=formatted_matched,
-                unmatched_tracks=formatted_unmatched,
+                tracks=[],
+                matched_tracks=[],
+                unmatched_tracks=[],
                 track_details=track_details,
-                total_count=total_tracks,
-                matched_count=matched_count,
-                failed_count=failed_count,
-                total_source_tracks=total_tracks,
-                match_rate=match_rate,
-                match_percentage=match_percentage,
+                total_count=total,
+                matched_count=0,
+                failed_count=total,
+                total_source_tracks=total,
+                match_rate="0/0",
+                match_percentage=0,
             )
     except HTTPException:
         raise
@@ -491,9 +621,6 @@ async def get_sync_tracks(
 ):
     """Get all tracks for a sync record by sync ID."""
     try:
-        from sqlalchemy import select
-        from sqlalchemy.orm import selectinload
-
         async with AsyncSessionLocal() as session:
             stmt = (
                 select(ScheduledPlaylistSync)
@@ -506,93 +633,9 @@ async def get_sync_tracks(
             if not sync_record:
                 raise HTTPException(status_code=404, detail=f"Sync {sync_id} not found")
 
-            all_rows: list[PlaylistTrack] = list(sync_record.tracks)
-            matched_rows = [r for r in all_rows if r.match_item_id is not None]
-            unmatched_rows = [r for r in all_rows if r.match_item_id is None]
-            matched_count = len(matched_rows)
-            failed_count = len(unmatched_rows)
-
-            track_details: list[TrackDetail] = []
-
-            formatted_matched = []
-            for r in matched_rows:
-                formatted_matched.append(
-                    {
-                        "plex_id": r.match_item_id,
-                        "title": r.match_title or r.source_title or "Unknown",
-                        "artist_name": r.match_artist or r.source_artist or "Unknown",
-                        "album_name": r.match_album or r.source_album or "Unknown",
-                        "duration": (
-                            r.match_duration
-                            if r.match_duration is not None
-                            else (r.source_duration_ms // 1000 if r.source_duration_ms else 0)
-                        ),
-                        "status": "matched",
-                        "match_rate": "✓ Matched",
-                    }
-                )
-                track_details.append(
-                    TrackDetail(
-                        source=TrackSource(
-                            title=r.source_title,
-                            artist_name=r.source_artist,
-                            album_name=r.source_album,
-                            duration_ms=r.source_duration_ms,
-                            source_id=r.source_id,
-                        ),
-                        match=TrackMatch(
-                            plex_id=r.match_item_id,
-                            title=r.match_title,
-                            artist_name=r.match_artist,
-                            album_name=r.match_album,
-                            duration=r.match_duration,
-                        ),
-                    )
-                )
-
-            formatted_unmatched = [
-                {
-                    "title": r.source_title or "Unknown",
-                    "artist_name": r.source_artist or "Unknown",
-                    "album_name": r.source_album or "Unknown",
-                    "duration": (r.source_duration_ms // 1000) if r.source_duration_ms else 0,
-                    "status": "unmatched",
-                    "match_rate": "✗ Unmatched",
-                }
-                for r in unmatched_rows
-            ]
-
-            for r in unmatched_rows:
-                track_details.append(
-                    TrackDetail(
-                        source=TrackSource(
-                            title=r.source_title,
-                            artist_name=r.source_artist,
-                            album_name=r.source_album,
-                            duration_ms=r.source_duration_ms,
-                            source_id=r.source_id,
-                        ),
-                        match=None,
-                    )
-                )
-
-            total_tracks = matched_count + failed_count
-            match_rate = f"{matched_count}/{total_tracks}" if total_tracks > 0 else "0/0"
-            match_percentage = int(matched_count / total_tracks * 100) if total_tracks > 0 else 0
-
-            return PlaylistTracksResponse(
+            return _build_track_response(
+                sync_record,
                 playlist_id=sync_record.target_playlist_id or str(sync_id),
-                source=sync_record.source,
-                tracks=formatted_matched + formatted_unmatched,
-                matched_tracks=formatted_matched,
-                unmatched_tracks=formatted_unmatched,
-                track_details=track_details,
-                total_count=total_tracks,
-                matched_count=matched_count,
-                failed_count=failed_count,
-                total_source_tracks=total_tracks,
-                match_rate=match_rate,
-                match_percentage=match_percentage,
             )
     except HTTPException:
         raise
@@ -615,9 +658,6 @@ async def rematch_sync_track(
         target = await get_sync_target()
 
         async with AsyncSessionLocal() as session:
-            from sqlalchemy import select
-            from sqlalchemy.orm import selectinload
-
             stmt = (
                 select(ScheduledPlaylistSync)
                 .where(ScheduledPlaylistSync.id == sync_id)
@@ -629,63 +669,15 @@ async def rematch_sync_track(
             if not sync_record:
                 raise HTTPException(status_code=404, detail=f"Sync {sync_id} not found")
 
-            track = TrackMetadata(
-                title=body.title,
-                artist_name=body.artist_name,
-                album_name=body.album_name or "",
-            )
-
-            match = None
-            try:
-                rules = await get_active_rules()
-                if rules:
-                    engine = MatchEngine(target)
-                    matches = await engine.run(track)
-                    if matches:
-                        match = matches[0]
-            except Exception:
-                logger.warning("MatchEngine failed during rematch, falling back to direct search")
-
+            match = await _find_match_for_track(target, body)
             if not match:
-                hits = await target.search_library(
-                    title=body.title,
-                    artist=body.artist_name,
-                    album=body.album_name,
-                )
-                if hits:
-                    match = hits[0]
-
-            if not match:
-                msg = f"No match found for '{body.title}'"
-                return RematchTrackResponse(
-                    matched=False,
-                    message=msg,
-                )
+                return RematchTrackResponse(matched=False, message=f"No match found for '{body.title}'")
 
             plex_id = match.get("plex_id")
-
             if plex_id and sync_record.target_playlist_id:
                 await target.add_items_to_playlist(sync_record.target_playlist_id, [plex_id])
 
-            track_stmt = select(PlaylistTrack).where(
-                PlaylistTrack.sync_id == sync_id,
-                PlaylistTrack.match_item_id.is_(None),
-                PlaylistTrack.source_title == body.title,
-            )
-            if body.artist_name:
-                track_stmt = track_stmt.where(PlaylistTrack.source_artist == body.artist_name)
-            track_stmt = track_stmt.limit(1)
-            result = await session.execute(track_stmt)
-            if db_row := result.scalars().first():
-                db_row.match_item_id = plex_id
-                db_row.match_title = match.get("title")
-                db_row.match_artist = match.get("artist_name")
-                db_row.match_album = match.get("album_name")
-                match_duration = match.get("duration") or (
-                    match.get("duration_ms", 0) // 1000 if match.get("duration_ms") else None
-                )
-                db_row.match_duration = match_duration
-                await session.commit()
+            await _update_track_match_in_db(session, sync_id, body, plex_id, match)
 
             await log_event(
                 event_type="track.rematched",
@@ -725,32 +717,7 @@ async def rematch_track(
     try:
         target = await get_sync_target()
 
-        track = TrackMetadata(
-            title=body.title,
-            artist_name=body.artist_name,
-            album_name=body.album_name or "",
-        )
-
-        match = None
-        try:
-            rules = await get_active_rules()
-            if rules:
-                engine = MatchEngine(target)
-                matches = await engine.run(track)
-                if matches:
-                    match = matches[0]
-        except Exception:
-            logger.warning("MatchEngine failed during rematch, falling back to direct search")
-
-        if not match:
-            hits = await target.search_library(
-                title=body.title,
-                artist=body.artist_name,
-                album=body.album_name,
-            )
-            if hits:
-                match = hits[0]
-
+        match = await _find_match_for_track(target, body)
         if not match:
             return RematchTrackResponse(matched=False, message=f"No match found for '{body.title}'")
 
@@ -759,8 +726,6 @@ async def rematch_track(
             await target.add_items_to_playlist(playlist_id, [plex_id])
 
         async with AsyncSessionLocal() as session:
-            from sqlalchemy import select
-
             sync_stmt = select(ScheduledPlaylistSync).where(
                 ScheduledPlaylistSync.target_playlist_id == playlist_id
             )
@@ -768,25 +733,7 @@ async def rematch_track(
             sync_record = sync_result.scalars().first()
 
             if sync_record:
-                track_stmt = select(PlaylistTrack).where(
-                    PlaylistTrack.sync_id == sync_record.id,
-                    PlaylistTrack.match_item_id.is_(None),
-                    PlaylistTrack.source_title == body.title,
-                )
-                if body.artist_name:
-                    track_stmt = track_stmt.where(PlaylistTrack.source_artist == body.artist_name)
-                track_stmt = track_stmt.limit(1)
-                result = await session.execute(track_stmt)
-                if db_row := result.scalars().first():
-                    db_row.match_item_id = plex_id
-                    db_row.match_title = match.get("title")
-                    db_row.match_artist = match.get("artist_name")
-                    db_row.match_album = match.get("album_name")
-                    match_duration = match.get("duration") or (
-                        match.get("duration_ms", 0) // 1000 if match.get("duration_ms") else None
-                    )
-                    db_row.match_duration = match_duration
-                    await session.commit()
+                await _update_track_match_in_db(session, sync_record.id, body, plex_id, match)
 
         await log_event(
             event_type="track.rematched",

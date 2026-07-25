@@ -95,7 +95,7 @@ async def create_scheduled_sync(
     await db.commit()
     await db.refresh(db_sync)
 
-    from src.app.tasks import scheduled_sync_task
+    from src.app.worker.scheduler import scheduled_sync_task
 
     scheduled_sync_task.delay(db_sync.id)
 
@@ -236,7 +236,7 @@ async def bulk_sync_now(
     _user: dict = Depends(get_current_user),  # noqa: B008
 ):
     """Trigger an immediate sync for multiple scheduled syncs."""
-    from src.app.tasks import scheduled_sync_task
+    from src.app.worker.scheduler import scheduled_sync_task
 
     result = await db.execute(
         select(ScheduledPlaylistSync).where(ScheduledPlaylistSync.id.in_(body.ids)),
@@ -351,7 +351,7 @@ async def trigger_sync_now(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Scheduled sync with ID {sync_id} not found",
         )
-    from src.app.tasks import scheduled_sync_task
+    from src.app.worker.scheduler import scheduled_sync_task
 
     task = scheduled_sync_task.delay(sync.id)
 

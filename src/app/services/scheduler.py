@@ -12,7 +12,7 @@ from sqlalchemy import select
 from src.app.db import AsyncSessionLocal
 from src.app.models import ScheduledPlaylistSync
 from src.app.services.base import ServiceBase
-from src.app.tasks import sync_playlists_task
+from src.app.worker.tasks import sync_playlists_task
 
 logger = logging.getLogger(__name__)
 

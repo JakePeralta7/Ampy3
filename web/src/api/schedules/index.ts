@@ -2,7 +2,7 @@
  * API client for scheduled playlist sync endpoints
  */
 
-import { apiPost, apiPut, apiRequest } from "../client";
+import { apiDelete, apiGet, apiPost, apiPut } from "../client";
 
 export interface ScheduledSync {
   id: number;
@@ -40,61 +40,31 @@ export interface BulkResponse {
   task_ids?: string[];
 }
 
-class ScheduledSyncsAPI {
-  async listScheduledSyncs(activeOnly: boolean = false): Promise<ScheduledSync[]> {
-    const params = new URLSearchParams();
-    if (activeOnly) {
-      params.append("active_only", "true");
-    }
+export const scheduledSyncsAPI = {
+  listScheduledSyncs: (activeOnly: boolean = false): Promise<ScheduledSync[]> =>
+    apiGet<ScheduledSync[]>(`/v1/schedules/${activeOnly ? "?active_only=true" : ""}`),
 
-    const query = params.toString();
-    const endpoint = query ? `/v1/schedules/?${query}` : `/v1/schedules/`;
+  getScheduledSync: (syncId: number): Promise<ScheduledSync> =>
+    apiGet<ScheduledSync>(`/v1/schedules/${syncId}`),
 
-    return apiRequest<ScheduledSync[]>(endpoint, {
-      method: "GET",
-    });
-  }
+  createScheduledSync: (input: CreateScheduledSyncInput): Promise<ScheduledSync> =>
+    apiPost<ScheduledSync>("/v1/schedules/", input),
 
-  async getScheduledSync(syncId: number): Promise<ScheduledSync> {
-    return apiRequest<ScheduledSync>(`/v1/schedules/${syncId}`, {
-      method: "GET",
-    });
-  }
+  updateScheduledSync: (syncId: number, input: UpdateScheduledSyncInput): Promise<ScheduledSync> =>
+    apiPut<ScheduledSync>(`/v1/schedules/${syncId}`, input),
 
-  async createScheduledSync(input: CreateScheduledSyncInput): Promise<ScheduledSync> {
-    return apiPost<ScheduledSync>("/v1/schedules/", input);
-  }
+  deleteScheduledSync: (syncId: number): Promise<{ message: string }> =>
+    apiDelete<{ message: string }>(`/v1/schedules/${syncId}`),
 
-  async updateScheduledSync(
-    syncId: number,
-    input: UpdateScheduledSyncInput,
-  ): Promise<ScheduledSync> {
-    return apiPut<ScheduledSync>(`/v1/schedules/${syncId}`, input);
-  }
+  triggerSyncNow: (syncId: number): Promise<{ task_id: string; message: string }> =>
+    apiPost<{ task_id: string; message: string }>(`/v1/schedules/${syncId}/sync-now`, {}),
 
-  async deleteScheduledSync(syncId: number): Promise<{ message: string }> {
-    return apiRequest<{ message: string }>(`/v1/schedules/${syncId}`, {
-      method: "DELETE",
-    });
-  }
+  bulkSyncNow: (ids: number[]): Promise<BulkResponse> =>
+    apiPost<BulkResponse>("/v1/schedules/bulk/sync-now", { ids }),
 
-  async triggerSyncNow(syncId: number): Promise<{ task_id: string; message: string }> {
-    return apiRequest<{ task_id: string; message: string }>(`/v1/schedules/${syncId}/sync-now`, {
-      method: "POST",
-    });
-  }
+  bulkToggleActive: (ids: number[], isActive: boolean): Promise<BulkResponse> =>
+    apiPost<BulkResponse>("/v1/schedules/bulk/toggle-active", { ids, is_active: isActive }),
 
-  async bulkSyncNow(ids: number[]): Promise<BulkResponse> {
-    return apiPost<BulkResponse>("/v1/schedules/bulk/sync-now", { ids });
-  }
-
-  async bulkToggleActive(ids: number[], isActive: boolean): Promise<BulkResponse> {
-    return apiPost<BulkResponse>("/v1/schedules/bulk/toggle-active", { ids, is_active: isActive });
-  }
-
-  async bulkDelete(ids: number[]): Promise<BulkResponse> {
-    return apiPost<BulkResponse>("/v1/schedules/bulk/delete", { ids });
-  }
-}
-
-export const scheduledSyncsAPI = new ScheduledSyncsAPI();
+  bulkDelete: (ids: number[]): Promise<BulkResponse> =>
+    apiPost<BulkResponse>("/v1/schedules/bulk/delete", { ids }),
+};

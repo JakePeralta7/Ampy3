@@ -7,7 +7,47 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.app.db import Base
 
 
-class MatchRule(Base):
+# ─── Column Mixins ───────────────────────────────────────────────
+
+
+class CreatedAtMixin:
+    """Adds a ``created_at`` timestamp column (no index)."""
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class TimestampMixin(CreatedAtMixin):
+    """Adds ``created_at`` and ``updated_at`` timestamp columns."""
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class TrackColumns:
+    """Shared source-match columns for any table tracking a YouTube Music track and its Plex match."""
+
+    position: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    # Source (YouTube Music) metadata
+    source_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    source_artist: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    source_album: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    source_duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    # Plex match result metadata
+    match_item_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    match_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    match_artist: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    match_album: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    match_duration: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    match_rule_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
+class MatchRule(TimestampMixin, Base):
     __tablename__ = "match_rules"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -16,13 +56,6 @@ class MatchRule(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     yaml_content: Mapped[str] = mapped_column(Text, nullable=False, default="")
-
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
-    )
 
     def __repr__(self) -> str:
         return f"<MatchRule(id={self.id}, name={self.name}, priority={self.priority})>"
@@ -40,7 +73,7 @@ class PlaylistSourceEnum(StrEnum):
     YOUTUBE_MUSIC = "youtube_music"
 
 
-class ScheduledPlaylistSync(Base):
+class ScheduledPlaylistSync(TimestampMixin, Base):
     __tablename__ = "scheduled_playlist_syncs"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -63,13 +96,6 @@ class ScheduledPlaylistSync(Base):
     failed_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
-    )
-
     tracks: Mapped[list["PlaylistTrack"]] = relationship(
         back_populates="sync", cascade="all, delete-orphan", order_by="PlaylistTrack.position"
     )
@@ -78,7 +104,7 @@ class ScheduledPlaylistSync(Base):
         return f"<ScheduledPlaylistSync(id={self.id}, playlist={self.target_playlist_name})>"
 
 
-class PlaylistTrack(Base):
+class PlaylistTrack(TrackColumns, CreatedAtMixin, Base):
     __tablename__ = "playlist_tracks"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -86,24 +112,6 @@ class PlaylistTrack(Base):
         ForeignKey("scheduled_playlist_syncs.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
-    )
-    position: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-
-    source_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    source_artist: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    source_album: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    source_duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    source_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-
-    match_item_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    match_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    match_artist: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    match_album: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    match_duration: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    match_rule_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
-
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
     sync: Mapped["ScheduledPlaylistSync"] = relationship(back_populates="tracks")
@@ -145,7 +153,7 @@ class AuditLog(Base):
         return f"<AuditLog(id={self.id}, event_type={self.event_type})>"
 
 
-class UserSession(Base):
+class UserSession(CreatedAtMixin, Base):
     """Server-side session store. The cookie only carries a signed session ID."""
 
     __tablename__ = "user_sessions"
@@ -159,12 +167,9 @@ class UserSession(Base):
     expires_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, index=True
     )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
 
 
-class SyncRun(Base):
+class SyncRun(CreatedAtMixin, Base):
     __tablename__ = "sync_runs"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -176,10 +181,6 @@ class SyncRun(Base):
     matched_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     failed_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
-
     tracks: Mapped[list["SyncRunTrack"]] = relationship(
         back_populates="run", cascade="all, delete-orphan", order_by="SyncRunTrack.position"
     )
@@ -188,7 +189,7 @@ class SyncRun(Base):
         return f"<SyncRun(id={self.id}, sync_id={self.sync_id}, matched={self.matched_count})>"
 
 
-class SyncRunTrack(Base):
+class SyncRunTrack(TrackColumns, Base):
     __tablename__ = "sync_run_tracks"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -197,20 +198,6 @@ class SyncRunTrack(Base):
         nullable=False,
         index=True,
     )
-    position: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-
-    source_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    source_artist: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    source_album: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    source_duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    source_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-
-    match_item_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    match_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    match_artist: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    match_album: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    match_duration: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    match_rule_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     run: Mapped["SyncRun"] = relationship(back_populates="tracks")
 
