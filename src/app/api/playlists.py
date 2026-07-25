@@ -133,9 +133,7 @@ def _build_track_response(
     )
 
 
-async def _find_match_for_track(
-    target, body: RematchTrackInput
-) -> dict | None:
+async def _find_match_for_track(target, body: RematchTrackInput) -> dict | None:
     """Find a Plex match for a track using MatchEngine with fallback to direct search."""
     track = TrackMetadata(
         title=body.title,
@@ -569,9 +567,7 @@ async def get_playlist_tracks(
 
             if sync_record and len(sync_record.tracks) > 0:
                 if plex_tracks:
-                    return _build_track_response_with_plex(
-                        sync_record, playlist_id, plex_tracks
-                    )
+                    return _build_track_response_with_plex(sync_record, playlist_id, plex_tracks)
                 return _build_track_response(sync_record, playlist_id)
 
             # No sync record — fall back to plex-only display
@@ -672,9 +668,8 @@ async def rematch_sync_track(
             match = await _find_match_for_track(target, body)
             if not match:
                 return RematchTrackResponse(
-                    matched=False,
-                    message=f"No match found for '{body.title}'"
-                    )
+                    matched=False, message=f"No match found for '{body.title}'"
+                )
 
             plex_id = match.get("plex_id")
             if plex_id and sync_record.target_playlist_id:
