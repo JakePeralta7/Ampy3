@@ -80,6 +80,7 @@ export function SyncsPage() {
     try {
       if (editingSync) {
         const updateInput = {
+          target_id: input.target_id !== editingSync.target_id ? input.target_id : undefined,
           target_playlist_name:
             input.target_playlist_name !== editingSync.target_playlist_name
               ? input.target_playlist_name

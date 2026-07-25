@@ -50,9 +50,22 @@ class SyncOrchestrator:
         }
 
         existing = await self._target.get_playlist_by_name(playlist_name)
+
+        def _playlist_id(data: dict | None) -> str | None:
+            if not data:
+                return None
+            for key in ("rating_key", "playlist_id", "id"):
+                value = data.get(key)
+                if isinstance(value, str) and value:
+                    return value
+            return None
+
         if existing and replace_existing:
             try:
-                await self._target.delete_playlist(existing["rating_key"])
+                existing_id = _playlist_id(existing)
+                if not existing_id:
+                    raise RuntimeError("Existing playlist missing identifier")
+                await self._target.delete_playlist(existing_id)
                 logger.debug("Deleted existing playlist '%s' for replacement", playlist_name)
                 existing = None
             except Exception as e:
@@ -119,12 +132,15 @@ class SyncOrchestrator:
         if matched_results:
             try:
                 if existing and not replace_existing:
+                    existing_id = _playlist_id(existing)
+                    if not existing_id:
+                        raise RuntimeError("Existing playlist missing identifier")
                     success = await self._target.update_playlist(
-                        existing["rating_key"],
+                        existing_id,
                         [t["match"] for t in matched_results],
                     )
                     if success:
-                        stats["target_playlist_id"] = existing["rating_key"]
+                        stats["target_playlist_id"] = existing_id
                         stats["updated"] = len(matched_results)
                 else:
                     playlist_id = await self._target.create_playlist(

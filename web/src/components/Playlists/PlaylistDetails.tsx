@@ -196,7 +196,7 @@ export function PlaylistDetails({
 
   const subtitle = playlistDetails ? (
     <span>
-      Plex: {sync.target_playlist_name} • Source:{" "}
+      {sync.target_id === "jellyfin" ? "Jellyfin" : "Plex"}: {sync.target_playlist_name} • Source:{" "}
       {sync.source === "youtube_music" ? "YouTube Music" : sync.source}
       <span className="ml-2 text-success-500 font-semibold">
         Match Rate: {playlistDetails.match_rate} ({playlistDetails.match_percentage}%)

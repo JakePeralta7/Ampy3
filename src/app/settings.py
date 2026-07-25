@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     secret_key: str = ""
     session_ttl_hours: int = 168
 
+    # Jellyfin (target)
+    jellyfin_server_url: str = ""
+    jellyfin_api_key: str = ""
+    jellyfin_user_id: str = ""
+
     # App
     app_env: str = "development"
     debug: bool = False

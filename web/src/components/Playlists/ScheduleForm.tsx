@@ -21,6 +21,10 @@ const SCHEDULE_INTERVALS = [
 ];
 
 const SOURCES = [{ value: "youtube_music", label: "YouTube Music" }];
+const TARGETS = [
+  { value: "plex", label: "Plex" },
+  { value: "jellyfin", label: "Jellyfin" },
+];
 
 export function ScheduleForm({
   onSubmit,
@@ -30,6 +34,7 @@ export function ScheduleForm({
   error,
 }: ScheduleFormProps) {
   const [source, setSource] = useState("youtube_music");
+  const [targetId, setTargetId] = useState("plex");
   const [sourceUrl, setSourceUrl] = useState("");
   const [targetPlaylistName, setTargetPlaylistName] = useState("");
   const [scheduleInterval, setScheduleInterval] = useState("daily");
@@ -38,6 +43,7 @@ export function ScheduleForm({
 
   const resetForm = useCallback(() => {
     setSource("youtube_music");
+    setTargetId("plex");
     setSourceUrl("");
     setTargetPlaylistName("");
     setScheduleInterval("daily");
@@ -48,6 +54,7 @@ export function ScheduleForm({
   useEffect(() => {
     if (editingSync) {
       setSource(editingSync.source);
+      setTargetId(editingSync.target_id || "plex");
       setSourceUrl(editingSync.source_url);
       setTargetPlaylistName(editingSync.target_playlist_name);
       setScheduleInterval(editingSync.schedule_interval);
@@ -66,13 +73,14 @@ export function ScheduleForm({
       return;
     }
     if (!targetPlaylistName.trim()) {
-      setFormError("Plex playlist name is required");
+      setFormError("Playlist name is required");
       return;
     }
 
     try {
       const input: CreateScheduledSyncInput = {
         source,
+        target_id: targetId,
         source_url: sourceUrl.trim(),
         target_playlist_name: targetPlaylistName.trim(),
         schedule_interval: scheduleInterval,
@@ -111,6 +119,22 @@ export function ScheduleForm({
             {SOURCES.map((s) => (
               <option key={s.value} value={s.value}>
                 {s.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-fg-muted mb-1">Target *</label>
+          <select
+            value={targetId}
+            onChange={(e) => setTargetId(e.target.value)}
+            className={SELECT_STYLES}
+            disabled={isLoading}
+          >
+            {TARGETS.map((target) => (
+              <option key={target.value} value={target.value}>
+                {target.label}
               </option>
             ))}
           </select>

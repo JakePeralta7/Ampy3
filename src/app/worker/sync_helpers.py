@@ -119,6 +119,7 @@ def _save_sync_results(
     schedule_id: int | None,
     playlist_url: str,
     source: str,
+    target_id: str,
     playlist_title: str,
     stats: dict,
     track_rows: list[dict],
@@ -130,7 +131,8 @@ def _save_sync_results(
             stmt = select(ScheduledPlaylistSync).where(ScheduledPlaylistSync.id == schedule_id)
         else:
             stmt = select(ScheduledPlaylistSync).where(
-                ScheduledPlaylistSync.source_url == playlist_url
+                ScheduledPlaylistSync.source_url == playlist_url,
+                ScheduledPlaylistSync.target_id == target_id,
             )
 
         result = db.execute(stmt)
@@ -143,6 +145,7 @@ def _save_sync_results(
         else:
             sync_record = ScheduledPlaylistSync(
                 source=source,
+                target_id=target_id,
                 source_url=playlist_url,
                 target_playlist_name=playlist_title,
                 target_playlist_id=stats.get("target_playlist_id"),

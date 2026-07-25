@@ -13,6 +13,7 @@ from src.app.api.playlists import router as playlists_router
 from src.app.api.plex_server import router as plex_server_router
 from src.app.api.schedules import router as schedules_router
 from src.app.api.settings import router as settings_router
+from src.app.api.targets import router as targets_router
 from src.app.auth.router import router as auth_router
 
 
@@ -30,6 +31,7 @@ def register_routers(app: FastAPI) -> None:
     app.include_router(plex_server_router)
     app.include_router(schedules_router)
     app.include_router(settings_router)
+    app.include_router(targets_router)
 
 
 __all__ = [
@@ -42,4 +44,5 @@ __all__ = [
     "plex_server_router",
     "schedules_router",
     "settings_router",
+    "targets_router",
 ]

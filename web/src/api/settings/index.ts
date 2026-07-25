@@ -7,6 +7,9 @@ import { apiGet, apiPut } from "../client";
 export interface AppSettings {
   plex_host: string;
   plex_token: string;
+  jellyfin_server_url: string;
+  jellyfin_api_key: string;
+  jellyfin_user_id: string;
   ollama_host: string;
   ollama_model: string;
   ollama_timeout: number;

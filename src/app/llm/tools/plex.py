@@ -36,7 +36,7 @@ async def sync_playlist_to_plex(playlist_url: str, source: str = "youtube_music"
         playlist_url: Full YouTube Music playlist URL to sync.
         source: The source platform (default: youtube_music).
     """
-    task = sync_playlists_task.delay(playlist_url, source)
+    task = sync_playlists_task.delay(playlist_url, source, "plex")
     return f"Sync started. Task ID: {task.id}. Poll /v1/status/{task.id} for progress."
 
 

@@ -79,9 +79,7 @@ export const routes: RouteObject[] = [
     path: "/settings",
     element: (
       <ProtectedRoute>
-        <RequireServer>
-          <SettingsLayout />
-        </RequireServer>
+        <SettingsLayout />
       </ProtectedRoute>
     ),
     children: [

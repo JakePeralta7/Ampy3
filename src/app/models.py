@@ -80,6 +80,7 @@ class ScheduledPlaylistSync(TimestampMixin, Base):
     source: Mapped[str] = mapped_column(
         String(50), default=PlaylistSourceEnum.YOUTUBE_MUSIC, nullable=False
     )
+    target_id: Mapped[str] = mapped_column(String(50), default="plex", nullable=False)
     source_url: Mapped[str] = mapped_column(String(2048), nullable=False)
     target_playlist_name: Mapped[str] = mapped_column(String(255), nullable=False)
     target_playlist_id: Mapped[str | None] = mapped_column(String(255), nullable=True)

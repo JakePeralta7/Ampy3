@@ -91,8 +91,11 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("Failed to stop APScheduler: %s", e)
 
-    plex_client = await get_plex_client()
-    await plex_client.close()
+    try:
+        plex_client = await get_plex_client()
+        await plex_client.close()
+    except Exception:
+        pass
     logger.info("Ampy3 API shut down gracefully.")
 
 
@@ -105,7 +108,7 @@ openapi_url = "/openapi.json" if settings.app_env != "production" else None
 app = FastAPI(
     title="Ampy3 Sync API",
     description=(
-        "Sync playlists from YouTube Music (and other sources) to Plex "
+        "Sync playlists from YouTube Music (and other sources) to Plex/Jellyfin "
         "using MusicBrainz metadata IDs and AI-powered match rules."
     ),
     version="1.0.0",
@@ -119,7 +122,7 @@ app = FastAPI(
         {"name": "chat", "description": "AI chat agent invocations and conversation history"},
         {
             "name": "playlists",
-            "description": "Plex playlist listing, search, sync, and track management",
+            "description": "Target playlist listing, search, sync, and track management",
         },
         {
             "name": "scheduled-syncs",
@@ -127,6 +130,7 @@ app = FastAPI(
         },
         {"name": "match-rules", "description": "Music matching rule configuration and testing"},
         {"name": "settings", "description": "Runtime configuration (Plex, Ollama, yt-dlp)"},
+        {"name": "targets", "description": "Available sync target platforms"},
         {"name": "audit", "description": "Audit log querying"},
     ],
 )

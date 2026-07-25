@@ -59,9 +59,10 @@ def scheduled_sync_task(self, schedule_id: int):
                 summary=f"Scheduled sync #{schedule_id} failed — sync not found",
             )
             return {"status": "FAILED", "error": "Sync not found"}
-        source_url, source, replace_existing, title = (
+        source_url, source, target_id, replace_existing, title = (
             sync.source_url,
             sync.source,
+            getattr(sync, "target_id", "plex"),
             sync.replace_existing,
             sync.target_playlist_name,
         )
@@ -85,6 +86,7 @@ def scheduled_sync_task(self, schedule_id: int):
             coro_factory=lambda: _async_sync_task(
                 source_url,
                 source,
+                target_id,
                 replace_existing,
                 schedule_id,
                 rules,

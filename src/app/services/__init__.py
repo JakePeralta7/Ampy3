@@ -7,6 +7,7 @@ Provides factory functions for creating and retrieving service instances.
 import logging
 
 from src.app.services.celery import CeleryService
+from src.app.services.jellyfin import JellyfinService
 from src.app.services.ollama import OllamaService
 from src.app.services.plex import PlexService
 from src.app.services.valkey import ValkeyService
@@ -17,6 +18,7 @@ logger = logging.getLogger(__name__)
 def reset_services():
     """Reset all service instances (useful for testing)."""
     PlexService.reset()
+    JellyfinService.reset()
     OllamaService.reset()
     CeleryService.reset()
     ValkeyService.reset()
@@ -43,21 +45,31 @@ async def get_plex_client():
     return await PlexService.get_instance_async()
 
 
+async def get_jellyfin_client():
+    """Dependency injection: Get Jellyfin client instance (lazy singleton)."""
+    return await JellyfinService.get_instance_async()
+
+
 async def get_sync_target(target_id: str = "plex"):
     """Get a sync target instance by ID.
 
     Returns a :class:`BaseTarget` implementation (e.g. ``PlexTarget``).
     Defaults to ``"plex"`` for backward compatibility.
     """
+    import src.app.core.targets  # noqa: F401
+    from src.app.core.targets.jellyfin import JellyfinTarget
+    from src.app.core.targets.plex import PlexTarget
     from src.app.core.targets.registry import TargetRegistry
 
     TargetRegistry.get(target_id)  # validate target_id exists
 
     if target_id == "plex":
-        from src.app.core.targets.plex import PlexTarget
-
         plex_client = await get_plex_client()
-        return PlexTarget(plex_client)
+        return PlexTarget(plex_client)  # type: ignore[call-arg]
+
+    if target_id == "jellyfin":
+        jellyfin_client = await get_jellyfin_client()
+        return JellyfinTarget(jellyfin_client)  # type: ignore[call-arg]
 
     raise NotImplementedError(
         f"Target '{target_id}' has no factory registered in get_sync_target()"
@@ -66,6 +78,7 @@ async def get_sync_target(target_id: str = "plex"):
 
 async def list_sync_targets():
     """Return all registered sync targets."""
+    import src.app.core.targets  # noqa: F401
     from src.app.core.targets.registry import TargetRegistry
 
     return TargetRegistry.list_targets()
@@ -74,6 +87,7 @@ async def list_sync_targets():
 __all__ = [
     "reset_services",
     "get_plex_client",
+    "get_jellyfin_client",
     "get_ollama_client",
     "get_celery_app",
     "get_valkey_client",

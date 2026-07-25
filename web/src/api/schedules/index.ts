@@ -7,6 +7,7 @@ import { apiDelete, apiGet, apiPost, apiPut } from "../client";
 export interface ScheduledSync {
   id: number;
   source: string;
+  target_id: string;
   source_url: string;
   target_playlist_name: string;
   target_playlist_id: string | null;
@@ -22,6 +23,7 @@ export interface ScheduledSync {
 
 export interface CreateScheduledSyncInput {
   source: string;
+  target_id: string;
   source_url: string;
   target_playlist_name: string;
   schedule_interval: string;
@@ -29,6 +31,7 @@ export interface CreateScheduledSyncInput {
 }
 
 export interface UpdateScheduledSyncInput {
+  target_id?: string;
   target_playlist_name?: string;
   schedule_interval?: string;
   is_active?: boolean;

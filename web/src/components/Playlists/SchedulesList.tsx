@@ -31,6 +31,12 @@ const INTERVAL_LABELS: Record<string, string> = {
   weekly: "Weekly",
 };
 
+function formatTargetName(targetId: string): string {
+  if (targetId === "plex") return "Plex";
+  if (targetId === "jellyfin") return "Jellyfin";
+  return targetId;
+}
+
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return "Never";
   return new Date(dateStr).toLocaleDateString("en-US", {
@@ -138,6 +144,19 @@ export function SchedulesList({
           <span className="text-fg-muted inline-flex items-center gap-1.5 group">
             <span>{sync.source === "youtube_music" ? "YouTube Music" : sync.source}</span>
             <CopyButton value={sync.source} label="source" />
+          </span>
+        ),
+      },
+      {
+        id: "target",
+        header: "Target",
+        sortable: true,
+        filterable: true,
+        sortValue: (sync: ScheduledSync) => formatTargetName(sync.target_id),
+        cell: (sync: ScheduledSync) => (
+          <span className="text-fg-muted inline-flex items-center gap-1.5 group">
+            <span>{formatTargetName(sync.target_id)}</span>
+            <CopyButton value={sync.target_id} label="target" />
           </span>
         ),
       },

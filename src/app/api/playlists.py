@@ -27,7 +27,7 @@ from src.app.schemas.playlists import (
     TrackSource,
     UnmatchedTrackOut,
 )
-from src.app.services import get_plex_client, get_sync_target
+from src.app.services import get_sync_target
 from src.app.services.audit import log_event
 from src.app.worker.tasks import sync_playlists_task
 
@@ -134,7 +134,7 @@ def _build_track_response(
 
 
 async def _find_match_for_track(target, body: RematchTrackInput) -> dict | None:
-    """Find a Plex match for a track using MatchEngine with fallback to direct search."""
+    """Find a target-library match for a track using MatchEngine with fallback search."""
     track = TrackMetadata(
         title=body.title,
         artist_name=body.artist_name,
@@ -200,7 +200,7 @@ def _build_track_response_with_plex(
     playlist_id: str,
     plex_tracks: list[dict],
 ) -> PlaylistTracksResponse:
-    """Build a PlaylistTracksResponse using Plex track data enriched with DB match info."""
+    """Build a PlaylistTracksResponse using target track data enriched with DB match info."""
     all_rows: list[PlaylistTrack] = list(sync_record.tracks)
     matched_rows = [r for r in all_rows if r.match_item_id is not None]
     matched_by_id: dict[str, PlaylistTrack] = {
@@ -211,7 +211,8 @@ def _build_track_response_with_plex(
     formatted_matched: list[dict] = []
     for t in plex_tracks:
         formatted_matched.append({**t, "status": "matched", "match_rate": "✓ Matched"})
-        db_row = matched_by_id.get(t.get("plex_id"))
+        match_key = t.get("plex_id")
+        db_row = matched_by_id.get(match_key) if isinstance(match_key, str) else None
         track_details.append(
             TrackDetail(
                 source=TrackSource(
@@ -447,12 +448,13 @@ async def get_sync_diff(
 
 @router.get("/")
 async def list_user_playlists(
+    target_id: str = Query(default="plex", description="Target platform ID"),
     _user: dict = Depends(get_current_user),  # noqa: B008
 ):
-    """List all playlists the user owns in Plex."""
+    """List all playlists the user owns in the selected target."""
     try:
-        plex_client = await get_plex_client()
-        playlists = await plex_client.search_playlists("")
+        target = await get_sync_target(target_id)
+        playlists = await target.search_playlists("")
         logger.info(f"Listed {len(playlists)} playlists")
         return playlists
     except Exception as e:
@@ -463,12 +465,13 @@ async def list_user_playlists(
 @router.post("/search", response_model=PlaylistSearchResponse)
 async def search_playlists(
     query: str,
+    target_id: str = Query(default="plex", description="Target platform ID"),
     _user: dict = Depends(get_current_user),  # noqa: B008
 ):
-    """Search Plex playlists by title or keywords."""
+    """Search target playlists by title or keywords."""
     try:
-        plex_client = await get_plex_client()
-        results = await plex_client.search_playlists(query)
+        target = await get_sync_target(target_id)
+        results = await target.search_playlists(query)
         if not results:
             raise HTTPException(status_code=404, detail=f"No playlists found matching '{query}'")
         return PlaylistSearchResponse(message="Search successful", playlists=results)
@@ -499,6 +502,7 @@ async def trigger_playlist_sync(
         task = sync_playlists_task.delay(
             sync_request.playlist_url,
             sync_request.source,
+            sync_request.target_id,
             sync_request.replace_existing,
             sync_request.schedule_id,
             sync_request.target_playlist_name,
@@ -508,13 +512,16 @@ async def trigger_playlist_sync(
         await log_event(
             event_type="sync.manually_triggered",
             resource_type="playlist",
-            resource_id=sync_request.schedule_id and str(sync_request.schedule_id),
+            resource_id=str(sync_request.schedule_id)
+            if sync_request.schedule_id is not None
+            else None,
             summary=(
                 f"Sync triggered for {sync_request.source} playlist — {sync_request.playlist_url}"
             ),
             details={
                 "playlist_url": sync_request.playlist_url,
                 "source": sync_request.source,
+                "target_id": sync_request.target_id,
                 "replace_existing": sync_request.replace_existing,
                 "schedule_id": sync_request.schedule_id,
             },
@@ -549,12 +556,13 @@ async def get_sync_status(
 @router.get("/{playlist_id}/tracks", response_model=PlaylistTracksResponse)
 async def get_playlist_tracks(
     playlist_id: str,
+    target_id: str = Query(default="plex", description="Target platform ID"),
     _user: dict = Depends(get_current_user),  # noqa: B008
 ):
     """Get all tracks for a playlist with match status details."""
     try:
-        plex_client = await get_plex_client()
-        plex_tracks = await plex_client.get_items_in_playlist(playlist_id)
+        target = await get_sync_target(target_id)
+        target_tracks = await target.get_items_in_playlist(playlist_id)
 
         async with AsyncSessionLocal() as session:
             stmt = (
@@ -566,8 +574,8 @@ async def get_playlist_tracks(
             sync_record = result.scalars().first()
 
             if sync_record and len(sync_record.tracks) > 0:
-                if plex_tracks:
-                    return _build_track_response_with_plex(sync_record, playlist_id, plex_tracks)
+                if target_tracks:
+                    return _build_track_response_with_plex(sync_record, playlist_id, target_tracks)
                 return _build_track_response(sync_record, playlist_id)
 
             # No sync record — fall back to plex-only display
@@ -583,9 +591,9 @@ async def get_playlist_tracks(
                         duration=t.get("duration"),
                     ),
                 )
-                for t in plex_tracks
+                for t in target_tracks
             ]
-            total = len(plex_tracks)
+            total = len(target_tracks)
             return PlaylistTracksResponse(
                 playlist_id=playlist_id,
                 source=source_name,
@@ -649,10 +657,8 @@ async def rematch_sync_track(
     body: RematchTrackInput,
     _user: dict = Depends(get_current_user),  # noqa: B008
 ):
-    """Rematch a track via sync ID, updating the DB and Plex playlist."""
+    """Rematch a track via sync ID, updating DB and target playlist."""
     try:
-        target = await get_sync_target()
-
         async with AsyncSessionLocal() as session:
             stmt = (
                 select(ScheduledPlaylistSync)
@@ -664,6 +670,8 @@ async def rematch_sync_track(
 
             if not sync_record:
                 raise HTTPException(status_code=404, detail=f"Sync {sync_id} not found")
+
+            target = await get_sync_target(getattr(sync_record, "target_id", "plex"))
 
             match = await _find_match_for_track(target, body)
             if not match:
@@ -709,11 +717,12 @@ async def rematch_sync_track(
 async def rematch_track(
     playlist_id: str,
     body: RematchTrackInput,
+    target_id: str = Query(default="plex", description="Target platform ID"),
     _user: dict = Depends(get_current_user),  # noqa: B008
 ):
-    """Rematch a track via playlist ID, updating the DB and Plex playlist."""
+    """Rematch a track via playlist ID, updating DB and target playlist."""
     try:
-        target = await get_sync_target()
+        target = await get_sync_target(target_id)
 
         match = await _find_match_for_track(target, body)
         if not match:

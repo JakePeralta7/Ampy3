@@ -8,6 +8,7 @@ class PlaylistSyncRequest(BaseModel):
 
     playlist_url: str = Field(..., description="URL of the source playlist")
     source: str = Field(default="youtube_music", description="Source platform")
+    target_id: str = Field(default="plex", description="Target platform")
     replace_existing: bool = Field(
         default=False, description="Delete existing playlist and recreate"
     )

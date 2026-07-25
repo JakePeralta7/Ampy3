@@ -21,6 +21,7 @@ from src.app.schemas.schedules import (
     SyncNowResponse,
     UpdateScheduledSyncInput,
 )
+from src.app.services import list_sync_targets
 from src.app.services.audit import log_event
 
 logger = logging.getLogger(__name__)
@@ -32,6 +33,7 @@ def _sync_to_out(model: ScheduledPlaylistSync) -> ScheduledSyncOut:
     return ScheduledSyncOut(
         id=model.id,
         source=model.source,
+        target_id=model.target_id,
         source_url=model.source_url,
         target_playlist_name=model.target_playlist_name,
         target_playlist_id=model.target_playlist_id,
@@ -83,8 +85,16 @@ async def create_scheduled_sync(
             ),
         )
 
+    valid_targets = {t["id"] for t in await list_sync_targets()}
+    if body.target_id not in valid_targets:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid target_id. Must be one of: {sorted(valid_targets)}",
+        )
+
     db_sync = ScheduledPlaylistSync(
         source=body.source,
+        target_id=body.target_id,
         source_url=body.source_url,
         target_playlist_name=body.target_playlist_name,
         schedule_interval=body.schedule_interval,
@@ -104,7 +114,7 @@ async def create_scheduled_sync(
         resource_type="schedule",
         resource_id=str(db_sync.id),
         summary=(
-            f"Schedule created — {body.source} → "
+            f"Schedule created — {body.source} → {body.target_id} / "
             f"{db_sync.target_playlist_name}, "
             f"every {body.schedule_interval}"
         ),
@@ -176,6 +186,14 @@ async def update_scheduled_sync(
                 f"{[e.value for e in ScheduleIntervalEnum]}"
             ),
         )
+
+    if body.target_id is not None:
+        valid_targets = {t["id"] for t in await list_sync_targets()}
+        if body.target_id not in valid_targets:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid target_id. Must be one of: {sorted(valid_targets)}",
+            )
 
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(sync, field, value)

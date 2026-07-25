@@ -18,6 +18,7 @@ def sync_playlists_task(
     self,
     playlist_url: str,
     source: str = "youtube_music",
+    target_id: str = "plex",
     replace_existing: bool = False,
     schedule_id: int | None = None,
     target_playlist_name: str | None = None,
@@ -40,6 +41,7 @@ def sync_playlists_task(
             coro_factory=lambda: _async_sync_task(
                 playlist_url,
                 source,
+                target_id,
                 replace_existing,
                 schedule_id,
                 rules,
@@ -61,6 +63,7 @@ def sync_playlists_task(
 async def _async_sync_task(
     playlist_url: str,
     source: str,
+    target_id: str,
     replace_existing: bool,
     schedule_id: int | None = None,
     rules=None,
@@ -76,7 +79,7 @@ async def _async_sync_task(
         len(playlist_metadata.tracks),
     )
 
-    target = await get_sync_target()
+    target = await get_sync_target(target_id)
     orchestrator = SyncOrchestrator(target=target)
 
     stats = await orchestrator.sync_playlist(
@@ -95,6 +98,7 @@ async def _async_sync_task(
         schedule_id,
         playlist_url,
         source,
+        target_id,
         playlist_metadata.title,
         stats,
         track_rows,

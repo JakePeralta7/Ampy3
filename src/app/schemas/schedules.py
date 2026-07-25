@@ -7,6 +7,7 @@ class CreateScheduledSyncInput(BaseModel):
     """Input schema for creating a scheduled sync."""
 
     source: str = Field(..., description="Source platform (e.g. youtube_music)")
+    target_id: str = Field(default="plex", description="Target platform (e.g. plex, jellyfin)")
     source_url: str = Field(..., description="URL of the source playlist")
     target_playlist_name: str = Field(..., description="Name for the Plex playlist")
     schedule_interval: str = Field(..., description="Sync interval (e.g. daily, weekly, every_6h)")
@@ -16,6 +17,7 @@ class CreateScheduledSyncInput(BaseModel):
 class UpdateScheduledSyncInput(BaseModel):
     """Input schema for updating a scheduled sync."""
 
+    target_id: str | None = None
     target_playlist_name: str | None = None
     schedule_interval: str | None = None
     is_active: bool | None = None
@@ -27,6 +29,7 @@ class ScheduledSyncOut(BaseModel):
 
     id: int
     source: str
+    target_id: str
     source_url: str
     target_playlist_name: str
     target_playlist_id: str | None = None

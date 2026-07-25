@@ -55,7 +55,7 @@ export function HomePage() {
   return (
     <PageLayout
       title="Dashboard"
-      subtitle="Keep your Plex playlists synced with YouTube Music and other sources"
+      subtitle="Keep your target playlists synced with YouTube Music and other sources"
     >
       {loading && syncs.length === 0 ? (
         <div className="text-fg-muted py-12 text-center">Loading...</div>

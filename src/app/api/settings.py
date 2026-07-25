@@ -19,6 +19,9 @@ router = APIRouter(prefix="/api/v1/settings", tags=["settings"])
 USER_CONFIG_KEYS = [
     "plex_host",
     "plex_token",
+    "jellyfin_server_url",
+    "jellyfin_api_key",
+    "jellyfin_user_id",
     "ollama_host",
     "ollama_model",
     "ollama_timeout",
@@ -37,6 +40,9 @@ def _build_settings_out(overrides: dict[str, str]) -> SettingsOut:
     return SettingsOut(
         plex_host=overrides.get("plex_host", ""),
         plex_token=_mask_token(overrides.get("plex_token", "")),
+        jellyfin_server_url=overrides.get("jellyfin_server_url", ""),
+        jellyfin_api_key=_mask_token(overrides.get("jellyfin_api_key", "")),
+        jellyfin_user_id=overrides.get("jellyfin_user_id", ""),
         ollama_host=overrides.get("ollama_host", settings.ollama_host),
         ollama_model=overrides.get("ollama_model", settings.ollama_model),
         ollama_timeout=int(overrides.get("ollama_timeout", str(settings.ollama_timeout))),
@@ -108,6 +114,14 @@ async def put_settings(
         from src.app.services.plex import PlexService
 
         PlexService.reset()
+    if (
+        "jellyfin_server_url" in incoming
+        or "jellyfin_api_key" in incoming
+        or "jellyfin_user_id" in incoming
+    ):
+        from src.app.services.jellyfin import JellyfinService
+
+        JellyfinService.reset()
     if "ollama_host" in incoming or "ollama_model" in incoming or "ollama_timeout" in incoming:
         from src.app.services.ollama import OllamaService
 

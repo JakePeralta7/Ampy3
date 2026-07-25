@@ -93,6 +93,9 @@ export function ConfigPage() {
         const flat: Record<string, string> = {
           plex_host: data.plex_host,
           plex_token: data.plex_token,
+          jellyfin_server_url: data.jellyfin_server_url,
+          jellyfin_api_key: data.jellyfin_api_key,
+          jellyfin_user_id: data.jellyfin_user_id,
           ollama_host: data.ollama_host,
           ollama_model: data.ollama_model,
           ollama_timeout: String(data.ollama_timeout),
@@ -132,6 +135,9 @@ export function ConfigPage() {
       const flat: Record<string, string> = {
         plex_host: result.plex_host,
         plex_token: result.plex_token,
+        jellyfin_server_url: result.jellyfin_server_url,
+        jellyfin_api_key: result.jellyfin_api_key,
+        jellyfin_user_id: result.jellyfin_user_id,
         ollama_host: result.ollama_host,
         ollama_model: result.ollama_model,
         ollama_timeout: String(result.ollama_timeout),
@@ -191,6 +197,31 @@ export function ConfigPage() {
           />
         </SectionCard>
 
+        <SectionCard icon={<Server size={20} className="text-accent-500" />} title="Jellyfin">
+          <SettingField
+            id="jellyfin_server_url"
+            label="Server URL"
+            value={values.jellyfin_server_url ?? ""}
+            onChange={(v) => setField("jellyfin_server_url", v)}
+            placeholder="http://jellyfin.lan:8096"
+          />
+          <SettingField
+            id="jellyfin_api_key"
+            label="API Key"
+            type="password"
+            value={values.jellyfin_api_key ?? ""}
+            onChange={(v) => setField("jellyfin_api_key", v)}
+            placeholder="Jellyfin API key"
+          />
+          <SettingField
+            id="jellyfin_user_id"
+            label="User ID"
+            value={values.jellyfin_user_id ?? ""}
+            onChange={(v) => setField("jellyfin_user_id", v)}
+            placeholder="Jellyfin user ID"
+          />
+        </SectionCard>
+
         <SectionCard icon={<Brain size={20} className="text-accent-500" />} title="Ollama">
           <SettingField
             id="ollama_host"
@@ -234,8 +265,8 @@ export function ConfigPage() {
 
         {hasChanges && (
           <p className="text-sm text-warn-500 text-center">
-            Changes apply immediately. Plex and Ollama connections will be reset with the new
-            values.
+            Changes apply immediately. Plex, Jellyfin, and Ollama connections will be reset with the
+            new values.
           </p>
         )}
       </div>
