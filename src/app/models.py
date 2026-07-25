@@ -6,7 +6,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.app.db import Base
 
-
 # ─── Column Mixins ───────────────────────────────────────────────
 
 
@@ -27,7 +26,8 @@ class TimestampMixin(CreatedAtMixin):
 
 
 class TrackColumns:
-    """Shared source-match columns for any table tracking a YouTube Music track and its Plex match."""
+    """Shared source-match columns for any table
+    tracking a YouTube Music track and its Plex match."""
 
     position: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 

@@ -18,7 +18,7 @@ if config.config_file_name is not None:
 
 # add your model's MetaData object here
 from src.app.db import Base
-from src.app.models import AuditLog, MatchRule, PlaylistTrack, ScheduledPlaylistSync, Config
+from src.app.models import AuditLog, Config, MatchRule, PlaylistTrack, ScheduledPlaylistSync
 
 target_metadata = Base.metadata
 

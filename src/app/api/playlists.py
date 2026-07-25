@@ -671,7 +671,10 @@ async def rematch_sync_track(
 
             match = await _find_match_for_track(target, body)
             if not match:
-                return RematchTrackResponse(matched=False, message=f"No match found for '{body.title}'")
+                return RematchTrackResponse(
+                    matched=False,
+                    message=f"No match found for '{body.title}'"
+                    )
 
             plex_id = match.get("plex_id")
             if plex_id and sync_record.target_playlist_id:
