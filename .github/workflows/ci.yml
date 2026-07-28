@@ -76,11 +76,9 @@ jobs:
         run: pip install -e ".[dev]"
 
       - name: Pytest
-        run: pytest --tb=short -q || test $? -eq 5
+        run: python -m pytest --tb=short -q || test $? -eq 5
         env:
           PYTHONPATH: src
-          PLEX_HOST: http://localhost:32400
-          PLEX_TOKEN: test-token
 
   docker-build:
     name: Docker build
