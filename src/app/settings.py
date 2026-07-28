@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     celery_result_backend: str = Field(default="redis://valkey:6379/1")
     celery_worker_concurrency: int = Field(default=1, ge=1)
     celery_log_level: str = Field(default="info")
+    source_playlist_cache_ttl_seconds: int = Field(default=300, ge=1)
 
     # yt-dlp
     yt_dlp_cookies: str = ""
@@ -32,11 +33,6 @@ class Settings(BaseSettings):
     app_url: str = "http://localhost:8000"
     secret_key: str = ""
     session_ttl_hours: int = 168
-
-    # Jellyfin (target)
-    jellyfin_server_url: str = ""
-    jellyfin_api_key: str = ""
-    jellyfin_user_id: str = ""
 
     # App
     app_env: str = "development"

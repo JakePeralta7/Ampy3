@@ -7,10 +7,11 @@ import { ChatPage } from "./pages/Chat";
 import { HomePage } from "./pages/Home";
 import { LoginPage } from "./pages/Login";
 import { MatchRulesPage } from "./pages/MatchRules";
+import { PlexSetupPage } from "./pages/PlexSetup";
 import { RuleProgramPage } from "./pages/RuleProgram";
 import { ConfigPage } from "./pages/Settings";
-import { SetupPage } from "./pages/Setup";
 import { SyncsPage } from "./pages/Syncs";
+import { TargetsPage } from "./pages/Targets";
 
 export const routes: RouteObject[] = [
   {
@@ -18,10 +19,10 @@ export const routes: RouteObject[] = [
     element: <LoginPage />,
   },
   {
-    path: "/setup",
+    path: "/plex-setup",
     element: (
       <ProtectedRoute>
-        <SetupPage />
+        <PlexSetupPage />
       </ProtectedRoute>
     ),
   },
@@ -85,6 +86,7 @@ export const routes: RouteObject[] = [
     children: [
       { index: true, element: <Navigate to="config" replace /> },
       { path: "config", element: <ConfigPage /> },
+      { path: "targets", element: <TargetsPage /> },
       { path: "matching", element: <MatchRulesPage /> },
       { path: "matching/:ruleId", element: <RuleProgramPage /> },
     ],

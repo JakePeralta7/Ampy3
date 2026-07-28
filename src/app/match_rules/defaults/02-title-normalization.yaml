@@ -48,7 +48,7 @@ nodes:
       field: title
       target_field: title
       operation: regex_replace
-      pattern: "\\s*[\\[\\(]\\s*(?:Official\\s+(?:Music\\s+)?Video|OFFICIAL\\s+(?:MUSIC\\s+)?VIDEO)\\s*[\\]\\)]"
+      pattern: "\\s*[\\[\\(]\\s*(?:Official\\s+(?:HD\\s+)?(?:Music\\s+)?Video|OFFICIAL\\s+(?:HD\\s+)?(?:MUSIC\\s+)?VIDEO)\\s*[\\]\\)]"
       replacement: ""
 
   # Remove trailing "– M/V" or "M/V"

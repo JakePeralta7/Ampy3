@@ -8,28 +8,15 @@ from __future__ import annotations
 
 import logging
 from collections import deque
-from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
 
-# Import node submodules to trigger handler registration.
-import src.app.core.nodes.io  # noqa: F401
-import src.app.core.nodes.logic  # noqa: F401
-import src.app.core.nodes.matching  # noqa: F401
-import src.app.core.nodes.musicbrainz  # noqa: F401
-import src.app.core.nodes.search  # noqa: F401
-import src.app.core.nodes.similarity  # noqa: F401
-import src.app.core.nodes.transform  # noqa: F401
+# Import nodes package to trigger handler registration.
+import src.app.core.nodes  # noqa: F401
 from src.app.core.models import TrackMetadata
-from src.app.core.nodes.base import (  # noqa: F401
-    NodeConfig,
-    NodeHandlerBase,
-    NodeHandlerProtocol,
-    NodeInputs,
-    NodeOutputs,
-)
-from src.app.core.nodes.registry import current_target, get_handler  # noqa: F401
+from src.app.core.nodes.base import NodeConfig, NodeInputs, NodeOutputs
+from src.app.core.nodes.registry import NodeRegistry, current_target
 from src.app.db import AsyncSessionLocal, SessionLocal
 from src.app.models import MatchRule
 
@@ -37,12 +24,6 @@ if TYPE_CHECKING:
     from src.app.core.targets.base import BaseTarget
 
 logger = logging.getLogger(__name__)
-
-# Re-export for callers that imported from here.
-NodeHandler = Callable[  # noqa: F401
-    [NodeConfig, TrackMetadata, NodeInputs],
-    Any,
-]
 
 
 # ─── Graph Executor ────────────────────────────────────────────
@@ -62,13 +43,13 @@ class NodeGraphExecutor:
 
     async def execute(
         self,
-        canvas: dict,
+        canvas: dict[str, Any],
         track: TrackMetadata,
         *,
         collect_trace: bool = False,
-    ) -> list[dict]:
-        nodes: list[dict] = canvas.get("nodes", [])
-        edges: list[dict] = canvas.get("edges", [])
+    ) -> list[dict[str, Any]]:
+        nodes: list[dict[str, Any]] = canvas.get("nodes", [])
+        edges: list[dict[str, Any]] = canvas.get("edges", [])
 
         if not nodes:
             return []
@@ -87,18 +68,18 @@ class NodeGraphExecutor:
 
     async def _execute_impl(
         self,
-        canvas: dict,
+        canvas: dict[str, Any],
         track: TrackMetadata,
-        nodes: list[dict],
-        edges: list[dict],
+        nodes: list[dict[str, Any]],
+        edges: list[dict[str, Any]],
         *,
         collect_trace: bool = False,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
 
         node_map = {n["id"]: n for n in nodes}
 
-        out_edges: dict[str, list[dict]] = {n["id"]: [] for n in nodes}
-        in_edges: dict[str, list[dict]] = {n["id"]: [] for n in nodes}
+        out_edges: dict[str, list[dict[str, Any]]] = {n["id"]: [] for n in nodes}
+        in_edges: dict[str, list[dict[str, Any]]] = {n["id"]: [] for n in nodes}
         for edge in edges:
             src = edge["source"]
             tgt = edge["target"]
@@ -129,13 +110,14 @@ class NodeGraphExecutor:
             logger.warning("Cycle detected in rule graph; executing in arbitrary order")
 
         outputs: dict[str, NodeOutputs] = {}
-        trace: list[dict] | None = [] if collect_trace else None
-        match_results: list[dict] = []
+        trace: list[dict[str, Any]] | None = [] if collect_trace else None
+        match_results: list[dict[str, Any]] = []
 
         for nid in sorted_ids:
             node = node_map[nid]
-            handler = get_handler(node["type"])
-            if handler is None:
+            try:
+                handler = NodeRegistry.create(node["type"], node.get("config", {}))
+            except KeyError:
                 logger.warning("Unknown node type '%s' (id=%s)", node["type"], nid)
                 continue
 
@@ -159,7 +141,7 @@ class NodeGraphExecutor:
 
             logger.debug("Executing node %s (%s)", nid, node["type"])
 
-            result = await handler(node.get("config", {}), track, inputs)
+            result = await handler(track, inputs)
 
             outputs[nid] = result
 
@@ -188,7 +170,7 @@ class NodeGraphExecutor:
 # ─── Match Engine ──────────────────────────────────────────────
 
 
-def _rule_canvas(rule: MatchRule) -> dict:
+def _rule_canvas(rule: MatchRule) -> dict[str, Any]:
     """Convert a MatchRule's yaml_content to a canvas dict for the executor."""
     from src.app.match_rules.parser import yaml_to_canvas
     from src.app.match_rules.validator import validate_rule_yaml
@@ -212,10 +194,10 @@ class MatchEngine:
         track: TrackMetadata,
         rule_ids: list[int] | None = None,
         rules: list[MatchRule] | None = None,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         if rules is None:
             rules = await self._load_rules(rule_ids)
-        all_matches: list[dict] = []
+        all_matches: list[dict[str, Any]] = []
         for rule in rules:
             try:
                 canvas = _rule_canvas(rule)
@@ -234,11 +216,11 @@ class MatchEngine:
         track: TrackMetadata,
         rule_ids: list[int] | None = None,
         rules: list[MatchRule] | None = None,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Execute rules and return full execution trace for debugging."""
         if rules is None:
             rules = await self._load_rules(rule_ids)
-        traces: list[dict] = []
+        traces: list[dict[str, Any]] = []
         for rule in rules:
             try:
                 canvas = _rule_canvas(rule)

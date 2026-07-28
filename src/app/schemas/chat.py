@@ -2,6 +2,7 @@
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -9,7 +10,7 @@ from pydantic import BaseModel, Field
 class ChatRequest(BaseModel):
     """Request payload for chat endpoint."""
 
-    messages: list[dict] = Field(..., description="List of chat messages")
+    messages: list[dict[str, Any]] = Field(..., description="List of chat messages")
     thread_id: str = Field(
         default_factory=lambda: str(uuid.uuid4()),
         description="Thread ID for conversation persistence",
@@ -29,7 +30,7 @@ class ChatFlowItem(BaseModel):
     """
 
     name: str | None = None
-    args: dict | None = None
+    args: dict[str, Any] | None = None
     result: str | None = None
     status: str | None = None
 

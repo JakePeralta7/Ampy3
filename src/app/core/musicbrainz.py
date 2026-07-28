@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import re
 import urllib.parse
+from typing import Any
 
 import requests
 
@@ -21,7 +22,7 @@ class MusicBrainzResolver:
     def __init__(self, user_agent: str = "ampy3/0.1.0"):
         self.headers = {"User-Agent": user_agent}
 
-    def _get(self, endpoint: str, params: dict) -> dict:
+    def _get(self, endpoint: str, params: dict[str, Any]) -> dict[str, Any]:
         url = f"{self.BASE_URL}/{endpoint}"
         query = params.get("query", "")
         logger.debug(f"[MusicBrainz] Searching {endpoint} with query: {query}")
@@ -36,7 +37,7 @@ class MusicBrainzResolver:
 
     def search_recording(
         self, title: str, artist: str | None = None, duration_ms: int | None = None
-    ) -> dict | None:
+    ) -> dict[str, Any] | None:
         rec_params = {"recording": title, "fmt": "json", "limit": 5}
         if artist:
             rec_params["arid"] = artist  # placeholder - will use discogs approach
@@ -50,12 +51,12 @@ class MusicBrainzResolver:
         best = self._best_match(recordings, title, artist, duration_ms)
         return best
 
-    def lookup_artist(self, name: str) -> dict | None:
+    def lookup_artist(self, name: str) -> dict[str, Any] | None:
         result = self._get("artist", {"query": f"artist:{name}", "fmt": "json"})
         artists = result.get("artists", [])
         return artists[0] if artists else None
 
-    def lookup_release_group(self, title: str, artist_name: str | None = None) -> dict | None:
+    def lookup_release_group(self, title: str, artist_name: str | None = None) -> dict[str, Any] | None:
         query = f"releasetitle:{title}"
         if artist_name:
             query += f' artist:"{artist_name}"'
@@ -63,7 +64,7 @@ class MusicBrainzResolver:
         groups = result.get("release-group-list", [])
         return groups[0] if groups else None
 
-    def search_by_tag(self, tag: str, entity: str = "artist", limit: int = 10) -> list[dict]:
+    def search_by_tag(self, tag: str, entity: str = "artist", limit: int = 10) -> list[dict[str, Any]]:
         """Search MusicBrainz by genre/style tag.
 
         Use this to find artists, releases, or recordings by genre (e.g. "chillout",
@@ -112,7 +113,7 @@ class MusicBrainzResolver:
             items.append(entry)
         return items
 
-    def search_artists(self, query: str, limit: int = 10) -> list[dict]:
+    def search_artists(self, query: str, limit: int = 10) -> list[dict[str, Any]]:
         """Search MusicBrainz for artists matching the query.
 
         Args:
@@ -140,7 +141,7 @@ class MusicBrainzResolver:
             )
         return artists
 
-    def search_releases(self, query: str, artist: str = "", limit: int = 10) -> list[dict]:
+    def search_releases(self, query: str, artist: str = "", limit: int = 10) -> list[dict[str, Any]]:
         """Search MusicBrainz for releases/albums matching the query.
 
         Args:
@@ -171,7 +172,7 @@ class MusicBrainzResolver:
             )
         return releases
 
-    def search_recordings(self, query: str, artist: str = "", limit: int = 10) -> list[dict]:
+    def search_recordings(self, query: str, artist: str = "", limit: int = 10) -> list[dict[str, Any]]:
         """Search MusicBrainz for recordings/tracks matching the query.
 
         Args:
@@ -199,7 +200,7 @@ class MusicBrainzResolver:
             )
         return recordings
 
-    def get_artist_releases(self, artist_mbid: str, limit: int = 25) -> list[dict]:
+    def get_artist_releases(self, artist_mbid: str, limit: int = 25) -> list[dict[str, Any]]:
         """Get all releases for an artist by their MusicBrainz ID.
 
         Args:
@@ -238,7 +239,7 @@ class MusicBrainzResolver:
             )
         return releases
 
-    def get_release_tracks(self, release_mbid: str) -> list[dict]:
+    def get_release_tracks(self, release_mbid: str) -> list[dict[str, Any]]:
         """Get all tracks in a release by its MusicBrainz ID.
 
         Args:
@@ -272,7 +273,7 @@ class MusicBrainzResolver:
                 )
         return tracks
 
-    def lookup_release(self, mbid: str) -> dict | None:
+    def lookup_release(self, mbid: str) -> dict[str, Any] | None:
         try:
             return self._get(
                 "release",
@@ -283,7 +284,7 @@ class MusicBrainzResolver:
             return None
 
     @staticmethod
-    def _artist_name(artist_credit: list | None) -> str:
+    def _artist_name(artist_credit: list[Any] | None) -> str:
         """Extract the primary artist name from a MusicBrainz artist-credit list."""
         if not isinstance(artist_credit, list) or not artist_credit:
             return ""
@@ -298,11 +299,11 @@ class MusicBrainzResolver:
         return normalize(text, strip_brackets=True, collapse_whitespace=True)
 
     def _best_match(
-        self, recordings: list[dict], title: str, artist: str | None, duration_ms: int | None
-    ) -> dict | None:
+        self, recordings: list[dict[str, Any]], title: str, artist: str | None, duration_ms: int | None
+    ) -> dict[str, Any] | None:
         norm_title = self._normalize(title)
         norm_artist = self._normalize(artist) if artist else ""
-        scored: list[tuple[int, dict]] = []
+        scored: list[tuple[int, dict[str, Any]]] = []
         for rec in recordings:
             score = 0
             rec_title = rec.get("title", "") or ""

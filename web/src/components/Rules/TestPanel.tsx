@@ -14,8 +14,9 @@ import {
   XCircle,
 } from "lucide-react";
 import { useCallback, useState } from "react";
-import { playlistsAPI, type UnmatchedTrack } from "../../api/playlists";
 import { matchRulesAPI, type TestResponse, type TrackTestInput } from "../../api/rules";
+import { syncsAPI, type UnmatchedTrack } from "../../api/syncs";
+import { TARGET_JELLYFIN, TARGET_PLEX } from "../../lib/constants";
 import { Button } from "../ui/Button";
 
 interface TestPanelProps {
@@ -27,6 +28,7 @@ export function TestPanel({ ruleId, onTestResult }: TestPanelProps) {
   const [title, setTitle] = useState("");
   const [artist, setArtist] = useState("");
   const [album, setAlbum] = useState("");
+  const [targetId, setTargetId] = useState<string>(TARGET_PLEX);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<TestResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -62,7 +64,7 @@ export function TestPanel({ ruleId, onTestResult }: TestPanelProps) {
     try {
       const track: TrackTestInput = { title, artist_name: artist, album_name: album || undefined };
       const ruleIds = ruleId ? [ruleId] : undefined;
-      const res = await matchRulesAPI.test(track, ruleIds);
+      const res = await matchRulesAPI.test(track, ruleIds, targetId);
       setResult(res);
       setExpandedTraces(new Set(res.matches?.length ? res.matches.map((m) => m.rule_id) : []));
       onTestResult?.(res);
@@ -73,7 +75,7 @@ export function TestPanel({ ruleId, onTestResult }: TestPanelProps) {
     } finally {
       setLoading(false);
     }
-  }, [title, artist, album, ruleId, onTestResult]);
+  }, [title, artist, album, ruleId, targetId, onTestResult]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -96,7 +98,7 @@ export function TestPanel({ ruleId, onTestResult }: TestPanelProps) {
     if (pickerTracks.length === 0) {
       setPickerLoading(true);
       try {
-        const tracks = await playlistsAPI.getUnmatchedTracks(100);
+        const tracks = await syncsAPI.getUnmatchedTracks(100);
         setPickerTracks(tracks);
       } catch {
         setPickerTracks([]);
@@ -194,6 +196,18 @@ export function TestPanel({ ruleId, onTestResult }: TestPanelProps) {
               placeholder="Album (optional)"
               disabled={loading}
             />
+          </div>
+          <div>
+            <label className="block text-xs text-fg-subtle mb-1">Target</label>
+            <select
+              value={targetId}
+              onChange={(e) => setTargetId(e.target.value)}
+              className="px-2.5 py-1.5 text-xs bg-bg-surface border border-border rounded-sm focus:outline-none focus:ring-1 focus:ring-border-focus text-fg"
+              disabled={loading}
+            >
+              <option value={TARGET_PLEX}>Plex</option>
+              <option value={TARGET_JELLYFIN}>Jellyfin</option>
+            </select>
           </div>
           <Button
             onClick={handleRun}
@@ -350,11 +364,11 @@ export function TestPanel({ ruleId, onTestResult }: TestPanelProps) {
                             <span className="text-fg truncate">{String(m.result.album_name)}</span>
                           </div>
                         )}
-                        {m.result.plex_id != null && (
+                        {m.result.item_id != null && (
                           <div className="flex gap-2">
-                            <span className="font-medium text-fg-subtle w-10 shrink-0">Plex</span>
+                            <span className="font-medium text-fg-subtle w-10 shrink-0">ID</span>
                             <span className="font-mono text-fg truncate text-xs">
-                              {String(m.result.plex_id)}
+                              {String(m.result.item_id)}
                             </span>
                           </div>
                         )}

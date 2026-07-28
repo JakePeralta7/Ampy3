@@ -6,6 +6,7 @@ engine.  They have no dependency on any specific media server.
 
 import logging
 import re
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -146,10 +147,10 @@ def _artist_similarity(search_artist: str, candidate_artist: str) -> float:
 
 def _best_match(
     search_title: str,
-    candidates: list[dict],
+    candidates: list[dict[str, Any]],
     threshold: float = 0.75,
     search_artist: str | None = None,
-) -> dict | None:
+) -> dict[str, Any] | None:
     """Find the best matching track from a list of candidates.
 
     When search_artist is provided, uses a combined title + artist

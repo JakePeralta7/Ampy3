@@ -15,7 +15,7 @@ import src.app.core.nodes.transform  # noqa: F401
 from src.app.core.nodes.base import (  # noqa: F401
     NodeConfig,
     NodeHandlerBase,
-    NodeHandlerProtocol,
     NodeInputs,
     NodeOutputs,
 )
+from src.app.core.nodes.registry import NodeRegistry  # noqa: F401

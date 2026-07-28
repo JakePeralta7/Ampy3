@@ -28,11 +28,11 @@ tests/                # Pytest tests
 ### Backend (Python)
 
 ```bash
+# Format
+black src/ tests/ alembic/ migrate.py
+
 # Lint
 ruff check src/ tests/
-
-# Type check
-mypy src/
 
 # Run all tests
 pytest
@@ -84,10 +84,9 @@ Alembic migrations run automatically at API startup via `src/app/db.py:init_db()
 - **pytest asyncio_mode**: Set to `"auto"` in `pyproject.toml` — no need for `@pytest.mark.asyncio`.
 - **conftest.py**: Sets default env vars (`PLEX_HOST`, `PLEX_TOKEN`, etc.) before imports so the app doesn't crash on missing config.
 
-## Lint / format / typecheck config
+## Lint / format config
 
-- **Python**: Ruff (`pyproject.toml`). Line length 100. Target py312. Ignores `F401` (unused imports). Selects: E, F, I, N, W, UP, B, SIM.
-- **Python**: Mypy strict mode, but `disallow_untyped_defs = false`.
+- **Python**: Black + Ruff (`pyproject.toml`). Line length 100. Target py314. Ruff selects: E, F, I, N, W, UP, B, SIM. Ignores `F401`.
 - **Frontend**: Biome (`web/biome.json`). Space indent, line width 100. Recommended preset with several a11y rules disabled.
 - **No pre-commit hooks or CI config** in this repo.
 

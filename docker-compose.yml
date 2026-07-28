@@ -5,6 +5,7 @@ services:
       - POSTGRES_USER=ampy3
       - POSTGRES_PASSWORD=ampy3
       - POSTGRES_DB=ampy3
+      - POSTGRES_INITDB_ARGS=-c max_connections=200
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
@@ -20,6 +21,11 @@ services:
       target: web
     ports:
       - ${APP_PORT:-8000}:8000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      retries: 3
+      start_period: 15s
     depends_on:
       valkey:
         condition: service_healthy
@@ -30,7 +36,7 @@ services:
       - OLLAMA_MODEL=${OLLAMA_MODEL:-gemma4-e4b-128:latest}
       - OLLAMA_TIMEOUT=${OLLAMA_TIMEOUT:-120}
       - YT_DLP_COOKIES=/cookies/cookies.txt
-      - DATABASE_URL=postgresql://ampy3:ampy3@postgres:5432/ampy3
+      - DATABASE_URL=${DATABASE_URL:-postgresql://ampy3:ampy3@postgres:5432/ampy3}
       - REQUIRE_AUTH=${REQUIRE_AUTH:-false}
       - APP_URL=${APP_URL:-http://localhost:8000}
       - SECRET_KEY=${SECRET_KEY:-}
@@ -49,8 +55,11 @@ services:
       postgres:
         condition: service_healthy
     environment:
+      - OLLAMA_HOST=${OLLAMA_HOST:-http://localhost:11434}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-gemma4-e4b-128:latest}
+      - OLLAMA_TIMEOUT=${OLLAMA_TIMEOUT:-120}
       - YT_DLP_COOKIES=/cookies/cookies.txt
-      - DATABASE_URL=postgresql://ampy3:ampy3@postgres:5432/ampy3
+      - DATABASE_URL=${DATABASE_URL:-postgresql://ampy3:ampy3@postgres:5432/ampy3}
       - CELERY_WORKER_CONCURRENCY=${CELERY_WORKER_CONCURRENCY:-1}
       - CELERY_LOG_LEVEL=${CELERY_LOG_LEVEL:-info}
     volumes:

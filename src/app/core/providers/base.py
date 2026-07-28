@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from typing import Any
 
 
 class BaseMetadataProvider(ABC):
@@ -26,7 +27,7 @@ class BaseMetadataProvider(ABC):
         title: str,
         artist: str | None = None,
         duration_ms: int | None = None,
-    ) -> dict | None:
+    ) -> dict[str, Any] | None:
         """Search for a recording by title/artist/duration and return the best match."""
         ...
 
@@ -36,19 +37,19 @@ class BaseMetadataProvider(ABC):
         query: str,
         artist: str = "",
         limit: int = 10,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Return a list of recording dicts matching *query*."""
         ...
 
     # ── artist search ─────────────────────────────────────────────────
 
     @abstractmethod
-    def lookup_artist(self, name: str) -> dict | None:
+    def lookup_artist(self, name: str) -> dict[str, Any] | None:
         """Look up a single artist by name."""
         ...
 
     @abstractmethod
-    def search_artists(self, query: str, limit: int = 10) -> list[dict]:
+    def search_artists(self, query: str, limit: int = 10) -> list[dict[str, Any]]:
         """Search for artists matching *query*."""
         ...
 
@@ -59,7 +60,7 @@ class BaseMetadataProvider(ABC):
         self,
         title: str,
         artist_name: str | None = None,
-    ) -> dict | None:
+    ) -> dict[str, Any] | None:
         """Look up a release group by title (and optional artist)."""
         ...
 
@@ -69,12 +70,12 @@ class BaseMetadataProvider(ABC):
         query: str,
         artist: str = "",
         limit: int = 10,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Search for releases/albums matching *query*."""
         ...
 
     @abstractmethod
-    def lookup_release(self, mbid: str) -> dict | None:
+    def lookup_release(self, mbid: str) -> dict[str, Any] | None:
         """Look up a specific release by its provider-specific ID."""
         ...
 
@@ -83,12 +84,12 @@ class BaseMetadataProvider(ABC):
         self,
         artist_id: str,
         limit: int = 25,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Get releases for an artist by their provider-specific ID."""
         ...
 
     @abstractmethod
-    def get_release_tracks(self, release_id: str) -> list[dict]:
+    def get_release_tracks(self, release_id: str) -> list[dict[str, Any]]:
         """Get all tracks in a release by its provider-specific ID."""
         ...
 
@@ -100,6 +101,6 @@ class BaseMetadataProvider(ABC):
         tag: str,
         entity: str = "artist",
         limit: int = 10,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Search for entities by genre / style tag."""
         ...

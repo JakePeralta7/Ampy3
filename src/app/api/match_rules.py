@@ -1,6 +1,7 @@
 """Match rules endpoints."""
 
 import logging
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -32,7 +33,7 @@ router = APIRouter(prefix="/api/v1/match-rules", tags=["match-rules"])
 
 @router.get("", response_model=list[MatchRuleOut])
 async def list_rules(
-    _user: dict = Depends(get_current_user),  # noqa: B008
+    _user: dict[str, Any] = Depends(get_current_user),  # noqa: B008
 ):
     """List all match rules ordered by priority."""
     from sqlalchemy import select
@@ -43,6 +44,8 @@ async def list_rules(
             result = await session.execute(stmt)
             rules = result.scalars().all()
             return [_model_to_out(r) for r in rules]
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error listing rules: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to list rules: {str(e)}") from e
@@ -51,7 +54,7 @@ async def list_rules(
 @router.get("/{rule_id}", response_model=MatchRuleOut)
 async def get_rule(
     rule_id: int,
-    _user: dict = Depends(get_current_user),  # noqa: B008
+    _user: dict[str, Any] = Depends(get_current_user),  # noqa: B008
 ):
     """Get a specific match rule by ID."""
     from sqlalchemy import select
@@ -74,7 +77,7 @@ async def get_rule(
 @router.post("", response_model=MatchRuleOut, status_code=201)
 async def create_rule(
     body: MatchRuleCreate,
-    _user: dict = Depends(get_current_user),  # noqa: B008
+    _user: dict[str, Any] = Depends(get_current_user),  # noqa: B008
 ):
     """Create a new user-defined match rule from a YAML definition."""
     from sqlalchemy import func, select
@@ -120,7 +123,7 @@ async def create_rule(
 async def clone_rule(
     rule_id: int,
     body: MatchRuleClone,
-    _user: dict = Depends(get_current_user),  # noqa: B008
+    _user: dict[str, Any] = Depends(get_current_user),  # noqa: B008
 ):
     """Clone any rule (especially useful for immutable default rules).
 
@@ -172,7 +175,7 @@ async def clone_rule(
 @router.put("/reorder", response_model=list[MatchRuleOut])
 async def reorder_rules(
     body: list[ReorderInput],
-    _user: dict = Depends(get_current_user),  # noqa: B008
+    _user: dict[str, Any] = Depends(get_current_user),  # noqa: B008
 ):
     """Reorder match rules by updating their priorities.
 
@@ -214,6 +217,8 @@ async def reorder_rules(
             result = await session.execute(stmt)
             rules = result.scalars().all()
             return [_model_to_out(r) for r in rules]
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error reordering rules: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to reorder rules: {str(e)}") from e
@@ -222,7 +227,7 @@ async def reorder_rules(
 @router.post("/test", response_model=MatchRuleTestResponse)
 async def test_rules(
     body: TestRequest,
-    _user: dict = Depends(get_current_user),  # noqa: B008
+    _user: dict[str, Any] = Depends(get_current_user),  # noqa: B008
 ):
     """Test match rules against a track to preview matching behavior."""
     try:
@@ -234,8 +239,8 @@ async def test_rules(
             source_id=body.track.source_id,
         )
 
-        plex_client = await get_sync_target()
-        engine = MatchEngine(plex_client)
+        target = await get_sync_target(body.target_id or "Plex")
+        engine = MatchEngine(target)
 
         traces = await engine.trace(track, rule_ids=body.rule_ids)
 
@@ -266,6 +271,8 @@ async def test_rules(
             matches=matches,
             match_results=match_results,
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error testing rules: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to test rules: {str(e)}") from e
@@ -275,7 +282,7 @@ async def test_rules(
 async def update_rule(
     rule_id: int,
     body: MatchRuleUpdate,
-    _user: dict = Depends(get_current_user),  # noqa: B008
+    _user: dict[str, Any] = Depends(get_current_user),  # noqa: B008
 ):
     """Update a match rule's name, active state, or YAML definition.
 
@@ -362,7 +369,7 @@ async def update_rule(
 @router.delete("/{rule_id}", response_model=MatchRuleDeleteResponse)
 async def delete_rule(
     rule_id: int,
-    _user: dict = Depends(get_current_user),  # noqa: B008
+    _user: dict[str, Any] = Depends(get_current_user),  # noqa: B008
 ):
     """Delete a match rule (default rules cannot be deleted)."""
     from sqlalchemy import select

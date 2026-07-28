@@ -34,8 +34,17 @@ export default {
           500: "hsl(var(--danger-500) / <alpha-value>)",
           fg: "hsl(var(--danger-fg) / <alpha-value>)",
         },
-        success: { 500: "hsl(var(--success-500) / <alpha-value>)" },
-        warn: { 500: "hsl(var(--warn-500) / <alpha-value>)" },
+        success: {
+          50: "hsl(var(--success-50) / <alpha-value>)",
+          500: "hsl(var(--success-500) / <alpha-value>)",
+        },
+        warning: {
+          50: "hsl(var(--warning-50) / <alpha-value>)",
+          300: "hsl(var(--warning-300) / <alpha-value>)",
+          700: "hsl(var(--warning-700) / <alpha-value>)",
+          800: "hsl(var(--warning-800) / <alpha-value>)",
+          900: "hsl(var(--warning-900) / <alpha-value>)",
+        },
       },
       borderRadius: {
         sm: "var(--radius-sm)",

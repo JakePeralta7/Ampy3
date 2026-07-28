@@ -27,11 +27,12 @@ WORKDIR /app
 
 # Install dependencies first (cached until pyproject.toml changes)
 COPY pyproject.toml ./
-# Need to copy src for setuptools to find packages when installing in editable mode
-COPY src/ ./src/
-RUN pip install --no-cache-dir --prefer-binary --prefix=/install -e "."
+# Stub src so pip can resolve the editable package; deleted after install
+RUN mkdir -p src/app && touch src/app/__init__.py
+RUN pip install --no-cache-dir --prefer-binary --prefix=/install . && rm -rf src
 
-# Copy alembic migrations after install so code changes don't invalidate the pip layer
+# Copy source and alembic after deps so code changes don't invalidate pip layer
+COPY src/ ./src/
 COPY alembic/ ./alembic/
 
 

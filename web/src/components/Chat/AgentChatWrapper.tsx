@@ -381,7 +381,7 @@ const FlowItemDisplay: React.FC<{
   onToggle: () => void;
 }> = ({ item, isExpanded, onToggle }) => {
   const statusStyles: Record<string, string> = {
-    pending: "bg-warn-500/5 border-warn-500/30 text-warn-500",
+    pending: "bg-warning-50/5 border-warning-300/30 text-warning-700",
     completed: "bg-success-500/5 border-success-500/30 text-success-500",
     failed: "bg-danger-500/5 border-danger-500/30 text-danger-500",
   };

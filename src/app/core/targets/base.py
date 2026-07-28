@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, ClassVar
+
+logger = logging.getLogger(__name__)
 
 
 class BaseTarget(ABC):
@@ -13,10 +16,10 @@ class BaseTarget(ABC):
     updated — e.g. Plex Media Server, Jellyfin, Navidrome, etc.
     """
 
-    target_id: str
-    """Unique identifier, e.g. ``"plex"``."""
+    target_id: ClassVar[str]
+    """Unique identifier, e.g. ``"Plex"``."""
 
-    display_name: str
+    display_name: ClassVar[str]
     """Human-readable name, e.g. ``"Plex Media Server"``."""
 
     # ── Playlist operations ──────────────────────────────────────
@@ -28,12 +31,10 @@ class BaseTarget(ABC):
         Returns a list of dicts with at least ``title``, ``id``,
         ``track_count``.
         """
-        ...
 
     @abstractmethod
     async def get_playlist_details(self, playlist_id: str) -> dict[str, Any] | None:
         """Return full details for a single playlist."""
-        ...
 
     @abstractmethod
     async def create_playlist(
@@ -46,7 +47,6 @@ class BaseTarget(ABC):
 
         Returns the new playlist ID on success, ``None`` on failure.
         """
-        ...
 
     @abstractmethod
     async def update_playlist(self, playlist_id: str, items: list[dict[str, Any]]) -> bool:
@@ -54,56 +54,46 @@ class BaseTarget(ABC):
 
         Returns ``True`` on success.
         """
-        ...
 
     @abstractmethod
     async def delete_playlist(self, playlist_id: str) -> bool:
         """Delete a playlist by ID."""
-        ...
 
     @abstractmethod
     async def get_items_in_playlist(self, playlist_id: str) -> list[dict[str, Any]]:
         """Return all track items in a playlist."""
-        ...
 
     # ── Playlist lookup ──────────────────────────────────────────
 
+    @abstractmethod
     async def get_playlist_by_name(self, name: str) -> dict[str, Any] | None:
         """Find a playlist by exact name.
 
-        Returns the playlist dict or ``None``.  Override in subclasses
-        that support name-based lookup.
+        Returns the playlist dict or ``None``.
         """
-        return None
 
+    @abstractmethod
     async def get_playlist_by_source_id(self, source_id: str) -> dict[str, Any] | None:
         """Find a playlist by its source platform ID stored in metadata.
 
-        Returns the playlist dict or ``None``.  Override in subclasses
-        that persist source IDs in playlist metadata.
+        Returns the playlist dict or ``None``.
         """
-        return None
 
     # ── Item management ──────────────────────────────────────────
 
+    @abstractmethod
     async def add_items_to_playlist(self, playlist_id: str, item_ids: list[str]) -> int:
         """Append items to an existing playlist.
 
-        Returns the number of items added.  Subclasses should override
-        this when incremental adds are supported.
+        Returns the number of items added.
         """
-        raise NotImplementedError(
-            f"{type(self).__name__} does not support adding items to a playlist"
-        )
 
+    @abstractmethod
     async def remove_items_from_playlist(self, playlist_id: str, item_ids: list[str]) -> int:
         """Remove items from a playlist.
 
         Returns the number of items removed.
         """
-        raise NotImplementedError(
-            f"{type(self).__name__} does not support removing items from a playlist"
-        )
 
     # ── Library search ───────────────────────────────────────────
 
@@ -117,32 +107,29 @@ class BaseTarget(ABC):
     ) -> list[dict[str, Any]]:
         """Search the media library for tracks matching the given criteria.
 
-        Returns a list of dicts with at least ``item_id``/``id``,
+        Returns a list of dicts with at least ``item_id``/`id``,
         ``title``, ``artist_name``, ``album_name``, ``duration_ms``.
         """
-        ...
 
+    @abstractmethod
     async def search_artist_tracks(self, artist: str, genre: str = "") -> list[dict[str, Any]]:
-        """Search the library for all tracks by an artist.
+        """Search the library for all tracks by an artist."""
 
-        By default delegates to :meth:`search_library`.  Subclasses may
-        override with a more specialised implementation (e.g. expanding
-        artist directories).
-        """
-        return await self.search_library(artist=artist, genre=genre)
-
+    @abstractmethod
     async def search_title_only(self, title: str) -> list[dict[str, Any]]:
-        """Search the library by title only.
+        """Search the library by title only."""
 
-        By default delegates to :meth:`search_library`.  Subclasses may
-        override with a more specialised implementation (e.g. direct
-        title search without artist expansion).
+    # ── Connection test ─────────────────────────────────────────
+
+    @abstractmethod
+    async def test_connection(self) -> None:
+        """Verify connectivity with the target server.
+
+        Raises an exception if the connection fails. Returns ``None`` on success.
         """
-        return await self.search_library(title=title)
 
     # ── Lifecycle ────────────────────────────────────────────────
 
     @abstractmethod
     async def close(self) -> None:
         """Release any resources held by this target."""
-        ...

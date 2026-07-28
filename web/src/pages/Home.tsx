@@ -12,6 +12,7 @@ import { PageLayout } from "../components/Layout/PageLayout";
 import { Card } from "../components/ui/Card";
 import { StatCard } from "../components/ui/StatCard";
 import { useScheduledSyncs } from "../hooks/useScheduledSyncs";
+import { getSourceLabel } from "../lib/constants";
 import { formatNextSync, formatRelativeTime } from "../lib/utils";
 
 export function HomePage() {
@@ -34,7 +35,7 @@ export function HomePage() {
       .find((t) => new Date(t) > new Date());
     const sources = syncs.reduce(
       (acc, s) => {
-        const label = s.source === "youtube_music" ? "YouTube Music" : s.source;
+        const label = getSourceLabel(s.source);
         acc[label] = (acc[label] || 0) + 1;
         return acc;
       },
@@ -86,7 +87,7 @@ export function HomePage() {
             <Card variant="bordered">
               <StatCard
                 icon={<Pause className="h-5 w-5" />}
-                iconClassName="bg-warn-500/10 text-warn-500"
+                iconClassName="bg-warning-50/10 text-warning-700"
                 label="Paused"
               >
                 {stats.paused}

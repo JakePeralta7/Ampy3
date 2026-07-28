@@ -1,8 +1,10 @@
 import type React from "react";
 import { useCallback, useEffect, useState } from "react";
 import type { CreateScheduledSyncInput, ScheduledSync } from "../../api/schedules";
+import { SOURCE_YOUTUBE_MUSIC, TARGET_PLEX } from "../../lib/constants";
 import { INPUT_STYLES, SELECT_STYLES } from "../../lib/styles";
 import { Button } from "../ui/Button";
+import { TargetSelectDropdown } from "../ui/TargetSelectDropdown";
 
 interface ScheduleFormProps {
   onSubmit: (input: CreateScheduledSyncInput) => Promise<void>;
@@ -20,11 +22,7 @@ const SCHEDULE_INTERVALS = [
   { value: "weekly", label: "Weekly" },
 ];
 
-const SOURCES = [{ value: "youtube_music", label: "YouTube Music" }];
-const TARGETS = [
-  { value: "plex", label: "Plex" },
-  { value: "jellyfin", label: "Jellyfin" },
-];
+const SOURCES = [{ value: SOURCE_YOUTUBE_MUSIC, label: "YouTube Music" }];
 
 export function ScheduleForm({
   onSubmit,
@@ -33,32 +31,29 @@ export function ScheduleForm({
   isLoading = false,
   error,
 }: ScheduleFormProps) {
-  const [source, setSource] = useState("youtube_music");
-  const [targetId, setTargetId] = useState("plex");
+  const [source, setSource] = useState(SOURCE_YOUTUBE_MUSIC);
+  const [targetIds, setTargetIds] = useState<string[]>([TARGET_PLEX]);
   const [sourceUrl, setSourceUrl] = useState("");
   const [targetPlaylistName, setTargetPlaylistName] = useState("");
   const [scheduleInterval, setScheduleInterval] = useState("daily");
-  const [replaceExisting, setReplaceExisting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
   const resetForm = useCallback(() => {
-    setSource("youtube_music");
-    setTargetId("plex");
+    setSource(SOURCE_YOUTUBE_MUSIC);
+    setTargetIds([TARGET_PLEX]);
     setSourceUrl("");
     setTargetPlaylistName("");
     setScheduleInterval("daily");
-    setReplaceExisting(false);
     setFormError(null);
   }, []);
 
   useEffect(() => {
     if (editingSync) {
       setSource(editingSync.source);
-      setTargetId(editingSync.target_id || "plex");
+      setTargetIds(editingSync.target_ids || [TARGET_PLEX]);
       setSourceUrl(editingSync.source_url);
       setTargetPlaylistName(editingSync.target_playlist_name);
       setScheduleInterval(editingSync.schedule_interval);
-      setReplaceExisting(editingSync.replace_existing);
     } else {
       resetForm();
     }
@@ -76,15 +71,18 @@ export function ScheduleForm({
       setFormError("Playlist name is required");
       return;
     }
+    if (targetIds.length === 0) {
+      setFormError("At least one target is required");
+      return;
+    }
 
     try {
       const input: CreateScheduledSyncInput = {
         source,
-        target_id: targetId,
+        target_ids: targetIds,
         source_url: sourceUrl.trim(),
         target_playlist_name: targetPlaylistName.trim(),
         schedule_interval: scheduleInterval,
-        replace_existing: replaceExisting,
       };
 
       await onSubmit(input);
@@ -125,19 +123,10 @@ export function ScheduleForm({
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-fg-muted mb-1">Target *</label>
-          <select
-            value={targetId}
-            onChange={(e) => setTargetId(e.target.value)}
-            className={SELECT_STYLES}
-            disabled={isLoading}
-          >
-            {TARGETS.map((target) => (
-              <option key={target.value} value={target.value}>
-                {target.label}
-              </option>
-            ))}
-          </select>
+          <label className="block text-sm font-medium text-fg-muted mb-2">
+            Targets * (select multiple)
+          </label>
+          <TargetSelectDropdown value={targetIds} onChange={setTargetIds} disabled={isLoading} />
         </div>
 
         <div>
@@ -178,19 +167,6 @@ export function ScheduleForm({
               </option>
             ))}
           </select>
-        </div>
-
-        <div>
-          <label className="flex items-center text-sm font-medium text-fg-muted">
-            <input
-              type="checkbox"
-              checked={replaceExisting}
-              onChange={(e) => setReplaceExisting(e.target.checked)}
-              className="w-4 h-4 rounded border-border mr-2 text-accent-500 focus:ring-border-focus disabled:opacity-50"
-              disabled={isLoading}
-            />
-            Replace existing playlist on sync (otherwise merge)
-          </label>
         </div>
 
         <div className="flex gap-2 pt-4">

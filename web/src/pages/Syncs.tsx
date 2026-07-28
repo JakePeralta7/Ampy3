@@ -30,9 +30,9 @@ export function SyncsPage() {
     playlistDetails,
     loading: detailsLoading,
     error: detailsError,
-    rematchingTracks,
+    matchingTracks,
     fetchPlaylistTracks,
-    rematchTrack,
+    matchTrack,
     clearPlaylistDetails,
   } = usePlaylistDetails();
 
@@ -45,6 +45,7 @@ export function SyncsPage() {
   const [deleteConfirmSync, setDeleteConfirmSync] = useState<ScheduledSync | null>(null);
 
   const syncIdParam = searchParams.get("sync");
+  const tabParam = searchParams.get("tab");
   const selectedSync = useMemo(() => {
     if (!syncIdParam || syncs.length === 0) return null;
     return syncs.find((s) => String(s.id) === syncIdParam) ?? null;
@@ -58,11 +59,13 @@ export function SyncsPage() {
     return idx;
   }, [searchParams, playlistDetails]);
 
+  const selectedSyncId = selectedSync?.id;
+
   useEffect(() => {
-    if (selectedSync) {
-      fetchPlaylistTracks(selectedSync.id);
+    if (selectedSyncId) {
+      fetchPlaylistTracks(selectedSyncId);
     }
-  }, [selectedSync, fetchPlaylistTracks]);
+  }, [selectedSyncId, fetchPlaylistTracks]);
 
   useEffect(() => {
     if (!selectedSync) {
@@ -79,8 +82,10 @@ export function SyncsPage() {
     setFormError(null);
     try {
       if (editingSync) {
+        const targetIdsChanged =
+          JSON.stringify(input.target_ids) !== JSON.stringify(editingSync.target_ids);
         const updateInput = {
-          target_id: input.target_id !== editingSync.target_id ? input.target_id : undefined,
+          target_ids: targetIdsChanged ? input.target_ids : undefined,
           target_playlist_name:
             input.target_playlist_name !== editingSync.target_playlist_name
               ? input.target_playlist_name
@@ -88,10 +93,6 @@ export function SyncsPage() {
           schedule_interval:
             input.schedule_interval !== editingSync.schedule_interval
               ? input.schedule_interval
-              : undefined,
-          replace_existing:
-            input.replace_existing !== editingSync.replace_existing
-              ? input.replace_existing
               : undefined,
         };
         await updateSync(editingSync.id, updateInput);
@@ -183,7 +184,8 @@ export function SyncsPage() {
   };
 
   const handleViewDetails = (sync: ScheduledSync) => {
-    setSearchParams({ sync: String(sync.id) });
+    const defaultTab = sync.target_ids[0] ?? "history";
+    setSearchParams({ sync: String(sync.id), tab: defaultTab });
   };
 
   const handleCloseDetailsModal = () => {
@@ -193,14 +195,25 @@ export function SyncsPage() {
   const handleTrackSelect = (index: number) => {
     const current = searchParams.get("sync");
     if (current) {
-      setSearchParams({ sync: current, track: String(index) });
+      setSearchParams({
+        sync: current,
+        tab: searchParams.get("tab") ?? "history",
+        track: String(index),
+      });
     }
   };
 
   const handleTrackClose = () => {
     const current = searchParams.get("sync");
     if (current) {
-      setSearchParams({ sync: current });
+      setSearchParams({ sync: current, tab: searchParams.get("tab") ?? "history" });
+    }
+  };
+
+  const handleTabChange = (tabId: string) => {
+    const current = searchParams.get("sync");
+    if (current) {
+      setSearchParams({ sync: current, tab: tabId });
     }
   };
 
@@ -259,11 +272,13 @@ export function SyncsPage() {
         playlistDetails={playlistDetails}
         loading={detailsLoading}
         error={detailsError}
-        onRematchTrack={rematchTrack}
-        rematchingTracks={rematchingTracks}
+        onMatchTrack={matchTrack}
+        matchingTracks={matchingTracks}
         selectedTrackIndex={trackIndex}
         onTrackSelect={handleTrackSelect}
         onTrackClose={handleTrackClose}
+        activeTab={tabParam ?? selectedSync?.target_ids[0] ?? "history"}
+        onTabChange={handleTabChange}
       />
 
       <ConfirmDialog

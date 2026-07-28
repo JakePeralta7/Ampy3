@@ -6,11 +6,11 @@ import re
 from typing import Any
 
 from src.app.core.models import TrackMetadata
-from src.app.core.nodes.base import NodeConfig, NodeInputs, NodeOutputs
+from src.app.core.nodes.base import NodeHandlerBase, NodeInputs, NodeOutputs
 from src.app.core.nodes.registry import register_node
 
 
-def _apply_string_op(value: Any, config: dict, operation: str) -> Any:
+def _apply_string_op(value: Any, config: dict[str, Any], operation: str) -> Any:
     if operation == "lowercase":
         return str(value).lower()
     if operation == "uppercase":
@@ -58,33 +58,30 @@ def _apply_string_op(value: Any, config: dict, operation: str) -> Any:
 
 
 @register_node("transform")
-async def _handle_string_op(
-    config: NodeConfig,
-    track: TrackMetadata,
-    inputs: NodeInputs,
-) -> NodeOutputs:
-    field = config.get("field", "value")
-    target_field = config.get("target_field", field)
-    operation = config.get("operation", "lowercase")
+class TransformNode(NodeHandlerBase):
+    async def execute(self, track: TrackMetadata, inputs: NodeInputs) -> NodeOutputs:
+        field = self._config.get("field", "value")
+        target_field = self._config.get("target_field", field)
+        operation = self._config.get("operation", "lowercase")
 
-    raw_input = inputs.get("in")
+        raw_input = inputs.get("in")
 
-    if field == "value":
-        value = str(raw_input) if raw_input is not None else ""
-        result = _apply_string_op(value, config, operation)
-        return {"out": result}
+        if field == "value":
+            value = str(raw_input) if raw_input is not None else ""
+            result = _apply_string_op(value, self._config, operation)
+            return {"out": result}
 
-    track_data = raw_input if isinstance(raw_input, dict) else {}
-    if not track_data:
-        track_data = {
-            "title": track.title or "",
-            "artist_name": track.artist_name or "",
-            "album_name": track.album_name or "",
-        }
-    value = str(track_data.get(field, ""))
-    result = _apply_string_op(value, config, operation)
+        track_data = raw_input if isinstance(raw_input, dict) else {}
+        if not track_data:
+            track_data = {
+                "title": track.title or "",
+                "artist_name": track.artist_name or "",
+                "album_name": track.album_name or "",
+            }
+        value = str(track_data.get(field, ""))
+        result = _apply_string_op(value, self._config, operation)
 
-    out_data = dict(track_data)
-    if result is not None:
-        out_data[target_field] = result
-    return {"out": out_data}
+        out_data = dict(track_data)
+        if result is not None:
+            out_data[target_field] = result
+        return {"out": out_data}

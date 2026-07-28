@@ -11,8 +11,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  PYTHON_VERSION: "3.12"
-  NODE_VERSION: "22"
+  PYTHON_VERSION: "3.14"
+  NODE_VERSION: "26"
 
 jobs:
   python-lint:
@@ -108,3 +108,11 @@ jobs:
           push: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Smoke test — verify images build and web container starts
+        run: |
+          docker compose up -d postgres valkey
+          docker compose up -d web
+          sleep 10
+          docker compose ps --status running | grep web
+          docker compose down

@@ -15,6 +15,8 @@ The exported ``workflow`` object is consumed by api/chat.py via
 
 from __future__ import annotations
 
+from typing import Any
+
 from langchain_core.messages import SystemMessage
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
@@ -50,7 +52,7 @@ _test_verify_tools = ToolNode(TEST_VERIFY_TOOLS)
 # ─── Phase Node Functions ─────────────────────────────────────────────────────
 
 
-async def _gather_context_node(state: AgentState) -> dict:
+async def _gather_context_node(state: AgentState) -> dict[str, Any]:
     """Phase 1: Gather context about syncs and unmatched tracks."""
     from src.app.llm.ollama import get_llm
 
@@ -70,7 +72,7 @@ async def _gather_context_node(state: AgentState) -> dict:
     }
 
 
-async def _diagnose_node(state: AgentState) -> dict:
+async def _diagnose_node(state: AgentState) -> dict[str, Any]:
     """Phase 2: Diagnose unmatched tracks by testing them against rules."""
     from src.app.llm.ollama import get_llm
 
@@ -90,7 +92,7 @@ async def _diagnose_node(state: AgentState) -> dict:
     }
 
 
-async def _group_patterns_node(state: AgentState) -> dict:
+async def _group_patterns_node(state: AgentState) -> dict[str, Any]:
     """Phase 3: Analyze and group diagnosed patterns by root cause (analysis only, no tools)."""
     from src.app.llm.ollama import get_llm
 
@@ -110,7 +112,7 @@ async def _group_patterns_node(state: AgentState) -> dict:
     }
 
 
-async def _verify_node(state: AgentState) -> dict:
+async def _verify_node(state: AgentState) -> dict[str, Any]:
     """Phase 4: Verify that identified patterns can actually be fixed in Plex."""
     from src.app.llm.ollama import get_llm
 
@@ -130,7 +132,7 @@ async def _verify_node(state: AgentState) -> dict:
     }
 
 
-async def _create_node(state: AgentState) -> dict:
+async def _create_node(state: AgentState) -> dict[str, Any]:
     """Phase 5: Create match rules for verified patterns."""
     from src.app.llm.ollama import get_llm
 
@@ -150,7 +152,7 @@ async def _create_node(state: AgentState) -> dict:
     }
 
 
-async def _test_verify_node(state: AgentState) -> dict:
+async def _test_verify_node(state: AgentState) -> dict[str, Any]:
     """Phase 6: Re-test created rules to confirm they fix the matched tracks."""
     from src.app.llm.ollama import get_llm
 

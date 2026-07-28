@@ -1,6 +1,7 @@
 import { Pause, Pencil, Play, RotateCw, Trash2 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import type { ScheduledSync } from "../../api/schedules";
+import { getSourceLabel } from "../../lib/constants";
 import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
@@ -32,8 +33,6 @@ const INTERVAL_LABELS: Record<string, string> = {
 };
 
 function formatTargetName(targetId: string): string {
-  if (targetId === "plex") return "Plex";
-  if (targetId === "jellyfin") return "Jellyfin";
   return targetId;
 }
 
@@ -142,7 +141,7 @@ export function SchedulesList({
         filterable: true,
         cell: (sync: ScheduledSync) => (
           <span className="text-fg-muted inline-flex items-center gap-1.5 group">
-            <span>{sync.source === "youtube_music" ? "YouTube Music" : sync.source}</span>
+            <span>{getSourceLabel(sync.source)}</span>
             <CopyButton value={sync.source} label="source" />
           </span>
         ),
@@ -152,11 +151,17 @@ export function SchedulesList({
         header: "Target",
         sortable: true,
         filterable: true,
-        sortValue: (sync: ScheduledSync) => formatTargetName(sync.target_id),
+        sortValue: (sync: ScheduledSync) => sync.target_ids.map(formatTargetName).join(", "),
         cell: (sync: ScheduledSync) => (
           <span className="text-fg-muted inline-flex items-center gap-1.5 group">
-            <span>{formatTargetName(sync.target_id)}</span>
-            <CopyButton value={sync.target_id} label="target" />
+            <span className="inline-flex gap-1">
+              {sync.target_ids.map((tid) => (
+                <Badge key={tid} variant="neutral">
+                  {formatTargetName(tid)}
+                </Badge>
+              ))}
+            </span>
+            <CopyButton value={sync.target_ids.join(", ")} label="targets" />
           </span>
         ),
       },

@@ -1,14 +1,16 @@
 """Celery task definitions for playlist sync operations."""
 
 import logging
+from typing import Any
 
-from src.app.core.services.matcher import get_active_rules_sync
-from src.app.core.services.orchestrator import SyncOrchestrator
-from src.app.core.sources.registry import SourceRegistry
-from src.app.services import get_sync_target
+from celery import Celery
+
+from src.app.constants import DEFAULT_SOURCE, DEFAULT_TARGET
 from src.app.services.audit import log_event_sync
 from src.app.worker.app import celery_app
-from src.app.worker.sync_helpers import _execute_sync, _run_async, _save_sync_results
+from src.app.worker.context import SyncContext
+from src.app.worker.matcher import TrackMatcher
+from src.app.worker.pipeline import SyncPipeline
 
 logger = logging.getLogger(__name__)
 
@@ -17,98 +19,130 @@ logger = logging.getLogger(__name__)
 def sync_playlists_task(
     self,
     playlist_url: str,
-    source: str = "youtube_music",
-    target_id: str = "plex",
-    replace_existing: bool = False,
+    source: str = DEFAULT_SOURCE,
+    target_ids: list[str] | None = None,
     schedule_id: int | None = None,
     target_playlist_name: str | None = None,
 ):
+    """Fetch source playlist once, then dispatch per-target sync tasks."""
+    if not target_ids:
+        target_ids = [DEFAULT_TARGET]
+
     resource_id = str(schedule_id) if schedule_id else None
     log_event_sync(
         event_type="sync.started",
         resource_type="playlist",
         resource_id=resource_id,
-        summary=f"Sync started for {source} playlist — {playlist_url}",
+        summary=(
+            f"Sync started for {source} playlist — {playlist_url} " f"({len(target_ids)} target(s))"
+        ),
     )
 
-    rules = get_active_rules_sync()
-
     try:
-        result = _execute_sync(
-            resource_type="playlist",
-            resource_id=resource_id,
-            summary_prefix=f"Sync for {source} playlist — {playlist_url}",
-            coro_factory=lambda: _async_sync_task(
-                playlist_url,
-                source,
-                target_id,
-                replace_existing,
-                schedule_id,
-                rules,
-                target_playlist_name,
-            ),
+        title = target_playlist_name or playlist_url
+
+        result = SyncPipeline.fetch_source(
+            playlist_url,
+            source,
+            schedule_id,
+            target_ids,
+            playlist_title=title,
         )
-        return result
+        sync_id = result["sync_id"]
+        track_items = result["track_items"]
+
+        if not track_items:
+            logger.info("No tracks to match for sync %d", sync_id)
+            return {"status": "SUCCESS", "stats": {"matched": 0, "failed": 0}}
+
+        for tid in target_ids:
+            sync_target_task.delay(
+                sync_id=sync_id,
+                target_id=tid,
+                playlist_title=result["playlist_title"],
+                track_rows=result["track_rows"],
+                track_items=track_items,
+                source=source,
+                playlist_url=playlist_url,
+                resource_id=resource_id,
+            )
+
+        return {"status": "DISPATCHED", "sync_id": sync_id}
     except Exception as e:
         log_event_sync(
             event_type="sync.failed",
             resource_type="playlist",
             resource_id=resource_id,
             summary=f"Sync failed: {e} — {playlist_url}",
-            details={"error": str(e), "playlist_url": playlist_url, "source": source},
+            details={"error": str(e), "playlist_url": playlist_url},
         )
         raise self.retry(exc=e, countdown=60, max_retries=3) from e
 
 
-async def _async_sync_task(
-    playlist_url: str,
-    source: str,
-    target_id: str,
-    replace_existing: bool,
-    schedule_id: int | None = None,
-    rules=None,
-    target_playlist_name: str | None = None,
-) -> dict:
-    source_cls = SourceRegistry.get(source)
-    source_adapter = source_cls()
-    playlist_metadata = await source_adapter.get_playlist(playlist_url)
-
-    logger.debug(
-        "Fetched playlist '%s' with %d tracks",
-        playlist_metadata.title,
-        len(playlist_metadata.tracks),
+@celery_app.task(bind=True)
+def sync_target_task(
+    self,
+    sync_id: int,
+    target_id: str = DEFAULT_TARGET,
+    playlist_title: str = "",
+    track_rows: list[dict[str, Any]] | None = None,
+    track_items: list[str] | None = None,
+    source: str = DEFAULT_SOURCE,
+    playlist_url: str = "",
+    resource_id: str | None = None,
+):
+    """Match all tracks, then finalize for one target."""
+    ctx = SyncContext(
+        sync_id=sync_id,
+        target_id=target_id,
+        playlist_title=playlist_title,
+        source_url=playlist_url,
+        source=source,
     )
+    pipeline = SyncPipeline(ctx)
 
-    target = await get_sync_target(target_id)
-    orchestrator = SyncOrchestrator(target=target)
+    try:
+        stats = pipeline.run_target(track_rows or [], track_items or [])
 
-    stats = await orchestrator.sync_playlist(
-        playlist=playlist_metadata,
-        replace_existing=replace_existing,
-        rules=rules,
-        target_playlist_name=target_playlist_name,
-    )
+        log_event_sync(
+            event_type="sync.completed",
+            resource_type="playlist",
+            resource_id=resource_id,
+            summary=(
+                f"Sync for {source} playlist — {playlist_url} ({target_id}): "
+                f"{stats.get('matched', 0)} matched, "
+                f"{stats.get('failed', 0)} failed"
+            ),
+            details=stats,
+        )
+        return {"status": "SUCCESS", "stats": stats}
+    except Exception as e:
+        log_event_sync(
+            event_type="sync.failed",
+            resource_type="playlist",
+            resource_id=resource_id,
+            summary=f"Sync failed for {target_id}: {e} — {playlist_url}",
+            details={"error": str(e), "target_id": target_id},
+        )
+        raise self.retry(exc=e, countdown=60, max_retries=3) from e
 
-    track_rows = stats.pop("track_rows", [])
 
-    import asyncio
-
-    await asyncio.to_thread(
-        _save_sync_results,
-        schedule_id,
-        playlist_url,
-        source,
-        target_id,
-        playlist_metadata.title,
-        stats,
-        track_rows,
-    )
-
-    return stats
+@celery_app.task(bind=True)
+def match_track_task(
+    self,
+    sync_id: int,
+    target_id: str = DEFAULT_TARGET,
+    item_id: str | None = None,
+):
+    """Match a single track (for manual re-match from the UI)."""
+    ctx = SyncContext(sync_id=sync_id, target_id=target_id)
+    matcher = TrackMatcher(ctx)
+    return matcher.match(item_id or "")
 
 
 @celery_app.task
 def get_sync_status_task(task_id: str):
+    """Poll the Celery backend for task status and result."""
     from celery.result import AsyncResult
 
     result = AsyncResult(task_id, app=celery_app)

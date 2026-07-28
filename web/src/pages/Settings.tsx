@@ -1,4 +1,4 @@
-import { Brain, Download, Eye, EyeOff, Save, Server } from "lucide-react";
+import { Brain, Download, Save } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { type AppSettings, getSettings, updateSettings } from "../api/settings";
@@ -23,8 +23,6 @@ function SettingField({
   type?: "text" | "password" | "number";
   placeholder?: string;
 }) {
-  const [showPassword, setShowPassword] = useState(false);
-
   return (
     <div className="space-y-1.5">
       <label htmlFor={id} className="block text-sm font-medium text-fg-muted">
@@ -33,22 +31,12 @@ function SettingField({
       <div className="relative">
         <input
           id={id}
-          type={type === "password" && !showPassword ? "password" : "text"}
+          type={type === "password" ? "password" : type}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
           className={INPUT_STYLES}
         />
-        {type === "password" && (
-          <button
-            type="button"
-            onClick={() => setShowPassword(!showPassword)}
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-fg-subtle hover:text-fg-muted transition-colors duration-fast"
-            aria-label={showPassword ? "Hide token" : "Show token"}
-          >
-            {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-          </button>
-        )}
       </div>
     </div>
   );
@@ -91,11 +79,6 @@ export function ConfigPage() {
       .then((data: AppSettings) => {
         if (cancelled) return;
         const flat: Record<string, string> = {
-          plex_host: data.plex_host,
-          plex_token: data.plex_token,
-          jellyfin_server_url: data.jellyfin_server_url,
-          jellyfin_api_key: data.jellyfin_api_key,
-          jellyfin_user_id: data.jellyfin_user_id,
           ollama_host: data.ollama_host,
           ollama_model: data.ollama_model,
           ollama_timeout: String(data.ollama_timeout),
@@ -133,11 +116,6 @@ export function ConfigPage() {
       }
       const result = await updateSettings(payload);
       const flat: Record<string, string> = {
-        plex_host: result.plex_host,
-        plex_token: result.plex_token,
-        jellyfin_server_url: result.jellyfin_server_url,
-        jellyfin_api_key: result.jellyfin_api_key,
-        jellyfin_user_id: result.jellyfin_user_id,
         ollama_host: result.ollama_host,
         ollama_model: result.ollama_model,
         ollama_timeout: String(result.ollama_timeout),
@@ -176,52 +154,6 @@ export function ConfigPage() {
       }
     >
       <div className="space-y-8">
-        <SectionCard
-          icon={<Server size={20} className="text-accent-500" />}
-          title="Plex Media Server"
-        >
-          <SettingField
-            id="plex_host"
-            label="Host URL"
-            value={values.plex_host ?? ""}
-            onChange={(v) => setField("plex_host", v)}
-            placeholder="http://plex.lan:32400"
-          />
-          <SettingField
-            id="plex_token"
-            label="Token"
-            type="password"
-            value={values.plex_token ?? ""}
-            onChange={(v) => setField("plex_token", v)}
-            placeholder="Plex API token"
-          />
-        </SectionCard>
-
-        <SectionCard icon={<Server size={20} className="text-accent-500" />} title="Jellyfin">
-          <SettingField
-            id="jellyfin_server_url"
-            label="Server URL"
-            value={values.jellyfin_server_url ?? ""}
-            onChange={(v) => setField("jellyfin_server_url", v)}
-            placeholder="http://jellyfin.lan:8096"
-          />
-          <SettingField
-            id="jellyfin_api_key"
-            label="API Key"
-            type="password"
-            value={values.jellyfin_api_key ?? ""}
-            onChange={(v) => setField("jellyfin_api_key", v)}
-            placeholder="Jellyfin API key"
-          />
-          <SettingField
-            id="jellyfin_user_id"
-            label="User ID"
-            value={values.jellyfin_user_id ?? ""}
-            onChange={(v) => setField("jellyfin_user_id", v)}
-            placeholder="Jellyfin user ID"
-          />
-        </SectionCard>
-
         <SectionCard icon={<Brain size={20} className="text-accent-500" />} title="Ollama">
           <SettingField
             id="ollama_host"
@@ -264,9 +196,8 @@ export function ConfigPage() {
         </SectionCard>
 
         {hasChanges && (
-          <p className="text-sm text-warn-500 text-center">
-            Changes apply immediately. Plex, Jellyfin, and Ollama connections will be reset with the
-            new values.
+          <p className="text-sm text-warning-700 text-center">
+            Changes apply immediately. Ollama connection will be reset with the new values.
           </p>
         )}
       </div>

@@ -1,5 +1,7 @@
 """FastAPI dependency for extracting the current user from the session."""
 
+from typing import Any
+
 from fastapi import HTTPException, Request
 
 from src.app.settings import settings
@@ -7,7 +9,7 @@ from src.app.settings import settings
 SESSION_COOKIE = "ampy3_session"
 
 
-def get_current_user(request: Request) -> dict:
+def get_current_user(request: Request) -> dict[str, Any]:
     """Return the authenticated user dict set by the session middleware.
 
     Raises ``401`` if auth is required and no valid session is present.

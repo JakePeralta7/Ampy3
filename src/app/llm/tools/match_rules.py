@@ -7,6 +7,7 @@ All database operations use the async SQLAlchemy session.
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from langchain_core.tools import tool
 from sqlalchemy import func, select
@@ -20,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 @tool
-async def list_match_rules() -> list[dict]:
+async def list_match_rules() -> list[dict[str, Any]]:
     """List all match rules ordered by priority.
 
     Returns id, name, priority, is_active, is_default, and a short yaml_content
@@ -44,7 +45,7 @@ async def list_match_rules() -> list[dict]:
 
 
 @tool
-async def get_match_rule(rule_id: int) -> dict:
+async def get_match_rule(rule_id: int) -> dict[str, Any]:
     """Get the full details of a single match rule, including its complete YAML.
 
     Args:
@@ -70,7 +71,7 @@ async def get_match_rule(rule_id: int) -> dict:
 
 
 @tool
-async def create_match_rule(name: str, yaml_content: str) -> dict:
+async def create_match_rule(name: str, yaml_content: str) -> dict[str, Any]:
     """Create a new user-defined match rule from a YAML definition.
 
     The YAML is validated before being persisted. Returns the new rule's id on
@@ -153,7 +154,7 @@ async def update_match_rule(
     name: str | None = None,
     is_active: bool | None = None,
     yaml_content: str | None = None,
-) -> dict:
+) -> dict[str, Any]:
     """Update an existing match rule.
 
     Default rules (is_default=True) are immutable — only is_active can be toggled.
@@ -234,7 +235,7 @@ async def test_match_rule(
     duration_ms: int | None = None,
     rule_ids: list[int] | None = None,
     trace_detail: bool = True,
-) -> dict:
+) -> dict[str, Any]:
     """Test match rules against a track to diagnose why it may have failed to match.
 
     Runs the MatchEngine against the provided track metadata and returns per-rule
@@ -281,7 +282,7 @@ async def test_match_rule(
         duration_ms=duration_ms,
     )
 
-    def _extract_failure_reason(trace_data: dict) -> str:
+    def _extract_failure_reason(trace_data: dict[str, Any]) -> str:
         """Extract human-readable failure reason from trace data."""
         steps = trace_data.get("steps") or []
 
@@ -311,7 +312,7 @@ async def test_match_rule(
 
         return "Unknown failure reason"
 
-    def _build_steps_trace(steps_list: list) -> list[dict]:
+    def _build_steps_trace(steps_list: list[Any]) -> list[dict[str, Any]]:
         """Build a clean, readable steps trace for output."""
         trace = []
         for step in steps_list or []:

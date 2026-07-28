@@ -19,7 +19,7 @@ const paletteItems = [
 
 export function AppLayout() {
   const location = useLocation();
-  const hideNav = ["/setup", "/login"].includes(location.pathname);
+  const hideNav = ["/login"].includes(location.pathname);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [theme, setTheme] = useState<"light" | "dark">(
     document.documentElement.classList.contains("dark") ? "dark" : "light",

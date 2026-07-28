@@ -7,13 +7,11 @@ import { apiDelete, apiGet, apiPost, apiPut } from "../client";
 export interface ScheduledSync {
   id: number;
   source: string;
-  target_id: string;
+  target_ids: string[];
   source_url: string;
   target_playlist_name: string;
-  target_playlist_id: string | null;
   schedule_interval: string;
   is_active: boolean;
-  replace_existing: boolean;
   last_synced_at: string | null;
   next_sync_at: string;
   created_at: string;
@@ -23,19 +21,17 @@ export interface ScheduledSync {
 
 export interface CreateScheduledSyncInput {
   source: string;
-  target_id: string;
+  target_ids: string[];
   source_url: string;
   target_playlist_name: string;
   schedule_interval: string;
-  replace_existing?: boolean;
 }
 
 export interface UpdateScheduledSyncInput {
-  target_id?: string;
+  target_ids?: string[];
   target_playlist_name?: string;
   schedule_interval?: string;
   is_active?: boolean;
-  replace_existing?: boolean;
 }
 
 export interface BulkResponse {
@@ -56,8 +52,8 @@ export const scheduledSyncsAPI = {
   updateScheduledSync: (syncId: number, input: UpdateScheduledSyncInput): Promise<ScheduledSync> =>
     apiPut<ScheduledSync>(`/v1/schedules/${syncId}`, input),
 
-  deleteScheduledSync: (syncId: number): Promise<{ message: string }> =>
-    apiDelete<{ message: string }>(`/v1/schedules/${syncId}`),
+  deleteScheduledSync: (syncId: number): Promise<{ id: number; success: boolean }> =>
+    apiDelete<{ id: number; success: boolean }>(`/v1/schedules/${syncId}`),
 
   triggerSyncNow: (syncId: number): Promise<{ task_id: string; message: string }> =>
     apiPost<{ task_id: string; message: string }>(`/v1/schedules/${syncId}/sync-now`, {}),

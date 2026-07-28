@@ -35,24 +35,39 @@ dependencies = [
 dev = [
     "pytest>=8.3.0",
     "pytest-asyncio>=0.24.0",
-    "ruff>=0.8.0",
+    "black>=24.0.0",
     "mypy>=1.13.0",
+    "ruff>=0.8.0",
 ]
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.ruff]
-target-version = "py312"
+target-version = "py314"
 line-length = 100
 lint.select = ["E", "F", "I", "N", "W", "UP", "B", "SIM"]
 lint.ignore = ["F401"]
 
+[tool.black]
+line-length = 100
+target-version = ["py314"]
+
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.14"
 strict = true
-warn_return_any = true
-disallow_untyped_defs = false
+explicit_package_bases = true
+disable_error_code = ["valid-type"]
+
+[[tool.mypy.overrides]]
+module = [
+    "celery.*",
+    "celery",
+    "apscheduler.*",
+    "apscheduler",
+    "celery.result",
+]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

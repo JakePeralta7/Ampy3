@@ -33,19 +33,19 @@ class AgentContext:
     without implicit state management.
     """
 
-    research_results: list[dict] = field(default_factory=list)
+    research_results: list[dict[str, Any]] = field(default_factory=list)
     """List of discovered artists: [{artist, mbid, genres}]"""
 
-    matched_tracks: list[dict] = field(default_factory=list)
+    matched_tracks: list[dict[str, Any]] = field(default_factory=list)
     """List of matched tracks from Plex: [{track, artist, plex_id}]"""
 
     created_playlist_id: str | None = None
     """ID of created Plex playlist"""
 
-    error_state: dict = field(default_factory=dict)
+    error_state: dict[str, Any] = field(default_factory=dict)
     """Error tracking: {error_type, message, agent_phase, attempted_retry}"""
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """Convert context to dict for JSON serialization."""
         return {
             "research_results": self.research_results,
@@ -55,7 +55,7 @@ class AgentContext:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> AgentContext:
+    def from_dict(cls, data: dict[str, Any]) -> AgentContext:
         """Create AgentContext from dict."""
         return cls(
             research_results=data.get("research_results", []),
@@ -86,7 +86,7 @@ class BaseAgent(ABC):
         self.tools = tools or []
 
     @abstractmethod
-    async def run(self, state: dict, llm: Any) -> dict:
+    async def run(self, state: dict[str, Any], llm: Any) -> dict[str, Any]:
         """Execute agent logic with given LLM and state.
 
         Args:
@@ -157,7 +157,7 @@ def get_context_summary(context: AgentContext) -> str:
     return " | ".join(parts) if parts else "(No context)"
 
 
-def increment_iteration_count(state: dict, max_iterations: int = 5) -> None:
+def increment_iteration_count(state: dict[str, Any], max_iterations: int = 5) -> None:
     """Increment iteration counter and raise if exceeded.
 
     Args:
@@ -176,7 +176,7 @@ def increment_iteration_count(state: dict, max_iterations: int = 5) -> None:
         )
 
 
-def push_workflow_stack(state: dict, phase: str) -> None:
+def push_workflow_stack(state: dict[str, Any], phase: str) -> None:
     """Record phase transition for debugging.
 
     Args:
@@ -188,7 +188,7 @@ def push_workflow_stack(state: dict, phase: str) -> None:
     state["workflow_stack"] = stack
 
 
-def clear_iteration_count(state: dict) -> None:
+def clear_iteration_count(state: dict[str, Any]) -> None:
     """Reset iteration count for a new phase.
 
     Args:

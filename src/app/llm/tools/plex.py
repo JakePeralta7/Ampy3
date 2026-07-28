@@ -1,24 +1,27 @@
 from __future__ import annotations
 
+from typing import Any
+
 from langchain_core.tools import tool
 
-from src.app.services import get_plex_client
+from src.app.constants import DEFAULT_SOURCE, DEFAULT_TARGET
+from src.app.services import get_sync_target
 from src.app.services.audit import log_event_sync
 from src.app.worker.tasks import sync_playlists_task
 
 
 @tool
-async def search_plex_playlists(query: str) -> list[dict]:
+async def search_plex_playlists(query: str) -> list[dict[str, Any]]:
     """Search Plex Media Server for playlists matching the given query text."""
-    plex_client = await get_plex_client()
-    return await plex_client.search_playlists(query)
+    target = await get_sync_target(DEFAULT_TARGET)
+    return await target.search_playlists(query)
 
 
 @tool
 async def list_plex_playlists() -> str:
     """List all playlists available in the user's Plex library."""
-    plex_client = await get_plex_client()
-    results = await plex_client.search_playlists("")
+    target = await get_sync_target(DEFAULT_TARGET)
+    results = await target.search_playlists("")
     if not results:
         return "No playlists found in your Plex library."
     lines = [f"- {p.get('title', p.get('name', 'Unnamed'))}" for p in results]
@@ -26,7 +29,7 @@ async def list_plex_playlists() -> str:
 
 
 @tool
-async def sync_playlist_to_plex(playlist_url: str, source: str = "youtube_music") -> str:
+async def sync_playlist_to_plex(playlist_url: str, source: str = DEFAULT_SOURCE) -> str:
     """Trigger a background sync job to import a playlist into Plex.
 
     Requires a full YouTube Music playlist URL (e.g. https://music.youtube.com/playlist?list=PL...).
@@ -36,16 +39,16 @@ async def sync_playlist_to_plex(playlist_url: str, source: str = "youtube_music"
         playlist_url: Full YouTube Music playlist URL to sync.
         source: The source platform (default: youtube_music).
     """
-    task = sync_playlists_task.delay(playlist_url, source, "plex")
+    task = sync_playlists_task.delay(playlist_url, source, DEFAULT_TARGET)
     return f"Sync started. Task ID: {task.id}. Poll /v1/status/{task.id} for progress."
 
 
 @tool
-async def search_plex_library(query: str = "", artist: str = "", genre: str = "") -> list[dict]:
+async def search_plex_library(query: str = "", artist: str = "", genre: str = "") -> list[dict[str, Any]]:
     """Search the user's Plex music library for tracks by title, artist, or genre.
 
     Use this to find tracks that already exist in Plex when researching music or creating playlists.
-    At least one parameter should be provided. Returns track details including plex_id, title,
+    At least one parameter should be provided. Returns track details including item_id, title,
     artist_name, album_name, and duration_ms.
 
     Args:
@@ -55,13 +58,13 @@ async def search_plex_library(query: str = "", artist: str = "", genre: str = ""
         genre: Optional genre to filter by (e.g. "Electronic",
             "Jazz", "Rock"). Searches Plex genre tags.
     """
-    plex_client = await get_plex_client()
-    return await plex_client.search_library(title=query, artist=artist, genre=genre)
+    target = await get_sync_target(DEFAULT_TARGET)
+    return await target.search_library(title=query, artist=artist, genre=genre)
 
 
 @tool
-async def create_plex_playlist(title: str, track_descriptions: list[dict]) -> str:
-    """Create a new playlist in Plex from a list of track descriptions or plex_ids.
+async def create_plex_playlist(title: str, track_descriptions: list[dict[str, Any]]) -> str:
+    """Create a new playlist in Plex from a list of track descriptions or item_ids.
 
     If a track description includes 'plex_id', uses it directly. Otherwise,
     searches the Plex library by title/artist.
@@ -80,7 +83,7 @@ async def create_plex_playlist(title: str, track_descriptions: list[dict]) -> st
 
     from src.app.core.matching import _best_match, _extract_primary_artist
 
-    plex_client = await get_plex_client()
+    target = await get_sync_target(DEFAULT_TARGET)
     matched_items = []
     unmatched_tracks = []
 
@@ -88,15 +91,14 @@ async def create_plex_playlist(title: str, track_descriptions: list[dict]) -> st
         if desc.get("plex_id"):
             matched_items.append(
                 {
-                    "plex_id": desc["plex_id"],
+                    "item_id": desc["plex_id"],
                     "title": desc.get("title", ""),
                     "artist_name": desc.get("artist", ""),
                 }
             )
         else:
-            # Extract primary artist from comma-separated artist names
             artist = _extract_primary_artist(desc.get("artist", ""))
-            results = await plex_client.search_library(
+            results = await target.search_library(
                 title=desc.get("title", ""),
                 artist=artist,
                 album=desc.get("album", ""),
@@ -104,8 +106,7 @@ async def create_plex_playlist(title: str, track_descriptions: list[dict]) -> st
             if results:
                 matched_items.append(results[0])
             else:
-                # Try fuzzy matching as fallback when no exact matches found
-                all_library = await plex_client.search_library(artist=artist)
+                all_library = await target.search_library(artist=artist)
                 fuzzy_match = _best_match(desc.get("title", ""), all_library, threshold=0.70)
                 if fuzzy_match:
                     matched_items.append(fuzzy_match)
@@ -117,9 +118,9 @@ async def create_plex_playlist(title: str, track_descriptions: list[dict]) -> st
     if not matched_items:
         return "No matching tracks found in your Plex library for any of the given descriptions."
 
-    existing = await plex_client.get_plist_by_name(title)
+    existing = await target.get_playlist_by_name(title)
     if existing:
-        success = await plex_client.update_plist_in_place(existing["rating_key"], matched_items)
+        success = await target.update_playlist(existing["rating_key"], matched_items)
         if not success:
             return f"Failed to update existing playlist '{title}'."
         result_msg = (
@@ -128,7 +129,7 @@ async def create_plex_playlist(title: str, track_descriptions: list[dict]) -> st
             f" tracks matched."
         )
     else:
-        playlist_id = await plex_client.create_plist_from_results(title, matched_items)
+        playlist_id = await target.create_playlist(title, matched_items)
         if not playlist_id:
             return "Failed to create playlist."
         result_msg = (
@@ -153,7 +154,7 @@ async def create_plex_playlist(title: str, track_descriptions: list[dict]) -> st
 
 
 @tool
-async def add_tracks_to_plex_playlist(playlist_id: str, track_descriptions: list[dict]) -> str:
+async def add_tracks_to_plex_playlist(playlist_id: str, track_descriptions: list[dict[str, Any]]) -> str:
     """Add tracks to an existing Plex playlist.
 
     For each track description, searches the Plex library for a matching track
@@ -166,23 +167,22 @@ async def add_tracks_to_plex_playlist(playlist_id: str, track_descriptions: list
     """
     from src.app.core.matching import _extract_primary_artist
 
-    plex_client = await get_plex_client()
-    matched_plex_ids = []
+    target = await get_sync_target(DEFAULT_TARGET)
+    matched_item_ids = []
     for desc in track_descriptions:
-        # Extract primary artist from comma-separated artist names
         artist = _extract_primary_artist(desc.get("artist", ""))
-        results = await plex_client.search_library(
+        results = await target.search_library(
             title=desc.get("title", ""),
             artist=artist,
             album=desc.get("album", ""),
         )
         if results:
-            matched_plex_ids.append(results[0]["plex_id"])
+            matched_item_ids.append(results[0]["item_id"])
 
-    if not matched_plex_ids:
+    if not matched_item_ids:
         return "No matching tracks found in your Plex library for any of the given descriptions."
 
-    added = await plex_client.add_items_to_playlist(playlist_id, matched_plex_ids)
+    added = await target.add_items_to_playlist(playlist_id, matched_item_ids)
 
     log_event_sync(
         event_type="plex.playlist_items_added",
@@ -195,14 +195,14 @@ async def add_tracks_to_plex_playlist(playlist_id: str, track_descriptions: list
 
 
 @tool
-async def get_plex_playlist_tracks(playlist_id: str) -> list[dict]:
+async def get_plex_playlist_tracks(playlist_id: str) -> list[dict[str, Any]]:
     """Retrieve all tracks in a Plex playlist.
 
     Args:
         playlist_id: The Plex playlist rating_key
     """
-    plex_client = await get_plex_client()
-    return await plex_client.get_items_in_playlist(playlist_id)
+    target = await get_sync_target(DEFAULT_TARGET)
+    return await target.get_items_in_playlist(playlist_id)
 
 
 @tool
@@ -212,8 +212,8 @@ async def delete_plex_playlist(playlist_id: str) -> str:
     Args:
         playlist_id: The Plex playlist rating_key to delete
     """
-    plex_client = await get_plex_client()
-    success = await plex_client.delete_plist(playlist_id)
+    target = await get_sync_target(DEFAULT_TARGET)
+    success = await target.delete_playlist(playlist_id)
 
     log_event_sync(
         event_type="plex.playlist_deleted",
@@ -228,7 +228,7 @@ async def delete_plex_playlist(playlist_id: str) -> str:
 
 
 @tool
-async def get_sync_status(task_id: str) -> dict:
+async def get_sync_status(task_id: str) -> dict[str, Any]:
     """Check the current status of a previously triggered sync task.
 
     Args:

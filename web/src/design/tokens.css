@@ -23,8 +23,13 @@
 
   --danger-500: 0 72% 51%;
   --danger-fg: 0 0% 100%;
+  --success-50: 142 40% 95%;
   --success-500: 142 70% 40%;
-  --warn-500: 38 92% 50%;
+  --warning-50: 38 92% 95%;
+  --warning-300: 38 92% 70%;
+  --warning-700: 30 80% 35%;
+  --warning-800: 26 75% 28%;
+  --warning-900: 22 70% 20%;
 
   --radius-sm: 4px;
   --radius-md: 6px;
@@ -60,8 +65,13 @@
 
   --danger-500: 0 70% 60%;
   --danger-fg: 0 0% 100%;
+  --success-50: 142 30% 14%;
   --success-500: 142 60% 50%;
-  --warn-500: 38 92% 60%;
+  --warning-50: 38 60% 12%;
+  --warning-300: 38 80% 40%;
+  --warning-700: 38 90% 55%;
+  --warning-800: 38 92% 65%;
+  --warning-900: 40 95% 80%;
 }
 
 @media (prefers-reduced-motion: reduce) {

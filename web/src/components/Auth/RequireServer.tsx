@@ -1,31 +1,23 @@
-import { useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
-import { apiGet } from "../../api/client";
+import { getConfiguredTargets } from "../../api/settings";
 
-interface ServerSettings {
-  jellyfin_server_url: string;
-  jellyfin_api_key: string;
-  jellyfin_user_id: string;
+interface ServerContextValue {
+  configured: boolean | null;
+}
+
+const ServerContext = createContext<ServerContextValue>({ configured: null });
+
+export function useServerConfigured() {
+  return useContext(ServerContext).configured;
 }
 
 export function RequireServer({ children }: { children: React.ReactNode }) {
   const [configured, setConfigured] = useState<boolean | null>(null);
 
   useEffect(() => {
-    Promise.allSettled([
-      apiGet<{ server_url: string | null }>("/plex/server"),
-      apiGet<ServerSettings>("/v1/settings/"),
-    ])
-      .then(([plexResult, settingsResult]) => {
-        const hasPlexServer =
-          plexResult.status === "fulfilled" && Boolean(plexResult.value.server_url);
-        const hasJellyfin =
-          settingsResult.status === "fulfilled" &&
-          Boolean(settingsResult.value.jellyfin_server_url?.trim()) &&
-          Boolean(settingsResult.value.jellyfin_api_key?.trim()) &&
-          Boolean(settingsResult.value.jellyfin_user_id?.trim());
-        setConfigured(hasPlexServer || hasJellyfin);
-      })
+    getConfiguredTargets()
+      .then((targets) => setConfigured(targets.length > 0))
       .catch(() => setConfigured(false));
   }, []);
 
@@ -38,8 +30,8 @@ export function RequireServer({ children }: { children: React.ReactNode }) {
   }
 
   if (!configured) {
-    return <Navigate to="/setup" replace />;
+    return <Navigate to="/plex-setup" replace />;
   }
 
-  return <>{children}</>;
+  return <ServerContext.Provider value={{ configured }}>{children}</ServerContext.Provider>;
 }

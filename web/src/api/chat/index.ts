@@ -184,7 +184,7 @@ export const chatAPI = {
   /**
    * Delete a chat session and its history.
    */
-  deleteSession: (sessionId: string): Promise<{ status: string; session_id: string }> =>
+  deleteSession: (sessionId: string): Promise<{ id: string; success: boolean }> =>
     apiRequest(`/v1/chat/sessions/${sessionId}`, {
       method: "DELETE",
     }),

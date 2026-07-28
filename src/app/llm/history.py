@@ -6,23 +6,24 @@ Provides async functions for storing and retrieving chat messages.
 from __future__ import annotations
 
 import json
+from typing import Any
 
 from src.app.services.valkey import ValkeyService
 
 
 async def append_message(
-    session_id: str, role: str, content: str, flow_items: list[dict] | None = None
+    session_id: str, role: str, content: str, flow_items: list[dict[str, Any]] | None = None
 ) -> None:
     client = ValkeyService.get_instance()
     key = f"chat:{session_id}"
-    msg: dict = {"role": role, "content": content}
+    msg: dict[str, Any] = {"role": role, "content": content}
     if flow_items:
         msg["flow_items"] = flow_items
     await client.rpush(key, json.dumps(msg))
     await client.expire(key, 604800)
 
 
-async def get_history(session_id: str, limit: int = 50) -> list[dict]:
+async def get_history(session_id: str, limit: int = 50) -> list[dict[str, Any]]:
     client = ValkeyService.get_instance()
     key = f"chat:{session_id}"
     items = await client.lrange(key, -limit, -1)

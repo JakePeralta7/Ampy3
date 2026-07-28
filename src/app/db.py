@@ -2,14 +2,12 @@
 
 from collections.abc import AsyncGenerator, Generator
 
-from sqlalchemy import create_engine
-from sqlalchemy.ext.asyncio import (
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
-from sqlalchemy.orm import Session, declarative_base, sessionmaker
+from alembic.config import Config
+from sqlalchemy import create_engine, inspect
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
+from alembic import command
 from src.app.settings import settings
 
 # Create async engine for PostgreSQL (used by FastAPI)
@@ -35,6 +33,9 @@ sync_engine = create_engine(
     settings.database_url,
     pool_pre_ping=True,
     echo=False,
+    pool_size=20,
+    max_overflow=10,
+    pool_recycle=3600,
 )
 
 # Synchronous session factory for Celery tasks
@@ -45,16 +46,17 @@ SessionLocal = sessionmaker(
 )
 
 # Base class for ORM models
-Base = declarative_base()
+class Base(DeclarativeBase):
+    pass
 
 
-async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
+async def get_async_session() -> AsyncGenerator[AsyncSession]:
     """Dependency for getting async database sessions."""
     async with AsyncSessionLocal() as session:
         yield session
 
 
-def get_sync_session() -> Generator[Session, None, None]:
+def get_sync_session() -> Generator[Session]:
     """Dependency for getting synchronous database sessions (for Celery)."""
     db = SessionLocal()
     try:
@@ -63,18 +65,36 @@ def get_sync_session() -> Generator[Session, None, None]:
         db.close()
 
 
+def _alembic_config() -> Config:
+    cfg = Config("alembic/alembic.ini")
+    cfg.set_main_option("sqlalchemy.url", settings.database_url)
+    return cfg
+
+
+async def _is_alembic_managed() -> bool:
+    """Return whether the database has already been stamped by Alembic."""
+    async with async_engine.connect() as conn:
+        return await conn.run_sync(
+            lambda sync_conn: inspect(sync_conn).has_table("alembic_version")
+        )
+
+
 async def init_db() -> None:
-    """Create all tables from ORM models, then seed default rules.
+    """Bootstrap fresh databases and upgrade Alembic-managed databases.
 
-    Uses ``create_all(checkfirst=True)`` so existing tables are never
-    dropped — safe to call on every startup.  Future schema changes
-    should be handled via Alembic migrations generated against the
-    updated models.
+    A fresh database is created from the current ORM metadata and stamped at
+    Alembic head. Once stamped, all later schema changes must be handled by
+    Alembic migrations; ``create_all`` is never run for an existing database.
     """
-    import src.app.models  # noqa: F401 — registers all ORM models on Base
+    import src.app.models  # noqa: F401
 
-    async with async_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all, checkfirst=True)
+    cfg = _alembic_config()
+    if await _is_alembic_managed():
+        command.upgrade(cfg, "head")
+    else:
+        async with async_engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all, checkfirst=True)
+        command.stamp(cfg, "head")
 
     from src.app.match_rules.loader import seed_default_rules
 

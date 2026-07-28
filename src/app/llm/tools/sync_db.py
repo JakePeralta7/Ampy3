@@ -5,15 +5,24 @@ All tools use the async SQLAlchemy session — safe to call from FastAPI/LangGra
 
 from __future__ import annotations
 
+from typing import Any
+
 from langchain_core.tools import tool
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from src.app.db import AsyncSessionLocal
-from src.app.models import PlaylistTrack, ScheduledPlaylistSync, SyncRun, SyncRunTrack
+from src.app.models import (
+    PlaylistTrack,
+    PlaylistTrackTarget,
+    ScheduledPlaylistSync,
+    SyncRun,
+    SyncRunTrack,
+)
 
 
 @tool
-async def list_scheduled_syncs() -> list[dict]:
+async def list_scheduled_syncs() -> list[dict[str, Any]]:
     """List all scheduled playlist syncs with their match/fail counts.
 
     Returns id, source_url, target_playlist_name, schedule_interval, is_active,
@@ -42,14 +51,14 @@ async def list_scheduled_syncs() -> list[dict]:
 
 
 @tool
-async def get_sync_summary(sync_id: int) -> dict:
+async def get_sync_summary(sync_id: int) -> dict[str, Any]:
     """Get summary details for a single scheduled sync.
 
     Args:
         sync_id: The ID of the scheduled sync.
 
     Returns id, source_url, target_playlist_name, matched_count, failed_count,
-    last_synced_at, next_sync_at, is_active, replace_existing, and error_message.
+    last_synced_at, next_sync_at, is_active, and error_message.
     """
     async with AsyncSessionLocal() as session:
         result = await session.execute(
@@ -66,7 +75,6 @@ async def get_sync_summary(sync_id: int) -> dict:
         "target_playlist_name": s.target_playlist_name,
         "schedule_interval": s.schedule_interval,
         "is_active": s.is_active,
-        "replace_existing": s.replace_existing,
         "matched_count": s.matched_count,
         "failed_count": s.failed_count,
         "last_synced_at": s.last_synced_at.isoformat() if s.last_synced_at else None,
@@ -76,24 +84,23 @@ async def get_sync_summary(sync_id: int) -> dict:
 
 
 @tool
-async def get_unmatched_tracks(sync_id: int) -> list[dict]:
+async def get_unmatched_tracks(sync_id: int) -> list[dict[str, Any]]:
     """Return all unmatched tracks for a scheduled sync.
 
-    A track is unmatched when the sync pipeline could not find a corresponding
-    entry in the Plex library (match_item_id is NULL).
+    A track is unmatched when it has no PlaylistTrackTarget rows for any target.
 
     Args:
         sync_id: The ID of the scheduled sync to inspect.
 
     Returns a list of dicts with position, source_title, source_artist, source_album,
-    source_duration_ms, and source_id for each unmatched track.
+    source_duration_ms, and item_id for each unmatched track.
     """
     async with AsyncSessionLocal() as session:
         result = await session.execute(
             select(PlaylistTrack)
             .where(
                 PlaylistTrack.sync_id == sync_id,
-                PlaylistTrack.match_item_id.is_(None),
+                ~PlaylistTrack.targets.any(),
             )
             .order_by(PlaylistTrack.position)
         )
@@ -107,14 +114,14 @@ async def get_unmatched_tracks(sync_id: int) -> list[dict]:
             "source_artist": t.source_artist,
             "source_album": t.source_album,
             "source_duration_ms": t.source_duration_ms,
-            "source_id": t.source_id,
+            "item_id": t.item_id,
         }
         for t in tracks
     ]
 
 
 @tool
-async def list_sync_runs(sync_id: int, limit: int = 10) -> list[dict]:
+async def list_sync_runs(sync_id: int, limit: int = 10) -> list[dict[str, Any]]:
     """List recent sync run snapshots for a scheduled sync.
 
     Each run records the matched/failed counts at the time the sync executed.
@@ -146,7 +153,7 @@ async def list_sync_runs(sync_id: int, limit: int = 10) -> list[dict]:
 
 
 @tool
-async def get_sync_run_unmatched(run_id: int) -> list[dict]:
+async def get_sync_run_unmatched(run_id: int) -> list[dict[str, Any]]:
     """Return unmatched tracks from a specific historical sync run.
 
     Unlike get_unmatched_tracks (which reads the live playlist_tracks table),
@@ -161,7 +168,7 @@ async def get_sync_run_unmatched(run_id: int) -> list[dict]:
             select(SyncRunTrack)
             .where(
                 SyncRunTrack.run_id == run_id,
-                SyncRunTrack.match_item_id.is_(None),
+                ~SyncRunTrack.targets.any(),
             )
             .order_by(SyncRunTrack.position)
         )
@@ -175,7 +182,7 @@ async def get_sync_run_unmatched(run_id: int) -> list[dict]:
             "source_artist": t.source_artist,
             "source_album": t.source_album,
             "source_duration_ms": t.source_duration_ms,
-            "source_id": t.source_id,
+            "item_id": t.item_id,
         }
         for t in tracks
     ]

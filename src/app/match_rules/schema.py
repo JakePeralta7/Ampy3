@@ -36,6 +36,8 @@ stored in YAML — the auto-layout algorithm generates them at render time.
 
 from __future__ import annotations
 
+from __future__ import annotations
+
 from typing import Any
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -75,7 +77,7 @@ class RuleDefinition(BaseModel):
 
     @field_validator("nodes")
     @classmethod
-    def nodes_not_empty(cls, v: dict) -> dict:
+    def nodes_not_empty(cls, v: dict[str, NodeDef]) -> dict[str, NodeDef]:
         if not v:
             raise ValueError("A rule must define at least one node.")
         return v

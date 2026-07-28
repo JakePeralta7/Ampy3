@@ -1,5 +1,7 @@
 """Audit log schemas."""
 
+from typing import Any
+
 from pydantic import BaseModel
 
 
@@ -11,7 +13,7 @@ class AuditLogOut(BaseModel):
     resource_type: str | None = None
     resource_id: str | None = None
     summary: str | None = None
-    details: dict | None = None
+    details: dict[str, Any] | None = None
     created_at: str | None = None
 
 

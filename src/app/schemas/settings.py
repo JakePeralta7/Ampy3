@@ -18,9 +18,9 @@ class SettingsUpdate(BaseModel):
 
 class SettingsOut(BaseModel):
     plex_host: str
-    plex_token: str
+    plex_token_set: bool
     jellyfin_server_url: str
-    jellyfin_api_key: str
+    jellyfin_api_key_set: bool
     jellyfin_user_id: str
     ollama_host: str
     ollama_model: str

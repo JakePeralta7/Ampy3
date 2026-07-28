@@ -6,10 +6,13 @@ https://forums.plex.tv/t/authenticating-with-plex/609370
 
 import logging
 import uuid
+from datetime import UTC, datetime
+from typing import Any
 
 import httpx
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
+from pydantic import BaseModel
 
 from src.app.auth.dependencies import SESSION_COOKIE, get_current_user
 from src.app.auth.tokens import create_session, destroy_session
@@ -88,6 +91,35 @@ async def get_plex_server_url() -> str | None:
 def _cookie_secure() -> bool:
     """Cookies must always use the Secure flag when auth is required."""
     return settings.require_auth or settings.app_env == "production"
+
+
+# ── Schemas ───────────────────────────────────────────────────────────
+
+
+class PlexResourceConnection(BaseModel):
+    uri: str
+    local: bool = False
+    relay: bool = False
+    status: int = 0
+
+
+class PlexResource(BaseModel):
+    name: str
+    client_identifier: str
+    connections: list[PlexResourceConnection]
+    access_token: str
+    owned: bool = False
+    product: str = ""
+    product_version: str = ""
+
+
+class PlexResourcesResponse(BaseModel):
+    servers: list[PlexResource]
+
+
+class PlexSetupRequest(BaseModel):
+    server_url: str
+    token: str
 
 
 # ── Routes ──────────────────────────────────────────────────────────────
@@ -266,8 +298,108 @@ async def plex_callback(
     return resp
 
 
+@router.get("/plex/resources", response_model=PlexResourcesResponse)
+async def plex_resources(
+    user: dict[str, Any] = Depends(get_current_user),  # noqa: B008
+):
+    """Discover the authenticated user's Plex Media Servers.
+
+    Calls the Plex.tv resources API to list servers the user has access to.
+    """
+    plex_token = user.get("plex_token", "")
+    if not plex_token:
+        raise HTTPException(status_code=400, detail="No Plex token available")
+
+    client_id = await _get_client_id()
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        resp = await client.get(
+            f"{PLEX_TV_API}/resources",
+            headers={
+                "Accept": "application/json",
+                "X-Plex-Token": plex_token,
+                "X-Plex-Client-Identifier": client_id,
+            },
+        )
+        resp.raise_for_status()
+        raw = resp.json()
+
+    servers = []
+    for r in raw or []:
+        if r.get("product") != "Plex Media Server":
+            continue
+        connections = [
+            PlexResourceConnection(
+                uri=c["uri"],
+                local=c.get("local", False),
+                relay=c.get("relay", False),
+                status=c.get("status", 0),
+            )
+            for c in r.get("connections", [])
+        ]
+        if not connections:
+            continue
+        servers.append(
+            PlexResource(
+                name=r.get("name", ""),
+                client_identifier=r.get("clientIdentifier", ""),
+                connections=connections,
+                access_token=r.get("accessToken", ""),
+                owned=r.get("owned", True),
+                product=r.get("product", ""),
+                product_version=r.get("productVersion", ""),
+            )
+        )
+
+    return PlexResourcesResponse(servers=servers)
+
+
+@router.post("/plex/setup")
+async def plex_setup(
+    body: PlexSetupRequest,
+    user: dict[str, Any] = Depends(get_current_user),  # noqa: B008
+):
+    """Configure the Plex target from a discovered server.
+
+    Saves the selected server URL and token so the PlexTarget factory
+    can connect without manual configuration.
+    """
+    server_url = body.server_url.strip().rstrip("/")
+    token = body.token.strip()
+
+    if not server_url or not token:
+        raise HTTPException(status_code=400, detail="server_url and token are required")
+
+    async with AsyncSessionLocal() as session:
+        from sqlalchemy import select
+
+        for key, value in [("plex_host", server_url), ("plex_token", token)]:
+            stmt = select(Config).where(Config.key == key)
+            row = (await session.execute(stmt)).scalar_one_or_none()
+            if row:
+                row.value = value
+                row.updated_at = datetime.now(UTC)
+            else:
+                session.add(Config(key=key, value=value, updated_at=datetime.now(UTC)))
+
+        await session.commit()
+
+    from src.app.services.target import TargetService
+
+    TargetService.reset()
+
+    await log_event(
+        "plex_target_configured",
+        f"Plex target configured via SSO setup: {server_url}",
+        resource_type="target",
+        resource_id="Plex",
+    )
+
+    return {"status": "ok"}
+
+
 @router.get("/me")
-async def auth_me(user: dict = Depends(get_current_user)):  # noqa: B008
+async def auth_me(user: dict[str, Any] = Depends(get_current_user)):  # noqa: B008
     """Return the current authenticated user."""
     return {
         "plex_user_id": user["plex_user_id"],
@@ -279,7 +411,7 @@ async def auth_me(user: dict = Depends(get_current_user)):  # noqa: B008
 
 
 @router.post("/logout")
-async def auth_logout(user: dict = Depends(get_current_user)):  # noqa: B008
+async def auth_logout(user: dict[str, Any] = Depends(get_current_user)):  # noqa: B008
     """Revoke the session server-side and clear the cookie."""
     session_id = user.get("session_id")
     if session_id:

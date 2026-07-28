@@ -7,7 +7,7 @@ interface BadgeProps {
 const variantStyles: Record<string, string> = {
   success: "bg-success-500/10 text-success-500 border border-success-500/20",
   danger: "bg-danger-500/10 text-danger-500 border border-danger-500/20",
-  warning: "bg-warn-500/10 text-warn-500 border border-warn-500/20",
+  warning: "bg-warning-50/10 text-warning-700 border border-warning-300/20",
   neutral: "bg-bg-muted text-fg-muted border border-border",
 };
 

@@ -1,9 +1,9 @@
-"""Protocol and base class for node-graph node handlers."""
+"""Abstract base class for node-graph node handlers."""
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, ClassVar
 
 from src.app.core.models import TrackMetadata
 
@@ -12,34 +12,22 @@ NodeInputs = dict[str, Any]
 NodeOutputs = dict[str, Any]
 
 
-@runtime_checkable
-class NodeHandlerProtocol(Protocol):
-    """Structural type for anything that can execute a node."""
-
-    async def __call__(
-        self,
-        config: NodeConfig,
-        track: TrackMetadata,
-        inputs: NodeInputs,
-    ) -> NodeOutputs: ...
-
-
 class NodeHandlerBase(ABC):
-    """Base class for stateful or complex node handlers.
+    """Base class for all node handlers.
 
-    Subclasses implement :meth:`execute`.  The ``__call__`` method is
-    provided so instances satisfy :class:`NodeHandlerProtocol` and can
-    be used with the ``@register_node`` decorator via
-    ``register_node("my_type", MyHandler())``.
+    Each concrete handler stores its YAML config at construction time
+    and implements :meth:`execute` with only ``track`` and ``inputs``.
     """
 
-    node_type: str
+    node_type: ClassVar[str]
     """Machine-readable type string, e.g. ``"search"`` or ``"compare"``."""
+
+    def __init__(self, config: NodeConfig) -> None:
+        self._config = config
 
     @abstractmethod
     async def execute(
         self,
-        config: NodeConfig,
         track: TrackMetadata,
         inputs: NodeInputs,
     ) -> NodeOutputs:
@@ -48,8 +36,7 @@ class NodeHandlerBase(ABC):
 
     async def __call__(
         self,
-        config: NodeConfig,
         track: TrackMetadata,
         inputs: NodeInputs,
     ) -> NodeOutputs:
-        return await self.execute(config, track, inputs)
+        return await self.execute(track, inputs)

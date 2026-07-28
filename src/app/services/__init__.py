@@ -1,93 +1,64 @@
 """Application service container with dependency injection.
 
-Manages singleton instances of external services (Plex, Ollama, Celery, Valkey).
+Manages singleton instances of external services (Ollama, Celery, Valkey).
 Provides factory functions for creating and retrieving service instances.
 """
 
 import logging
+from typing import Any
 
 from src.app.services.celery import CeleryService
-from src.app.services.jellyfin import JellyfinService
 from src.app.services.ollama import OllamaService
-from src.app.services.plex import PlexService
+from src.app.services.target import TargetService
 from src.app.services.valkey import ValkeyService
 
 logger = logging.getLogger(__name__)
 
 
-def reset_services():
-    """Reset all service instances (useful for testing)."""
-    PlexService.reset()
-    JellyfinService.reset()
-    OllamaService.reset()
-    CeleryService.reset()
-    ValkeyService.reset()
-    logger.info("All services reset")
+def reset_services() -> None:
+     """Reset all service instances (useful for testing)."""
+     TargetService.reset()
+     OllamaService.reset()
+     CeleryService.reset()
+     ValkeyService.reset()
+     logger.info("All services reset")
 
 
-def get_ollama_client():
-    """Dependency injection: Get Ollama client instance (lazy singleton)."""
-    return OllamaService.get_instance()
+def get_ollama_client() -> Any:
+     """Dependency injection: Get Ollama client instance (lazy singleton)."""
+     return OllamaService.get_instance()
 
 
-def get_celery_app():
-    """Dependency injection: Get Celery app instance (lazy singleton)."""
-    return CeleryService.get_instance()
+def get_celery_app() -> Any:
+     """Dependency injection: Get Celery app instance (lazy singleton)."""
+     return CeleryService.get_instance()
 
 
-def get_valkey_client():
-    """Dependency injection: Get Valkey client instance (lazy singleton)."""
-    return ValkeyService.get_instance()
+def get_valkey_client() -> Any:
+     """Dependency injection: Get Valkey client instance (lazy singleton)."""
+     return ValkeyService.get_instance()
 
 
-async def get_plex_client():
-    """Dependency injection: Get Plex client instance (lazy singleton)."""
-    return await PlexService.get_instance_async()
+async def get_sync_target(target_id: str = "Plex") -> Any:
+     """Get a sync target instance by ID.
+
+     Returns a :class:`BaseTarget` implementation (e.g. ``PlexTarget``).
+     Uses the target registry's registered factory to construct the target.
+     Defaults to ``"Plex"`` for backward compatibility.
+     """
+     return await TargetService.get_target_async(target_id)
 
 
-async def get_jellyfin_client():
-    """Dependency injection: Get Jellyfin client instance (lazy singleton)."""
-    return await JellyfinService.get_instance_async()
+async def list_sync_targets() -> list[dict[str, str]]:
+     """Return all registered sync targets."""
+     import src.app.core.targets  # noqa: F401
+     from src.app.core.targets.registry import TargetRegistry
 
-
-async def get_sync_target(target_id: str = "plex"):
-    """Get a sync target instance by ID.
-
-    Returns a :class:`BaseTarget` implementation (e.g. ``PlexTarget``).
-    Defaults to ``"plex"`` for backward compatibility.
-    """
-    import src.app.core.targets  # noqa: F401
-    from src.app.core.targets.jellyfin import JellyfinTarget
-    from src.app.core.targets.plex import PlexTarget
-    from src.app.core.targets.registry import TargetRegistry
-
-    TargetRegistry.get(target_id)  # validate target_id exists
-
-    if target_id == "plex":
-        plex_client = await get_plex_client()
-        return PlexTarget(plex_client)  # type: ignore[call-arg]
-
-    if target_id == "jellyfin":
-        jellyfin_client = await get_jellyfin_client()
-        return JellyfinTarget(jellyfin_client)  # type: ignore[call-arg]
-
-    raise NotImplementedError(
-        f"Target '{target_id}' has no factory registered in get_sync_target()"
-    )
-
-
-async def list_sync_targets():
-    """Return all registered sync targets."""
-    import src.app.core.targets  # noqa: F401
-    from src.app.core.targets.registry import TargetRegistry
-
-    return TargetRegistry.list_targets()
+     return TargetRegistry.list_targets()
 
 
 __all__ = [
     "reset_services",
-    "get_plex_client",
-    "get_jellyfin_client",
     "get_ollama_client",
     "get_celery_app",
     "get_valkey_client",

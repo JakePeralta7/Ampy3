@@ -5,7 +5,8 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import AsyncGenerator
-from datetime import datetime
+from datetime import UTC, datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -38,6 +39,7 @@ from src.app.schemas.chat import (
     ChatSessionEntry,
     ChatSessionsListResponse,
 )
+from src.app.schemas.common import DeleteResponse
 from src.app.services.audit import log_event
 
 logger = logging.getLogger(__name__)
@@ -50,7 +52,7 @@ router = APIRouter(prefix="/api/v1/chat", tags=["chat"])
 
 async def _load_state_from_history(
     session_id: str,
-    new_messages: list[dict],
+    new_messages: list[dict[str, Any]],
 ) -> AgentState:
     """Load agent state from Valkey history and append new messages."""
     history = await get_history(session_id)
@@ -86,7 +88,7 @@ async def _load_state_from_history(
     return state
 
 
-async def _generate_title(session_id: str, history: list[dict]) -> str | None:
+async def _generate_title(session_id: str, history: list[dict[str, Any]]) -> str | None:
     """Generate a short title for the conversation."""
     try:
         existing = await get_title(session_id)
@@ -126,8 +128,8 @@ async def _generate_title(session_id: str, history: list[dict]) -> str | None:
 
 async def _stream_agent_events(
     state: AgentState,
-    config: dict,
-) -> AsyncGenerator[str, None]:
+    config: dict[str, Any],
+) -> AsyncGenerator[str]:
     """Stream events from the agent as JSON lines.
 
     All messages are persisted to Valkey (thinking, responses, tool results).
@@ -142,8 +144,8 @@ async def _stream_agent_events(
         for msg in state.get("messages", [])
         if hasattr(msg, "content") and isinstance(msg.content, str) and msg.content.strip()
     }
-    pending_flow_items: dict[str, dict] = {}
-    completed_flow_items: list[dict] = []
+    pending_flow_items: dict[str, dict[str, Any]] = {}
+    completed_flow_items: list[dict[str, Any]] = []
 
     # Track streamed content for persistence
     current_ai_content = ""
@@ -320,7 +322,7 @@ async def _stream_agent_events(
 @router.post("/invoke", response_model=ChatInvokeResponse)
 async def chat_invoke(
     request: ChatRequest,
-    _user: dict = Depends(get_current_user),  # noqa: B008
+    _user: dict[str, Any] = Depends(get_current_user),  # noqa: B008
 ):
     """Synchronously invoke the agent (single turn, no streaming)."""
     session_id = request.session_id or request.thread_id
@@ -361,7 +363,7 @@ async def chat_invoke(
 @router.post("/stream_events")
 async def chat_stream_events(
     request: ChatRequest,
-    _user: dict = Depends(get_current_user),  # noqa: B008
+    _user: dict[str, Any] = Depends(get_current_user),  # noqa: B008
 ):
     """Stream agent events in real-time (SSE response).
 
@@ -394,7 +396,7 @@ async def chat_stream_events(
 async def chat_history(
     session_id: str,
     limit: int = Query(50, ge=1, le=1000),
-    _user: dict = Depends(get_current_user),  # noqa: B008
+    _user: dict[str, Any] = Depends(get_current_user),  # noqa: B008
 ):
     """Retrieve chat history for a session."""
     try:
@@ -424,7 +426,7 @@ async def chat_history(
 @router.delete("/history/{session_id}", response_model=ChatClearResponse)
 async def clear_chat_history(
     session_id: str,
-    _user: dict = Depends(get_current_user),  # noqa: B008
+    _user: dict[str, Any] = Depends(get_current_user),  # noqa: B008
 ):
     """Clear chat history for a session."""
     try:
@@ -448,7 +450,7 @@ async def clear_chat_history(
 
 @router.get("/sessions", response_model=ChatSessionsListResponse)
 async def list_chat_sessions(
-    user: dict = Depends(get_current_user),  # noqa: B008
+    user: dict[str, Any] = Depends(get_current_user),  # noqa: B008
     session: AsyncSession = Depends(get_async_session),  # noqa: B008
 ):
     """List all chat sessions for the current user."""
@@ -484,13 +486,13 @@ async def list_chat_sessions(
 @router.post("/sessions", response_model=ChatSessionCreateResponse)
 async def create_chat_session(
     request: ChatSessionCreateRequest,
-    user: dict = Depends(get_current_user),  # noqa: B008
+    user: dict[str, Any] = Depends(get_current_user),  # noqa: B008
     session: AsyncSession = Depends(get_async_session),  # noqa: B008
 ):
     """Create a new chat session."""
     try:
         plex_user_id = user.get("plex_user_id")
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
 
         # Check if session already exists
         stmt = select(ChatSession).where(ChatSession.id == request.id)
@@ -535,10 +537,10 @@ async def create_chat_session(
         ) from e
 
 
-@router.delete("/sessions/{session_id}", response_model=dict)
+@router.delete("/sessions/{session_id}", response_model=DeleteResponse)
 async def delete_chat_session(
     session_id: str,
-    user: dict = Depends(get_current_user),  # noqa: B008
+    user: dict[str, Any] = Depends(get_current_user),  # noqa: B008
     db_session: AsyncSession = Depends(get_async_session),  # noqa: B008
 ):
     """Delete a chat session and its history."""
@@ -570,7 +572,7 @@ async def delete_chat_session(
             resource_id=session_id,
         )
 
-        return {"status": "deleted", "session_id": session_id}
+        return DeleteResponse(id=session_id)
     except HTTPException:
         raise
     except Exception as e:

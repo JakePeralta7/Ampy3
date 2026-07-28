@@ -1,11 +1,6 @@
 import { ChevronDown, ChevronRight, GitCompare } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import {
-  playlistsAPI,
-  type SyncDiffItem,
-  type SyncDiffResponse,
-  type SyncRun,
-} from "../../api/playlists";
+import { type SyncDiffItem, type SyncDiffResponse, type SyncRun, syncsAPI } from "../../api/syncs";
 import { Badge } from "../ui/Badge";
 import { LoadingSpinner } from "../ui/LoadingSpinner";
 
@@ -25,7 +20,7 @@ export function SyncHistory({ syncId }: SyncHistoryProps) {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    playlistsAPI
+    syncsAPI
       .getSyncHistory(syncId)
       .then((data) => {
         if (!cancelled) setRuns(data);
@@ -49,8 +44,11 @@ export function SyncHistory({ syncId }: SyncHistoryProps) {
         return;
       }
 
-      const runTime = run.created_at ?? "";
-      const prevRun = runs.find((r) => r.id !== run.id && (r.created_at ?? "") < runTime);
+      // Find the previous run with the same target (runs are sorted newest-first by backend)
+      const currentIndex = runs.findIndex((r) => r.id === run.id);
+      const prevRun =
+        runs.slice(currentIndex + 1).find((r) => r.target_id === run.target_id) || null;
+
       if (!prevRun) {
         setSelectedRunId(run.id);
         setDiff(null);
@@ -60,7 +58,7 @@ export function SyncHistory({ syncId }: SyncHistoryProps) {
       setSelectedRunId(run.id);
       setDiffLoading(true);
       try {
-        const result = await playlistsAPI.getSyncDiff(syncId, prevRun.id, run.id);
+        const result = await syncsAPI.getSyncDiff(syncId, prevRun.id, run.id);
         setDiff(result);
       } catch {
         setDiff(null);
@@ -115,6 +113,7 @@ export function SyncHistory({ syncId }: SyncHistoryProps) {
                   ) : (
                     <ChevronRight size={12} className="text-fg-subtle shrink-0" />
                   )}
+                  <Badge variant="neutral">{run.target_id}</Badge>
                   <span className="text-xs text-fg-muted">
                     {run.created_at
                       ? new Date(run.created_at).toLocaleString("en-US", {

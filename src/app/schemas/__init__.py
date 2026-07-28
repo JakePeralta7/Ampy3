@@ -8,6 +8,7 @@ from src.app.schemas.chat import (
     ChatMessage,
     ChatRequest,
 )
+from src.app.schemas.common import DeleteResponse
 from src.app.schemas.match_rules import (
     MatchRuleCreate,
     MatchRuleDeleteResponse,
@@ -21,14 +22,9 @@ from src.app.schemas.match_rules import (
 )
 from src.app.schemas.playlists import (
     PlaylistSearchResponse,
-    PlaylistSyncRequest,
-    PlaylistSyncResponse,
-    PlaylistTracksResponse,
-    RematchTrackInput,
-    RematchTrackResponse,
     TrackDetail,
-    TrackMatch,
     TrackSource,
+    TrackTarget,
 )
 from src.app.schemas.schedules import (
     CreateScheduledSyncInput,
@@ -38,8 +34,22 @@ from src.app.schemas.schedules import (
     UpdateScheduledSyncInput,
 )
 from src.app.schemas.settings import SettingsOut, SettingsUpdate
+from src.app.schemas.syncs import (
+    MatchTrackInput,
+    MatchTrackResponse,
+    SyncDiffItem,
+    SyncDiffResponse,
+    SyncRunOut,
+    SyncTracksResponse,
+    SyncTriggerRequest,
+    SyncTriggerResponse,
+    UnmatchedTrackOut,
+)
+from src.app.schemas.targets import TargetTestRequest, TargetTestResponse
 
 __all__ = [
+    # Common
+    "DeleteResponse",
     # Audit
     "AuditLogOut",
     "AuditLogListResponse",
@@ -60,14 +70,9 @@ __all__ = [
     "TrackTestInput",
     "TestRequest",
     # Playlists
-    "PlaylistSyncRequest",
-    "PlaylistSyncResponse",
     "PlaylistSearchResponse",
-    "PlaylistTracksResponse",
-    "RematchTrackInput",
-    "RematchTrackResponse",
     "TrackSource",
-    "TrackMatch",
+    "TrackTarget",
     "TrackDetail",
     # Schedules
     "CreateScheduledSyncInput",
@@ -78,4 +83,17 @@ __all__ = [
     # Settings
     "SettingsOut",
     "SettingsUpdate",
+    # Syncs
+    "SyncTriggerRequest",
+    "SyncTriggerResponse",
+    "SyncTracksResponse",
+    "MatchTrackInput",
+    "MatchTrackResponse",
+    "SyncRunOut",
+    "SyncDiffItem",
+    "SyncDiffResponse",
+    "UnmatchedTrackOut",
+    # Targets
+    "TargetTestRequest",
+    "TargetTestResponse",
 ]

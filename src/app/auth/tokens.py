@@ -9,6 +9,7 @@ import hashlib
 import hmac
 import secrets
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from sqlalchemy import delete, select
 
@@ -48,7 +49,7 @@ def verify_session_id(cookie_value: str, secret: str) -> str | None:
 
 
 async def create_session(
-    user_data: dict,
+    user_data: dict[str, Any],
     plex_token: str,
     secret: str,
     ttl_hours: int = 168,
@@ -74,7 +75,7 @@ async def create_session(
     return f"{session_id}.{sig}"
 
 
-async def verify_session(cookie_value: str, secret: str) -> dict | None:
+async def verify_session(cookie_value: str, secret: str) -> dict[str, Any] | None:
     """Verify the cookie and load session data from the DB.
 
     Returns the user dict if the session is valid and not expired,

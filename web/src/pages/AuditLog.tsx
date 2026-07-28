@@ -22,7 +22,7 @@ const EVENT_LABELS: Record<
   "sync.started": { label: "Sync Started", variant: "neutral" },
   "sync.completed": { label: "Sync Completed", variant: "success" },
   "sync.failed": { label: "Sync Failed", variant: "danger" },
-  "track.rematched": { label: "Track Rematched", variant: "warning" },
+  "track.matched": { label: "Track Matched", variant: "warning" },
   "scheduler.reloaded": { label: "Scheduler Reloaded", variant: "neutral" },
   "plex.playlist_created": { label: "Plex Playlist Created", variant: "success" },
   "plex.playlist_deleted": { label: "Plex Playlist Deleted", variant: "danger" },

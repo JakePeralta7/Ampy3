@@ -1,6 +1,7 @@
 """Main entry point for the Ampy3 API."""
 
 import logging
+import secrets
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -13,7 +14,7 @@ from src.app.api import register_routers
 from src.app.auth.tokens import purge_expired_sessions, verify_session
 from src.app.db import init_db
 from src.app.llm.ollama import health_check as ollama_health_check
-from src.app.services import get_plex_client
+from src.app.services import get_sync_target
 from src.app.services.scheduler import SchedulerService
 from src.app.settings import settings
 
@@ -33,13 +34,14 @@ SESSION_COOKIE = "ampy3_session"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Require SECRET_KEY when auth is enabled
+    # Fall back to no auth when SECRET_KEY is missing
     if settings.require_auth and not settings.secret_key:
-        msg = (
-            "SECRET_KEY must be set when REQUIRE_AUTH=true. "
-            'Generate one with: python -c "import secrets; print(secrets.token_hex(32))"'
+        logger.warning(
+            "SECRET_KEY is not set but REQUIRE_AUTH=true — "
+            "falling back to no authentication. "
+            'Generate a key with: python -c "import secrets; print(secrets.token_hex(32))"'
         )
-        raise RuntimeError(msg)
+        settings.require_auth = False
 
     logger.info("Starting Ampy3 API...")
 
@@ -57,8 +59,8 @@ async def lifespan(app: FastAPI):
         logger.warning("Could not purge expired sessions: %s", e)
 
     try:
-        plex_client = await get_plex_client()
-        sections = await plex_client.get_sections()
+        plex_target = await get_sync_target("Plex")
+        sections = await plex_target.get_sections()
         if not sections:
             logger.warning("Plex Client started but returned no library sections.")
         else:
@@ -92,8 +94,8 @@ async def lifespan(app: FastAPI):
         logger.warning("Failed to stop APScheduler: %s", e)
 
     try:
-        plex_client = await get_plex_client()
-        await plex_client.close()
+        plex_target = await get_sync_target("Plex")
+        await plex_target.close()
     except Exception:
         pass
     logger.info("Ampy3 API shut down gracefully.")

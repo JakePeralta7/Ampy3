@@ -1,6 +1,7 @@
 """Audit logging service for tracking important operations."""
 
 import logging
+from typing import Any
 
 from src.app.db import AsyncSessionLocal, SessionLocal
 from src.app.models import AuditLog
@@ -13,7 +14,7 @@ async def log_event(
     summary: str,
     resource_type: str | None = None,
     resource_id: str | None = None,
-    details: dict | None = None,
+    details: dict[str, Any] | None = None,
 ) -> None:
     try:
         async with AsyncSessionLocal() as session:
@@ -35,7 +36,7 @@ def log_event_sync(
     summary: str,
     resource_type: str | None = None,
     resource_id: str | None = None,
-    details: dict | None = None,
+    details: dict[str, Any] | None = None,
 ) -> None:
     try:
         db = SessionLocal()

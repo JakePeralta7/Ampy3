@@ -1,56 +1,100 @@
-"""Node handler registry."""
+"""Node handler registry with OOP registration pattern."""
 
 from __future__ import annotations
 
 import contextvars
-from collections.abc import Callable, Coroutine
+import logging
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
-from src.app.core.models import TrackMetadata
 from src.app.core.nodes.base import NodeConfig, NodeHandlerBase, NodeInputs, NodeOutputs
 
 if TYPE_CHECKING:
+    from src.app.core.models import TrackMetadata
     from src.app.core.targets.base import BaseTarget
 
-# Callable form for simple function-based handlers.
-NodeHandler = Callable[
-    [NodeConfig, TrackMetadata, NodeInputs],
-    Coroutine[Any, Any, NodeOutputs],
-]
-
-_handlers: dict[str, NodeHandler | NodeHandlerBase] = {}
+logger = logging.getLogger(__name__)
 
 
-def register_node(node_type: str, handler: NodeHandler | NodeHandlerBase | None = None):
-    """Decorator or direct call to register a node handler by type.
+class NodeRegistry:
+    """Central registry of node handler classes.
+
+    Node types self-register via the ``@register_node`` decorator.
+    """
+
+    _nodes: dict[str, type[NodeHandlerBase]] = {}
+
+    @classmethod
+    def register(cls, node_type: str, node_class: type[NodeHandlerBase]) -> None:
+        """Register a node handler class under *node_type*."""
+        if node_type in cls._nodes:
+            logger.warning(
+                "Overwriting existing node registration for '%s': %s -> %s",
+                node_type,
+                cls._nodes[node_type].__name__,
+                node_class.__name__,
+            )
+        cls._nodes[node_type] = node_class
+        logger.debug("Registered node '%s' -> %s", node_type, node_class.__name__)
+
+    @classmethod
+    def get(cls, node_type: str) -> type[NodeHandlerBase]:
+        """Return the node handler class for *node_type*.
+
+        Raises ``KeyError`` if the node type is not registered.
+        """
+        try:
+            return cls._nodes[node_type]
+        except KeyError:
+            available = ", ".join(sorted(cls._nodes)) or "(none)"
+            raise KeyError(f"Unknown node type '{node_type}'. Available: {available}") from None
+
+    @classmethod
+    def create(cls, node_type: str, config: NodeConfig) -> NodeHandlerBase:
+        """Create a handler instance for *node_type* with the given config."""
+        return cls.get(node_type)(config)
+
+    @classmethod
+    def list_nodes(cls) -> list[dict[str, str]]:
+        """Return metadata for all registered node types."""
+        return [
+            {"type": node_type, "name": node_class.__name__}
+            for node_type, node_class in cls._nodes.items()
+        ]
+
+
+def register_node(
+    node_type: str,
+    node_class: type[NodeHandlerBase] | None = None,
+) -> type[NodeHandlerBase] | Callable[[type[NodeHandlerBase]], type[NodeHandlerBase]]:
+    """Decorator or direct call to register a node handler class.
 
     Usage as decorator::
 
         @register_node("search")
-        async def _handle_search(config, track, inputs): ...
+        class SearchNode(NodeHandlerBase):
+            ...
 
-    Usage with a :class:`NodeHandlerBase` instance::
+    Usage as direct call::
 
-        register_node("search", MySearchHandler())
+        register_node("search", SearchNode)
     """
-    if handler is not None:
-        _handlers[node_type] = handler
-        return handler
+    if node_class is not None:
+        node_class.node_type = node_type  # type: ignore[misc]
+        NodeRegistry.register(node_type, node_class)
+        return node_class
 
-    def decorator(fn: NodeHandler | NodeHandlerBase) -> NodeHandler | NodeHandlerBase:
-        _handlers[node_type] = fn
-        return fn
+    def decorator(cls: type[NodeHandlerBase]) -> type[NodeHandlerBase]:
+        cls.node_type = node_type  # type: ignore[misc]
+        NodeRegistry.register(node_type, cls)
+        return cls
 
     return decorator
 
 
-def get_handler(node_type: str) -> NodeHandler | NodeHandlerBase | None:
-    return _handlers.get(node_type)
-
-
 def get_registered_types() -> list[str]:
     """Return sorted list of all registered node type strings."""
-    return sorted(_handlers.keys())
+    return sorted(NodeRegistry._nodes.keys())
 
 
 def build_node_type_literal() -> type:
@@ -63,9 +107,8 @@ def build_node_type_literal() -> type:
 
     types = get_registered_types()
     if not types:
-        # Fallback so Pydantic doesn't choke on an empty Literal.
         return str  # type: ignore[return-value]
-    return Literal[tuple(types)]  # type: ignore[valid-type]
+    return Literal[tuple(types)]  # type: ignore[misc]
 
 
 # ─── Target Context ───────────────────────────────────────────

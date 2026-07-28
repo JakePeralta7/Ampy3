@@ -83,7 +83,7 @@ def register_source(source_id: str) -> Callable[[type[IPlatformSource]], type[IP
             ...
     """
 
-    def decorator(cls):
+    def decorator(cls: type[IPlatformSource]) -> type[IPlatformSource]:
         cls.source_id = source_id
         SourceRegistry.register(source_id, cls)
         return cls

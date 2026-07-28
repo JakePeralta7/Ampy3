@@ -1,8 +1,9 @@
+import { RotateCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import type { PlaylistDetailsResponse, TrackDetail } from "../../api/playlists";
 import type { ScheduledSync } from "../../api/schedules";
-import { Badge } from "../ui/Badge";
+import type { SyncTracksResponse, TrackDetail } from "../../api/syncs";
+import { getSourceLabel } from "../../lib/constants";
 import { CopyButton } from "../ui/CopyButton";
 import { type Column, DataTable } from "../ui/DataTable";
 import { Slideover } from "../ui/Slideover";
@@ -13,7 +14,8 @@ import { TrackDetailModal } from "./TrackDetailModal";
 interface TrackRow {
   _idx: number;
   _detail: TrackDetail | null;
-  plex_id?: string;
+  item_id?: string;
+  source_item_id?: string;
   title: string;
   artist_name: string;
   album_name: string;
@@ -25,18 +27,43 @@ interface PlaylistDetailsProps {
   sync: ScheduledSync | null;
   isOpen: boolean;
   onClose: () => void;
-  playlistDetails: PlaylistDetailsResponse | null;
+  playlistDetails: SyncTracksResponse | null;
   loading: boolean;
   error: string | null;
-  onRematchTrack: (
+  onMatchTrack: (
     syncId: number,
     trackKey: string,
     input: { title: string; artist_name?: string; album_name?: string },
+    targetId?: string,
+    sourceItemId?: string,
   ) => Promise<{ matched: boolean; message: string }>;
-  rematchingTracks?: Set<string>;
+  matchingTracks?: Set<string>;
   selectedTrackIndex: number | null;
   onTrackSelect: (index: number) => void;
   onTrackClose: () => void;
+  activeTab: string;
+  onTabChange: (tabId: string) => void;
+}
+
+function deriveRows(playlistDetails: SyncTracksResponse, activeTargetId: string): TrackRow[] {
+  return playlistDetails.tracks.map((track, idx) => {
+    const detail = playlistDetails.track_details?.[idx] ?? null;
+    const match = detail?.targets?.find((t) => t.target_id === activeTargetId);
+    const source = detail?.source;
+    return {
+      _idx: idx,
+      _detail: detail,
+      item_id: match?.item_id,
+      source_item_id: source?.item_id ?? undefined,
+      title: match?.title ?? source?.title ?? track.title,
+      artist_name: match?.artist_name ?? source?.artist_name ?? track.artist_name,
+      album_name: match?.album_name ?? source?.album_name ?? track.album_name,
+      duration:
+        match?.duration ??
+        (source?.duration_ms != null ? Math.round(source.duration_ms / 1000) : track.duration),
+      status: match ? "matched" : "unmatched",
+    };
+  });
 }
 
 export function PlaylistDetails({
@@ -46,45 +73,60 @@ export function PlaylistDetails({
   playlistDetails,
   loading,
   error,
-  onRematchTrack,
-  rematchingTracks = new Set(),
+  onMatchTrack,
+  matchingTracks = new Set(),
   selectedTrackIndex,
   onTrackSelect,
   onTrackClose,
+  activeTab,
+  onTabChange,
 }: PlaylistDetailsProps) {
   useEffect(() => {
     if (error) toast.error(error);
   }, [error]);
 
-  const [tab, setTab] = useState<"tracks" | "history">("tracks");
+  const targetIds = sync?.target_ids ?? [];
 
-  const handleRematch = useCallback(
+  const [selectedTab, setSelectedTab] = useState<string>(
+    () => activeTab ?? targetIds[0] ?? "history",
+  );
+
+  // Sync selectedTab changes to URL
+  const handleTabChangeLocal = useCallback(
+    (tabId: string) => {
+      setSelectedTab(tabId);
+      onTabChange(tabId);
+    },
+    [onTabChange],
+  );
+
+  // Update local state when URL tab param changes (e.g., browser back/forward)
+  useEffect(() => {
+    setSelectedTab(activeTab ?? targetIds[0] ?? "history");
+  }, [activeTab, targetIds]);
+
+  const handleMatch = useCallback(
     async (
       trackKey: string,
       input: { title: string; artist_name?: string; album_name?: string },
+      targetId?: string,
+      sourceItemId?: string,
     ) => {
       if (!sync) return;
-      const result = await onRematchTrack(sync.id, trackKey, input);
+      const result = await onMatchTrack(sync.id, trackKey, input, targetId, sourceItemId);
       if (result.matched) {
         toast.success(result.message);
       } else {
         toast.error(result.message);
       }
     },
-    [onRematchTrack, sync],
+    [onMatchTrack, sync],
   );
 
-  const rows: TrackRow[] = useMemo(
-    () =>
-      playlistDetails
-        ? playlistDetails.tracks.map((track, idx) => ({
-            _idx: idx,
-            _detail: playlistDetails.track_details?.[idx] ?? null,
-            ...track,
-          }))
-        : [],
-    [playlistDetails?.tracks, playlistDetails?.track_details, playlistDetails],
-  );
+  const rows: TrackRow[] = useMemo(() => {
+    if (!playlistDetails || selectedTab === "history") return [];
+    return deriveRows(playlistDetails, selectedTab);
+  }, [playlistDetails, selectedTab]);
 
   const columns: Column<TrackRow>[] = useMemo(
     () => [
@@ -106,10 +148,10 @@ export function PlaylistDetails({
               {r.title}
               <CopyButton value={r.title} label="title" />
             </div>
-            {r.plex_id && (
+            {r.item_id && (
               <div className="text-xs text-fg-muted flex items-center gap-1 group">
-                {r.plex_id}
-                <CopyButton value={r.plex_id} label="Plex ID" />
+                {r.item_id}
+                <CopyButton value={r.item_id} label="Library ID" />
               </div>
             )}
           </div>
@@ -161,48 +203,48 @@ export function PlaylistDetails({
         filterable: true,
         sortValue: (r: TrackRow) => r.status,
         cell: (r: TrackRow) => {
-          const trackKey = `${r.plex_id || r.title}-${r._idx}`;
-          const isRematching = rematchingTracks.has(trackKey);
+          const trackKey = `${selectedTab}-${r.item_id || r.title}-${r._idx}`;
+          const isMatching = matchingTracks.has(trackKey);
           return r.status === "matched" ? (
-            <Badge variant="success">✓ Matched</Badge>
+            <span className="text-success-500 font-bold">✓</span>
           ) : (
-            <div className="flex items-center gap-2">
-              <Badge variant="danger">✗ Unmatched</Badge>
+            <div className="flex items-center gap-1">
+              <span className="text-danger-500 font-bold">✗</span>
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleRematch(trackKey, {
-                    title: r.title,
-                    artist_name: r.artist_name,
-                    album_name: r.album_name || undefined,
-                  });
+                  handleMatch(
+                    trackKey,
+                    {
+                      title: r.title,
+                      artist_name: r.artist_name,
+                      album_name: r.album_name || undefined,
+                    },
+                    selectedTab,
+                    r.source_item_id,
+                  );
                 }}
-                disabled={isRematching}
-                className="px-2 py-1 rounded-sm text-xs font-medium bg-warn-500/10 text-warn-500 border border-warn-500/20 hover:bg-warn-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-fast"
+                disabled={isMatching}
+                title="Match"
+                className="p-1 rounded text-warning-700 hover:bg-warning-50/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-fast"
               >
-                {isRematching ? "..." : "Rematch"}
+                <RotateCw size={12} className={isMatching ? "animate-spin" : ""} />
               </button>
             </div>
           );
         },
       },
     ],
-    [handleRematch, rematchingTracks],
+    [handleMatch, matchingTracks, selectedTab],
   );
 
   if (!isOpen || !sync) {
     return null;
   }
 
-  const subtitle = playlistDetails ? (
-    <span>
-      {sync.target_id === "jellyfin" ? "Jellyfin" : "Plex"}: {sync.target_playlist_name} • Source:{" "}
-      {sync.source === "youtube_music" ? "YouTube Music" : sync.source}
-      <span className="ml-2 text-success-500 font-semibold">
-        Match Rate: {playlistDetails.match_rate} ({playlistDetails.match_percentage}%)
-      </span>
-    </span>
-  ) : undefined;
+  const tabs = [...targetIds.map((id) => ({ id, label: id })), { id: "history", label: "History" }];
+
+  const subtitle = playlistDetails ? `Source: ${getSourceLabel(sync.source)}` : undefined;
 
   return (
     <>
@@ -221,24 +263,17 @@ export function PlaylistDetails({
 
         {playlistDetails && (
           <>
-            <Tabs
-              tabs={[
-                { id: "tracks", label: "Tracks" },
-                { id: "history", label: "History" },
-              ]}
-              activeTab={tab}
-              onChange={(id) => setTab(id as "tracks" | "history")}
-            />
+            <Tabs tabs={tabs} activeTab={selectedTab} onChange={handleTabChangeLocal} />
 
-            {tab === "tracks" && (
+            {selectedTab !== "history" && (
               <>
                 <div className="mb-4">
                   <p className="text-sm text-fg-muted">
                     Click a track to see source and match details
                   </p>
                   <p className="text-sm text-fg-muted">
-                    Matched: {playlistDetails.matched_count} | Failed:{" "}
-                    {playlistDetails.failed_count} | Total: {playlistDetails.total_source_tracks}
+                    Matched: {rows.filter((r) => r.status === "matched").length} | Failed:{" "}
+                    {rows.filter((r) => r.status === "unmatched").length} | Total: {rows.length}
                   </p>
                 </div>
 
@@ -250,7 +285,7 @@ export function PlaylistDetails({
                     <DataTable
                       columns={columns}
                       data={rows}
-                      keyExtractor={(r) => `${r.plex_id || r.title}-${r._idx}`}
+                      keyExtractor={(r) => `${selectedTab}-${r.item_id || r.title}-${r._idx}`}
                       onRowClick={(r) => {
                         if (r._detail) onTrackSelect(r._idx);
                       }}
@@ -261,7 +296,7 @@ export function PlaylistDetails({
               </>
             )}
 
-            {tab === "history" && <SyncHistory syncId={sync.id} />}
+            {selectedTab === "history" && <SyncHistory syncId={sync.id} />}
           </>
         )}
       </Slideover>
@@ -275,7 +310,7 @@ export function PlaylistDetails({
         index={selectedTrackIndex ?? 0}
         isOpen={selectedTrackIndex != null}
         onClose={onTrackClose}
-        source={playlistDetails?.source ?? "unknown"}
+        targetId={selectedTab !== "history" ? selectedTab : undefined}
       />
     </>
   );

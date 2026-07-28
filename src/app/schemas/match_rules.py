@@ -70,6 +70,7 @@ class TestRequest(BaseModel):
 
     track: TrackTestInput
     rule_ids: list[int] | None = None
+    target_id: str | None = None
 
 
 class MatchRuleTestResult(BaseModel):
@@ -79,16 +80,16 @@ class MatchRuleTestResult(BaseModel):
     rule_name: str
     rule_priority: int
     matched: bool
-    result: dict | None = None
+    result: dict[str, Any] | None = None
     error: str | None = None
 
 
 class MatchRuleTestResponse(BaseModel):
     """Response from testing match rules."""
 
-    traces: list[dict]
+    traces: list[dict[str, Any]]
     matches: list[MatchRuleTestResult]
-    match_results: list[dict]
+    match_results: list[dict[str, Any]]
 
 
 class MatchRuleDeleteResponse(BaseModel):
@@ -112,13 +113,13 @@ def _model_to_out(rule: Any) -> MatchRuleOut:
     if hasattr(rule, "created_at") and rule.created_at:
         try:
             created_at_str = rule.created_at.isoformat()
-        except (AttributeError, ValueError):
+        except AttributeError, ValueError:
             created_at_str = str(rule.created_at)
 
     if hasattr(rule, "updated_at") and rule.updated_at:
         try:
             updated_at_str = rule.updated_at.isoformat()
-        except (AttributeError, ValueError):
+        except AttributeError, ValueError:
             updated_at_str = str(rule.updated_at)
 
     # Compute canvas from YAML; fall back to empty canvas on error

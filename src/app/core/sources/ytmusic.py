@@ -3,25 +3,22 @@
 from __future__ import annotations
 
 import json
-import logging
 import re
 from pathlib import Path
+from typing import Any
 
-import requests
-
+from src.app.constants import SOURCE_YOUTUBE_MUSIC, SOURCE_YOUTUBE_MUSIC_DISPLAY
 from src.app.core.models import IPlatformSource, PlaylistMetadata, TrackMetadata
 from src.app.core.sources.registry import register_source
 from src.app.settings import settings
 
-logger = logging.getLogger(__name__)
 
-
-@register_source("youtube_music")
+@register_source(SOURCE_YOUTUBE_MUSIC)
 class YouTubeMusicSource(IPlatformSource):
-    """Extracts playlists from YouTube Music via yt-dlp."""
+    """Extract playlists from YouTube Music via yt-dlp."""
 
-    source_id = "youtube_music"
-    display_name = "YouTube Music"
+    source_id = SOURCE_YOUTUBE_MUSIC
+    display_name = SOURCE_YOUTUBE_MUSIC_DISPLAY
 
     YTM_URL_PATTERN = re.compile(r"(https?://music\.youtube\.com/playlist\?list=[a-zA-Z0-9_-]+)")
 
@@ -34,29 +31,16 @@ class YouTubeMusicSource(IPlatformSource):
         match = cls.YTM_URL_PATTERN.search(url)
         if not match:
             return f"PL{url.split('list=')[-1]}"
-        parts = match.group(1).split("list=")
-        return parts[-1]
+        return match.group(1).split("list=")[-1]
 
-    async def get_playlist(self, playlist_url: str) -> PlaylistMetadata:
-        pl_id = self._parse_playlist_id(playlist_url)
-        if not pl_id:
+    def get_playlist_cache_identifier(self, playlist_url: str) -> str:
+        playlist_id = self._parse_playlist_id(playlist_url)
+        if not playlist_id:
             raise ValueError(f"Could not parse playlist ID from: {playlist_url}")
+        return playlist_id
 
-        cache_key = f"ytmusic:playlist:{pl_id}"
-
-        # Try Valkey cache first (5 min TTL)
-        from src.app.services.valkey import ValkeyService
-
-        try:
-            cache = ValkeyService.get_instance()
-            cached = await cache.get(cache_key)
-            if cached:
-                logger.debug("Cache hit for playlist '%s' — using cached yt-dlp output", pl_id)
-                return self._parse_playlist_data(pl_id, playlist_url, json.loads(cached))
-        except Exception as e:
-            logger.debug("Valkey cache read failed (continuing without cache): %s", e)
-
-        # Fetch from yt-dlp
+    async def _fetch_playlist(self, playlist_url: str) -> PlaylistMetadata:
+        playlist_id = self.get_playlist_cache_identifier(playlist_url)
         cmd = [
             "yt-dlp",
             "--dump-single-json",
@@ -89,63 +73,54 @@ class YouTubeMusicSource(IPlatformSource):
         if result.returncode != 0 and not result.stdout.strip():
             raise RuntimeError(f"yt-dlp failed: {result.stderr.strip()}")
 
-        data = json.loads(result.stdout)
-
-        # Cache the result (non-blocking on failure)
-        try:
-            cache = ValkeyService.get_instance()
-            await cache.setex(cache_key, 300, json.dumps(data))
-        except Exception as e:
-            logger.debug("Failed to cache yt-dlp output (non-fatal): %s", e)
-
-        return self._parse_playlist_data(pl_id, playlist_url, data)
+        return self._parse_playlist_data(playlist_id, playlist_url, json.loads(result.stdout))
 
     @staticmethod
-    def _parse_playlist_data(pl_id: str, playlist_url: str, data: dict) -> PlaylistMetadata:
+    def _parse_playlist_data(
+        playlist_id: str, playlist_url: str, data: dict[str, Any]
+    ) -> PlaylistMetadata:
         tracks_raw = data.get("entries", [])
         title = data.get("title", "Unknown Playlist")
-        pl_description = data.get("description", "")
+        description = data.get("description", "")
 
         tracks: list[TrackMetadata] = []
         for entry in tracks_raw:
             if entry is None:
                 continue
 
-            title_val = entry.get("title", "") or ""
-            if not title_val:
+            title_value = entry.get("title", "") or ""
+            if not title_value:
                 continue
 
             artist = entry.get("creator", "") or entry.get("uploader", "") or ""
-            album_obj = entry.get("album")
-            if isinstance(album_obj, dict):
-                album = album_obj.get("name", "")
-            else:
-                album = entry.get("album", "") or ""
+            album_value = entry.get("album")
+            album = (
+                album_value.get("name", "") if isinstance(album_value, dict) else album_value or ""
+            )
             if (
                 album
                 and title
-                and (album.lower() == title.lower() or title.lower().find(album.lower()) >= 0)
+                and (album.lower() == title.lower() or album.lower() in title.lower())
             ):
                 album = ""
             duration = entry.get("duration") or None
-            mbid = entry.get("musicbrainz_id", None)
 
             tracks.append(
                 TrackMetadata(
-                    mbid=mbid,
-                    title=title_val if title_val else None,
-                    artist_name=artist if artist else None,
-                    album_name=album if album else None,
+                    mbid=entry.get("musicbrainz_id"),
+                    title=title_value,
+                    artist_name=artist or None,
+                    album_name=album or None,
                     duration_ms=int(duration * 1000) if duration else None,
                     source_id=entry.get("id") or None,
                 )
             )
 
         return PlaylistMetadata(
-            source_id=pl_id,
-            source="youtube_music",
+            source_id=playlist_id,
+            source=SOURCE_YOUTUBE_MUSIC,
             title=title,
-            description=pl_description,
+            description=description,
             tracks=tracks,
             external_url=playlist_url,
         )

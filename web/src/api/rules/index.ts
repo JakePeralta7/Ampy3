@@ -97,6 +97,10 @@ export const matchRulesAPI = {
   reorder: (order: { id: number; priority: number }[]) =>
     apiPut<MatchRule[]>("/v1/match-rules/reorder", order),
 
-  test: (track: TrackTestInput, ruleIds?: number[]) =>
-    apiPost<TestResponse>("/v1/match-rules/test", { track, rule_ids: ruleIds }),
+  test: (track: TrackTestInput, ruleIds?: number[], targetId?: string) =>
+    apiPost<TestResponse>("/v1/match-rules/test", {
+      track,
+      rule_ids: ruleIds,
+      target_id: targetId,
+    }),
 };

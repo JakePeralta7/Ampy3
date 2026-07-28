@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+from typing import Any
+
 from langchain_core.tools import tool
 
 from src.app.core.sources.ytmusic import YouTubeMusicSource
 
 
 @tool
-async def search_youtube_music(query: str) -> dict:
+async def search_youtube_music(query: str) -> dict[str, Any]:
     """Search YouTube Music for playlists matching the given query.
 
     Returns a list of matching playlist URLs and titles.
@@ -44,10 +46,7 @@ async def search_youtube_music(query: str) -> dict:
             playlist_id = entry.get("playlist_id")
             if not playlist_id:
                 continue
-            valid_ids = (
-                r"^(PL|OLAK5uy_|RD|RDCLAK5uy_|FL|LM|WL|UU|LL)"
-                r"[A-Za-z0-9_-]+$"
-            )
+            valid_ids = r"^(PL|OLAK5uy_|RD|RDCLAK5uy_|FL|LM|WL|UU|LL)" r"[A-Za-z0-9_-]+$"
             if not re.match(valid_ids, playlist_id):
                 continue
             playlists.append(
@@ -81,7 +80,7 @@ async def search_youtube_music(query: str) -> dict:
 
 
 @tool
-async def get_ytmusic_playlist(playlist_url: str) -> dict:
+async def get_ytmusic_playlist(playlist_url: str) -> dict[str, Any]:
     """Fetch tracks from a YouTube Music playlist URL.
 
     Args:

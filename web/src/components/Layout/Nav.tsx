@@ -25,11 +25,12 @@ const links = [
   { path: "/chat", label: "Chat", icon: MessageSquare },
   { path: "/audit", label: "Audit Log", icon: ScrollText },
   {
-    path: "/settings/config",
+    path: "/settings",
     label: "Settings",
     icon: Cog,
     sub: [
       { path: "/settings/config", label: "Config" },
+      { path: "/settings/targets", label: "Targets" },
       { path: "/settings/matching", label: "Match Rules" },
     ],
   },
@@ -58,7 +59,7 @@ export function Nav() {
   }, [collapsed]);
 
   const isActive = (path: string) =>
-    path === "/settings/config" && location.pathname.startsWith("/settings")
+    path === "/settings" && location.pathname.startsWith("/settings")
       ? true
       : path === "/chat" && location.pathname.startsWith("/chat")
         ? true

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from src.app.core.musicbrainz import MusicBrainzResolver
 from src.app.core.providers.base import BaseMetadataProvider
 
@@ -20,7 +22,7 @@ class MusicBrainzProvider(BaseMetadataProvider):
         title: str,
         artist: str | None = None,
         duration_ms: int | None = None,
-    ) -> dict | None:
+    ) -> dict[str, Any] | None:
         return self._resolver.search_recording(title, artist, duration_ms)
 
     def search_recordings(
@@ -28,20 +30,20 @@ class MusicBrainzProvider(BaseMetadataProvider):
         query: str,
         artist: str = "",
         limit: int = 10,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         return self._resolver.search_recordings(query, artist, limit)
 
-    def lookup_artist(self, name: str) -> dict | None:
+    def lookup_artist(self, name: str) -> dict[str, Any] | None:
         return self._resolver.lookup_artist(name)
 
-    def search_artists(self, query: str, limit: int = 10) -> list[dict]:
+    def search_artists(self, query: str, limit: int = 10) -> list[dict[str, Any]]:
         return self._resolver.search_artists(query, limit)
 
     def lookup_release_group(
         self,
         title: str,
         artist_name: str | None = None,
-    ) -> dict | None:
+    ) -> dict[str, Any] | None:
         return self._resolver.lookup_release_group(title, artist_name)
 
     def search_releases(
@@ -49,16 +51,16 @@ class MusicBrainzProvider(BaseMetadataProvider):
         query: str,
         artist: str = "",
         limit: int = 10,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         return self._resolver.search_releases(query, artist, limit)
 
-    def lookup_release(self, mbid: str) -> dict | None:
+    def lookup_release(self, mbid: str) -> dict[str, Any] | None:
         return self._resolver.lookup_release(mbid)
 
-    def get_artist_releases(self, artist_id: str, limit: int = 25) -> list[dict]:
+    def get_artist_releases(self, artist_id: str, limit: int = 25) -> list[dict[str, Any]]:
         return self._resolver.get_artist_releases(artist_id, limit)
 
-    def get_release_tracks(self, release_id: str) -> list[dict]:
+    def get_release_tracks(self, release_id: str) -> list[dict[str, Any]]:
         return self._resolver.get_release_tracks(release_id)
 
     def search_by_tag(
@@ -66,5 +68,5 @@ class MusicBrainzProvider(BaseMetadataProvider):
         tag: str,
         entity: str = "artist",
         limit: int = 10,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         return self._resolver.search_by_tag(tag, entity, limit)

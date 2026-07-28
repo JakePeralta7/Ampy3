@@ -1,6 +1,7 @@
 """Ollama LLM client service."""
 
 import logging
+from typing import Any
 
 from src.app.services.base import ServiceBase
 
@@ -8,10 +9,10 @@ logger = logging.getLogger(__name__)
 
 
 class OllamaService(ServiceBase):
-    """Service for managing Ollama client instance."""
+     """Service for managing Ollama client instance."""
 
-    @classmethod
-    def create(cls):
+     @classmethod
+     def create(cls) -> Any:
         from src.app.llm.ollama import OllamaClient
         from src.app.settings import settings
 

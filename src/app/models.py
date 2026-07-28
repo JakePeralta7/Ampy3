@@ -1,7 +1,18 @@
 from datetime import datetime
 from enum import StrEnum
+from typing import Any
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.app.db import Base
@@ -26,8 +37,7 @@ class TimestampMixin(CreatedAtMixin):
 
 
 class TrackColumns:
-    """Shared source-match columns for any table
-    tracking a YouTube Music track and its Plex match."""
+    """Shared source columns for any table tracking a YouTube Music track."""
 
     position: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
@@ -36,15 +46,7 @@ class TrackColumns:
     source_artist: Mapped[str | None] = mapped_column(String(255), nullable=True)
     source_album: Mapped[str | None] = mapped_column(String(255), nullable=True)
     source_duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    source_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-
-    # Plex match result metadata
-    match_item_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    match_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    match_artist: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    match_album: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    match_duration: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    match_rule_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    item_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
 
 class MatchRule(TimestampMixin, Base):
@@ -80,16 +82,13 @@ class ScheduledPlaylistSync(TimestampMixin, Base):
     source: Mapped[str] = mapped_column(
         String(50), default=PlaylistSourceEnum.YOUTUBE_MUSIC, nullable=False
     )
-    target_id: Mapped[str] = mapped_column(String(50), default="plex", nullable=False)
     source_url: Mapped[str] = mapped_column(String(2048), nullable=False)
     target_playlist_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    target_playlist_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     schedule_interval: Mapped[str] = mapped_column(
         String(50), default=ScheduleIntervalEnum.DAILY, nullable=False
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    replace_existing: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     next_sync_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -97,12 +96,53 @@ class ScheduledPlaylistSync(TimestampMixin, Base):
     failed_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    tracks: Mapped[list["PlaylistTrack"]] = relationship(
+    tracks: Mapped[list[PlaylistTrack]] = relationship(
         back_populates="sync", cascade="all, delete-orphan", order_by="PlaylistTrack.position"
+    )
+    schedule_targets: Mapped[list[ScheduleTarget]] = relationship(
+        back_populates="sync", cascade="all, delete-orphan"
     )
 
     def __repr__(self) -> str:
         return f"<ScheduledPlaylistSync(id={self.id}, playlist={self.target_playlist_name})>"
+
+    @property
+    def target_ids(self) -> list[str]:
+        """Computed from junction table — replaces former JSON column."""
+        return [t.target_id for t in self.schedule_targets]
+
+    @property
+    def target_playlist_id(self) -> str | None:
+        """Backward-compat: first target's playlist_id."""
+        for t in self.schedule_targets:
+            if t.playlist_id:
+                return t.playlist_id
+        return None
+
+
+class ScheduleTarget(Base):
+    """Junction table linking schedules to their target platforms with persisted playlist IDs."""
+
+    __tablename__ = "schedule_targets"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    sync_id: Mapped[int] = mapped_column(
+        ForeignKey("scheduled_playlist_syncs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    target_id: Mapped[str] = mapped_column(String(50), nullable=False)
+    playlist_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    sync: Mapped[ScheduledPlaylistSync] = relationship(back_populates="schedule_targets")
+
+    __table_args__ = (UniqueConstraint("sync_id", "target_id", name="uq_schedule_target"),)
+
+    def __repr__(self) -> str:
+        return (
+            f"<ScheduleTarget(id={self.id}, sync_id={self.sync_id}, "
+            f"target_id='{self.target_id}', playlist_id='{self.playlist_id}')>"
+        )
 
 
 class PlaylistTrack(TrackColumns, CreatedAtMixin, Base):
@@ -115,12 +155,15 @@ class PlaylistTrack(TrackColumns, CreatedAtMixin, Base):
         index=True,
     )
 
-    sync: Mapped["ScheduledPlaylistSync"] = relationship(back_populates="tracks")
+    sync: Mapped[ScheduledPlaylistSync] = relationship(back_populates="tracks")
+    targets: Mapped[list[PlaylistTrackTarget]] = relationship(
+        back_populates="playlist_track", cascade="all, delete-orphan"
+    )
 
     def __repr__(self) -> str:
         return (
             f"<PlaylistTrack(id={self.id}, sync_id={self.sync_id}, "
-            f"source='{self.source_title}', matched={self.match_item_id is not None})>"
+            f"source='{self.source_title}')>"
         )
 
 
@@ -145,7 +188,7 @@ class AuditLog(Base):
     resource_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     resource_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     summary: Mapped[str] = mapped_column(Text, nullable=False)
-    details: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    details: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
     )
@@ -179,10 +222,11 @@ class SyncRun(CreatedAtMixin, Base):
         nullable=False,
         index=True,
     )
+    target_id: Mapped[str] = mapped_column(String(50), nullable=False)
     matched_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     failed_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
-    tracks: Mapped[list["SyncRunTrack"]] = relationship(
+    tracks: Mapped[list[SyncRunTrack]] = relationship(
         back_populates="run", cascade="all, delete-orphan", order_by="SyncRunTrack.position"
     )
 
@@ -200,12 +244,78 @@ class SyncRunTrack(TrackColumns, Base):
         index=True,
     )
 
-    run: Mapped["SyncRun"] = relationship(back_populates="tracks")
+    run: Mapped[SyncRun] = relationship(back_populates="tracks")
+    targets: Mapped[list[SyncRunTrackTarget]] = relationship(
+        back_populates="sync_run_track", cascade="all, delete-orphan"
+    )
 
     def __repr__(self) -> str:
         return (
-            f"<SyncRunTrack(id={self.id}, run_id={self.run_id}, "
-            f"source='{self.source_title}', matched={self.match_item_id is not None})>"
+            f"<SyncRunTrack(id={self.id}, run_id={self.run_id}, " f"source='{self.source_title}')>"
+        )
+
+
+class PlaylistTrackTarget(Base):
+    """Per-target match data for a playlist track."""
+
+    __tablename__ = "playlist_track_targets"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    playlist_track_id: Mapped[int] = mapped_column(
+        ForeignKey("playlist_tracks.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    target_id: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    item_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    title: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    artist_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    album_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    duration: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    rule_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    playlist_track: Mapped[PlaylistTrack] = relationship(back_populates="targets")
+
+    __table_args__ = (
+        UniqueConstraint("playlist_track_id", "target_id", name="uq_playlist_track_target"),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<PlaylistTrackTarget(id={self.id}, target={self.target_id}, "
+            f"item_id='{self.item_id}')>"
+        )
+
+
+class SyncRunTrackTarget(Base):
+    """Per-target match data for a sync run track (history)."""
+
+    __tablename__ = "sync_run_track_targets"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    sync_run_track_id: Mapped[int] = mapped_column(
+        ForeignKey("sync_run_tracks.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    target_id: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    item_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    title: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    artist_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    album_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    duration: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    rule_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    sync_run_track: Mapped[SyncRunTrack] = relationship(back_populates="targets")
+
+    __table_args__ = (
+        UniqueConstraint("sync_run_track_id", "target_id", name="uq_sync_run_track_target"),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<SyncRunTrackTarget(id={self.id}, target={self.target_id}, "
+            f"item_id='{self.item_id}')>"
         )
 
 

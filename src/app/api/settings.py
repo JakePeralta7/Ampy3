@@ -2,6 +2,7 @@
 
 import logging
 from datetime import UTC, datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -29,19 +30,16 @@ USER_CONFIG_KEYS = [
     "yt_dlp_timeout",
 ]
 
-
-def _mask_token(token: str) -> str:
-    if len(token) <= 4:
-        return "****"
-    return f"****{token[-4:]}"
+# Keys whose values must never be sent to the frontend.
+_SENSITIVE_KEYS = {"plex_token", "jellyfin_api_key"}
 
 
 def _build_settings_out(overrides: dict[str, str]) -> SettingsOut:
     return SettingsOut(
         plex_host=overrides.get("plex_host", ""),
-        plex_token=_mask_token(overrides.get("plex_token", "")),
+        plex_token_set=bool(overrides.get("plex_token", "")),
         jellyfin_server_url=overrides.get("jellyfin_server_url", ""),
-        jellyfin_api_key=_mask_token(overrides.get("jellyfin_api_key", "")),
+        jellyfin_api_key_set=bool(overrides.get("jellyfin_api_key", "")),
         jellyfin_user_id=overrides.get("jellyfin_user_id", ""),
         ollama_host=overrides.get("ollama_host", settings.ollama_host),
         ollama_model=overrides.get("ollama_model", settings.ollama_model),
@@ -53,7 +51,7 @@ def _build_settings_out(overrides: dict[str, str]) -> SettingsOut:
 
 @router.get("/", response_model=SettingsOut)
 async def get_settings(
-    _user: dict = Depends(get_current_user),  # noqa: B008
+    _user: dict[str, Any] = Depends(get_current_user),  # noqa: B008
 ):
     """Return current settings (env defaults merged with DB overrides)."""
     from sqlalchemy import select
@@ -69,12 +67,20 @@ async def get_settings(
 @router.put("/", response_model=SettingsOut)
 async def put_settings(
     body: SettingsUpdate,
-    _user: dict = Depends(get_current_user),  # noqa: B008
+    _user: dict[str, Any] = Depends(get_current_user),  # noqa: B008
 ):
     """Update settings and persist to database."""
     from sqlalchemy import select
 
     incoming = body.model_dump(exclude_none=True, exclude_unset=True)
+    if not incoming:
+        raise HTTPException(status_code=400, detail="No settings provided")
+
+    # Skip sensitive keys when empty — preserves existing value.
+    for key in _SENSITIVE_KEYS:
+        if key in incoming and incoming[key] == "":
+            del incoming[key]
+
     if not incoming:
         raise HTTPException(status_code=400, detail="No settings provided")
 
@@ -111,20 +117,16 @@ async def put_settings(
     )
 
     if "plex_host" in incoming or "plex_token" in incoming:
-        from src.app.services.plex import PlexService
+        from src.app.services.target import TargetService
 
-        PlexService.reset()
+        TargetService.reset()
     if (
         "jellyfin_server_url" in incoming
         or "jellyfin_api_key" in incoming
         or "jellyfin_user_id" in incoming
     ):
-        from src.app.services.jellyfin import JellyfinService
+        from src.app.services.target import TargetService
 
-        JellyfinService.reset()
-    if "ollama_host" in incoming or "ollama_model" in incoming or "ollama_timeout" in incoming:
-        from src.app.services.ollama import OllamaService
-
-        OllamaService.reset()
+        TargetService.reset()
 
     return _build_settings_out(overrides)

@@ -15,6 +15,7 @@ a canvas is needed (e.g. GET /api/v1/match-rules/:id).
 from __future__ import annotations
 
 from collections import deque
+from typing import Any
 
 # Pixels between layer columns (horizontal)
 H_SPACING = 220
@@ -27,7 +28,7 @@ MARGIN_Y = 80
 
 def auto_layout(
     node_ids: list[str],
-    edges: list[dict],
+    edges: list[dict[str, Any]],
 ) -> dict[str, dict[str, float]]:
     """Compute {node_id: {x, y}} for every node.
 
@@ -43,10 +44,10 @@ def auto_layout(
         return {}
 
     # Normalise edge representation — accept both "from"/"to" and "source"/"target"
-    def _src(e: dict) -> str:
+    def _src(e: dict[str, Any]) -> str:
         return e.get("from") or e.get("from_node") or e.get("source", "")
 
-    def _tgt(e: dict) -> str:
+    def _tgt(e: dict[str, Any]) -> str:
         return e.get("to") or e.get("to_node") or e.get("target", "")
 
     # Build adjacency structures
