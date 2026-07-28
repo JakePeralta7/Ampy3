@@ -95,8 +95,8 @@ def register_target(
     """
 
     def decorator(cls: type[BaseTarget]) -> type[BaseTarget]:
-         cls.target_id = target_id
-         TargetRegistry.register(target_id, cls, factory=factory)
-         return cls
+        cls.target_id = target_id
+        TargetRegistry.register(target_id, cls, factory=factory)
+        return cls
 
     return decorator

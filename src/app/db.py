@@ -45,6 +45,7 @@ SessionLocal = sessionmaker(
     autoflush=False,
 )
 
+
 # Base class for ORM models
 class Base(DeclarativeBase):
     pass

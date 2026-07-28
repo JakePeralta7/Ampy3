@@ -34,7 +34,7 @@ def sync_playlists_task(
         resource_type="playlist",
         resource_id=resource_id,
         summary=(
-            f"Sync started for {source} playlist — {playlist_url} " f"({len(target_ids)} target(s))"
+            f"Sync started for {source} playlist — {playlist_url} ({len(target_ids)} target(s))"
         ),
     )
 

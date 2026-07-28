@@ -162,8 +162,7 @@ class PlaylistTrack(TrackColumns, CreatedAtMixin, Base):
 
     def __repr__(self) -> str:
         return (
-            f"<PlaylistTrack(id={self.id}, sync_id={self.sync_id}, "
-            f"source='{self.source_title}')>"
+            f"<PlaylistTrack(id={self.id}, sync_id={self.sync_id}, source='{self.source_title}')>"
         )
 
 
@@ -250,9 +249,7 @@ class SyncRunTrack(TrackColumns, Base):
     )
 
     def __repr__(self) -> str:
-        return (
-            f"<SyncRunTrack(id={self.id}, run_id={self.run_id}, " f"source='{self.source_title}')>"
-        )
+        return f"<SyncRunTrack(id={self.id}, run_id={self.run_id}, source='{self.source_title}')>"
 
 
 class PlaylistTrackTarget(Base):
@@ -314,8 +311,7 @@ class SyncRunTrackTarget(Base):
 
     def __repr__(self) -> str:
         return (
-            f"<SyncRunTrackTarget(id={self.id}, target={self.target_id}, "
-            f"item_id='{self.item_id}')>"
+            f"<SyncRunTrackTarget(id={self.id}, target={self.target_id}, item_id='{self.item_id}')>"
         )
 
 

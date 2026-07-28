@@ -9,14 +9,14 @@ from src.app.settings import settings
 
 
 def get_llm(**kwargs: Any) -> ChatOllama:
-     return ChatOllama(
-         model=settings.ollama_model,
-         base_url=settings.ollama_host,
-         temperature=kwargs.pop("temperature", 0.1),
-         num_predict=kwargs.pop("max_tokens", 4096),
-         timeout=settings.ollama_timeout,
-         **kwargs,
-     )
+    return ChatOllama(
+        model=settings.ollama_model,
+        base_url=settings.ollama_host,
+        temperature=kwargs.pop("temperature", 0.1),
+        num_predict=kwargs.pop("max_tokens", 4096),
+        timeout=settings.ollama_timeout,
+        **kwargs,
+    )
 
 
 def get_async_streaming_client() -> httpx.AsyncClient:

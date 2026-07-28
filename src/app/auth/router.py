@@ -189,7 +189,7 @@ async def plex_callback(
     try:
         pin_id_str, pin_code = pin_data.split(":", 1)
         pin_id = int(pin_id_str)
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return RedirectResponse("/login?error=invalid_pin")
 
     # ── 2. Exchange the PIN for the user's access token ───────────────

@@ -341,9 +341,7 @@ class FinalizePhase(SyncPhase):
             }
         )
 
-    def _finalize_counts(
-        self, db, ctx: SyncContext, matched: int, failed: int
-    ) -> None:  # noqa: ANN001
+    def _finalize_counts(self, db, ctx: SyncContext, matched: int, failed: int) -> None:  # noqa: ANN001
         """Update SyncRun with match counts."""
         stmt = (
             select(SyncRun)
