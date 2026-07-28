@@ -56,7 +56,9 @@ class MusicBrainzResolver:
         artists = result.get("artists", [])
         return artists[0] if artists else None
 
-    def lookup_release_group(self, title: str, artist_name: str | None = None) -> dict[str, Any] | None:
+    def lookup_release_group(
+        self, title: str, artist_name: str | None = None
+    ) -> dict[str, Any] | None:
         query = f"releasetitle:{title}"
         if artist_name:
             query += f' artist:"{artist_name}"'
@@ -64,7 +66,12 @@ class MusicBrainzResolver:
         groups = result.get("release-group-list", [])
         return groups[0] if groups else None
 
-    def search_by_tag(self, tag: str, entity: str = "artist", limit: int = 10) -> list[dict[str, Any]]:
+    def search_by_tag(
+        self,
+        tag: str,
+        entity: str = "artist",
+        limit: int = 10,
+    ) -> list[dict[str, Any]]:
         """Search MusicBrainz by genre/style tag.
 
         Use this to find artists, releases, or recordings by genre (e.g. "chillout",
@@ -141,7 +148,12 @@ class MusicBrainzResolver:
             )
         return artists
 
-    def search_releases(self, query: str, artist: str = "", limit: int = 10) -> list[dict[str, Any]]:
+    def search_releases(
+        self,
+        query: str,
+        artist: str = "",
+        limit: int = 10,
+    ) -> list[dict[str, Any]]:
         """Search MusicBrainz for releases/albums matching the query.
 
         Args:
@@ -172,7 +184,12 @@ class MusicBrainzResolver:
             )
         return releases
 
-    def search_recordings(self, query: str, artist: str = "", limit: int = 10) -> list[dict[str, Any]]:
+    def search_recordings(
+        self,
+        query: str,
+        artist: str = "",
+        limit: int = 10,
+    ) -> list[dict[str, Any]]:
         """Search MusicBrainz for recordings/tracks matching the query.
 
         Args:
@@ -299,7 +316,11 @@ class MusicBrainzResolver:
         return normalize(text, strip_brackets=True, collapse_whitespace=True)
 
     def _best_match(
-        self, recordings: list[dict[str, Any]], title: str, artist: str | None, duration_ms: int | None
+        self,
+        recordings: list[dict[str, Any]],
+        title: str,
+        artist: str | None,
+        duration_ms: int | None,
     ) -> dict[str, Any] | None:
         norm_title = self._normalize(title)
         norm_artist = self._normalize(artist) if artist else ""

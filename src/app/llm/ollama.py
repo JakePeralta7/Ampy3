@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from typing import Any
+
 import httpx
 from langchain_ollama import ChatOllama
-from typing import Any
 
 from src.app.settings import settings
 

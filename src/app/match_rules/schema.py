@@ -36,8 +36,6 @@ stored in YAML — the auto-layout algorithm generates them at render time.
 
 from __future__ import annotations
 
-from __future__ import annotations
-
 from typing import Any
 
 from pydantic import BaseModel, Field, field_validator, model_validator

@@ -39,12 +39,14 @@ async def sync_playlist_to_plex(playlist_url: str, source: str = DEFAULT_SOURCE)
         playlist_url: Full YouTube Music playlist URL to sync.
         source: The source platform (default: youtube_music).
     """
-    task = sync_playlists_task.delay(playlist_url, source, DEFAULT_TARGET)
+    task = sync_playlists_task.delay(playlist_url, source, DEFAULT_TARGET)  # type: ignore[attr-defined]
     return f"Sync started. Task ID: {task.id}. Poll /v1/status/{task.id} for progress."
 
 
 @tool
-async def search_plex_library(query: str = "", artist: str = "", genre: str = "") -> list[dict[str, Any]]:
+async def search_plex_library(
+    query: str = "", artist: str = "", genre: str = ""
+) -> list[dict[str, Any]]:
     """Search the user's Plex music library for tracks by title, artist, or genre.
 
     Use this to find tracks that already exist in Plex when researching music or creating playlists.
@@ -154,7 +156,9 @@ async def create_plex_playlist(title: str, track_descriptions: list[dict[str, An
 
 
 @tool
-async def add_tracks_to_plex_playlist(playlist_id: str, track_descriptions: list[dict[str, Any]]) -> str:
+async def add_tracks_to_plex_playlist(
+    playlist_id: str, track_descriptions: list[dict[str, Any]]
+) -> str:
     """Add tracks to an existing Plex playlist.
 
     For each track description, searches the Plex library for a matching track

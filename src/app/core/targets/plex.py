@@ -240,6 +240,9 @@ class PlexTarget(BaseTarget):
                 return None
 
             playlist_id = playlist.get("ratingKey")
+            if playlist_id is None:
+                logger.error("Created playlist has no ratingKey")
+                return None
             logger.info(f"Created playlist '{title}' with ID: {playlist_id}")
 
             remaining = [item["item_id"] for item in items[1:] if item.get("item_id")]
@@ -457,7 +460,7 @@ class PlexTarget(BaseTarget):
 
         for i, raw_id in enumerate(item_ids):
             uri = f"server://{mi}/com.plexapp.plugins.library/library/metadata/{self._rating_key(raw_id)}"
-            params = [("uri", uri)]
+            params = {"uri": uri}
             try:
                 response = await self.client.put(f"/playlists/{playlist_id}/items", params=params)
                 response.raise_for_status()
@@ -488,7 +491,7 @@ class PlexTarget(BaseTarget):
 
         for i, raw_id in enumerate(item_ids):
             uri = f"server://{mi}/com.plexapp.plugins.library/library/metadata/{self._rating_key(raw_id)}"
-            params = [("uri", uri)]
+            params = {"uri": uri}
             try:
                 response = await self.client.delete(
                     f"/playlists/{playlist_id}/items", params=params
@@ -513,7 +516,9 @@ class PlexTarget(BaseTarget):
 
     # ── Library search ───────────────────────────────────────────
 
-    async def _expand_artists(self, dirs: list[ET.Element], genre: str = "") -> list[dict[str, Any]]:
+    async def _expand_artists(
+        self, dirs: list[ET.Element], genre: str = ""
+    ) -> list[dict[str, Any]]:
         """Expands Directory (artist) entries into their tracks via allLeaves."""
         results = []
         for d in dirs:
