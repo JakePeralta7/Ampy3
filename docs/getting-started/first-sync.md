@@ -15,7 +15,7 @@ The Dashboard, Syncs, Explore, Audit Log, and Settings pages unlock once a targe
 
 ## 2. (Optional) Tune match rules
 
-Open **Settings → Match rules** to adjust confidence thresholds, fuzzy-match strictness, and which MusicBrainz fields to weight. The defaults work for most users; see [Metadata matching](../guides/metadata-matching.md) for details.
+Open **Settings → Match rules** to adjust the search/compare thresholds and which target-library fields to weight (`title`, `artist_name`, `album_name`). The defaults work for most users; see [Metadata matching](../guides/metadata-matching.md) for the full rule-graph walkthrough.
 
 ![Settings — Match rules](../assets/screenshots/settings-matching.png)
 
@@ -26,7 +26,7 @@ Open **Syncs → + New sync**.
 - Pick a **Source** (currently YouTube Music; Deezer is wired in via `core/sources/deezer.py`).
 - Paste the playlist URL or ID.
 - Pick a **Target library** on your Plex/Jellyfin server.
-- Choose a **Schedule** (manual, hourly, daily, or a cron expression).
+- Choose a **Schedule**: `manual` (no auto-run), `every_6h`, `every_12h`, `every_24h`, `daily`, or `weekly`. See [`INTERVAL_DELTAS` in `src/app/constants.py`](https://github.com/JakePeralta7/Ampy3/blob/main/src/app/constants.py) for the canonical list.
 
 ![Adding a sync schedule](../assets/screenshots/sync-create.png)
 
@@ -42,7 +42,7 @@ Watch progress in the **Syncs** page. Each track gets a status: `matched`, `unma
 
 ## 5. Inspect the audit log
 
-The **Audit log** page shows per-track outcomes across every run. Use it to identify tracks Ampy3 couldn't confidently match — usually titles that YouTube Music mangled or remixes with no canonical MusicBrainz release.
+The **Audit log** page shows per-track outcomes across every run. Use it to identify tracks Ampy3 couldn't confidently match — usually titles where YouTube Music's casing differs from your library, remixes with no clean release in the library, or tracks that simply aren't in your Plex/Jellyfin library yet.
 
 ![Audit log](../assets/screenshots/audit.png)
 
@@ -57,5 +57,5 @@ If the audit log shows too many `unmatched` rows:
 ## What's next
 
 - [Sync pipeline](../guides/sync-pipeline.md) — what actually happens between *Run now* and `matched`.
-- [Explore](../guides/explore.md) — build custom DAGs of fetch/match/transform nodes.
+- [Explore](../guides/explore.md) — discover charts, moods, and playlists across your sources.
 - [Auth](../guides/auth.md) — enable Plex SSO before exposing Ampy3 beyond localhost.

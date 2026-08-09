@@ -34,7 +34,7 @@ DATABASE_URL=postgresql://user:pass@db.example.internal:5432/ampy3
 ```
 
 !!! danger "Don't mix session factories"
-    Routes get an `AsyncSession` from `src/app/db.py:get_session()`. Celery tasks get a `Session` from `get_sync_session()`. Using one in the other context will deadlock or fail silently.
+    FastAPI routes get an `AsyncSession` via the `get_async_session()` dependency in [`src/app/db.py`][app.db]. Celery tasks get a `Session` via [`session_scope`][app.worker.session.session_scope] (or `get_sync_session()`). Using an async session inside a Celery task will deadlock; using a sync session inside an async route will block the event loop.
 
 ## Section: Celery / Valkey
 
@@ -91,13 +91,12 @@ DEBUG=false
 
 ## Local development overrides
 
-`tests/conftest.py` sets sane defaults so unit tests don't crash on missing config:
+There is no `tests/conftest.py` in this repo — each test sets the env vars it needs directly (see [`tests/test_db_initialization.py`](https://github.com/JakePeralta7/Ampy3/blob/main/tests/test_db_initialization.py) for the pattern). When running locally without Docker, export at least these before launching Uvicorn / Celery:
 
-```python
-os.environ.setdefault("PLEX_HOST", "http://plex.local")
-os.environ.setdefault("PLEX_TOKEN", "test-token")
-os.environ.setdefault("DATABASE_URL", "postgresql://ampy3:ampy3@localhost:5432/ampy3_test")
-# ...
+```bash
+export DATABASE_URL=postgresql://ampy3:ampy3@localhost:5432/ampy3
+export CELERY_BROKER_URL=redis://localhost:6379/0
+export CELERY_RESULT_BACKEND=redis://localhost:6379/1
 ```
 
-When running locally without Docker, export the same values before launching Uvicorn / Celery. See [Local setup](../development/local-setup.md).
+See [Local setup](../development/local-setup.md) for the full dev workflow.

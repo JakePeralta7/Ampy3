@@ -57,7 +57,7 @@ The next login becomes the new owner.
 
 ## Sessions
 
-Sessions are stored server-side in the `session` table (created via Alembic). The session cookie is:
+Sessions are stored server-side in the `user_sessions` table (created via Alembic). The cookie carries a random session ID signed with HMAC-SHA256 — actual session data (including the Plex token) lives in the database and is loaded on each request.
 
 - **HttpOnly** — never accessible to JavaScript
 - **Secure** — set automatically when `REQUIRE_AUTH=true` or `APP_ENV=production`

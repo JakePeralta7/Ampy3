@@ -44,7 +44,7 @@ python migrate.py upgrade
 uvicorn main:app --host 0.0.0.0 --port 8000
 
 # In another shell, run a Celery worker
-celery -A app.services.celery.celery_app worker --loglevel=info
+celery -A app.worker.app worker --loglevel=info --concurrency=1
 ```
 
 !!! warning "PYTHONPATH must include `src/`"

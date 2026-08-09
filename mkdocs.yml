@@ -143,8 +143,3 @@ extra:
     - icon: fontawesome/brands/github
       link: https://github.com/JakePeralta7/Ampy3
   generator: false
-
-validation:
-  omitted_files: ignore
-  absolute_links: ignore
-  unrecognized_links: ignore

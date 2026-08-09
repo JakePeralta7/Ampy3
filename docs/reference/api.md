@@ -1,30 +1,30 @@
 # API reference
 
-The FastAPI app exposes every route under `/api/*`. The live Swagger UI is at `/docs` (development only) and the raw OpenAPI schema at `/openapi.json` (also dev-only).
+The FastAPI app exposes every route under `/api/v1/*` for the public REST surface and `/api/auth/*` for Plex SSO. The live Swagger UI is at `/docs` (only when `APP_ENV != "production"`) and the raw OpenAPI schema at `/openapi.json` (same condition).
 
 This page indexes the auto-generated reference for each router.
 
+## URL conventions
+
+- All public REST endpoints live under `/api/v1/...` (see each router's `prefix`).
+- Plex SSO endpoints live under `/api/auth/...` and are exempt from session validation in `PUBLIC_PATHS`.
+- The session middleware in [`src/main.py`](https://github.com/JakePeralta7/Ampy3/blob/main/src/main.py) protects every `/api/*` route when `REQUIRE_AUTH=true`.
+
 ## Routers
 
-| Tag | Router | Purpose |
-|-----|--------|---------|
-| `auth` | [`app.auth.router`][app.auth.router] | Plex SSO login/callback, session, `/me`, `/logout` |
-| `audit` | [`app.api.audit`][app.api.audit] | Audit log querying |
-| `explore` | [`app.api.explore`][app.api.explore] | Explore providers, charts, moods |
-| `match-rules` | [`app.api.match_rules`][app.api.match_rules] | Rule CRUD + canvas test runner |
-| `playlists` | [`app.api.playlists`][app.api.playlists] | Source/target playlist listing, sync triggers |
-| `scheduled-syncs` | [`app.api.schedules`][app.api.schedules] | Scheduled sync CRUD |
-| `settings` | [`app.api.settings`][app.api.settings] | Runtime configuration |
-| `syncs` | [`app.api.syncs`][app.api.syncs] | Manual sync triggers and sync history |
-| `targets` | [`app.api.targets`][app.api.targets] | Available sync target platforms |
+| Tag | Router | Prefix | Purpose |
+|-----|--------|--------|---------|
+| `auth` | [`app.auth.router`][app.auth.router] | `/api/auth` | Plex SSO login/callback, session, `/me`, `/logout` |
+| `audit` | [`app.api.audit`][app.api.audit] | `/api/v1/audit` | Audit log querying |
+| `explore` | [`app.api.explore`][app.api.explore] | `/api/v1/explore` | Explore providers, charts, moods, search |
+| `match-rules` | [`app.api.match_rules`][app.api.match_rules] | `/api/v1/match-rules` | Rule CRUD, reorder, test runner |
+| `playlists` | [`app.api.playlists`][app.api.playlists] | `/api/v1/playlists` | Source/target playlist listing and search |
+| `scheduled-syncs` | [`app.api.schedules`][app.api.schedules] | `/api/v1/schedules` | Scheduled sync CRUD + bulk actions + manual trigger |
+| `settings` | [`app.api.settings`][app.api.settings] | `/api/v1/settings` | Runtime configuration |
+| `syncs` | [`app.api.syncs`][app.api.syncs] | `/api/v1/syncs` | Manual sync trigger, status, history, diff |
+| `targets` | [`app.api.targets`][app.api.targets] | `/api/v1/targets` | Available sync target platforms |
 
-All routers are mounted in [`register_routers`][app.api.register_routers] (called from [`main.py`](https://github.com/JakePeralta7/Ampy3/blob/main/src/main.py)).
-
-## App object
-
-The FastAPI app is constructed in `src/main.py`. The full source is browsable in the repository — visit `/docs` at runtime for an interactive explorer, or read the auto-generated router references below.
-
-The `app/api` package centralises router registration — see [`register_routers`][app.api.register_routers] below.
+All routers are mounted in [`register_routers`][app.api.register_routers] (called from [`src/main.py`](https://github.com/JakePeralta7/Ampy3/blob/main/src/main.py)).
 
 ## Router registry
 
@@ -45,7 +45,9 @@ The `app/api` package centralises router registration — see [`register_routers
 
 ## Auto-generated endpoints
 
-The FastAPI app is mounted on `app = FastAPI(...)` inside [`main.py`](https://github.com/JakePeralta7/Ampy3/blob/main/src/main.py). Visit `/docs` at runtime for an interactive explorer; the pages below cover the underlying router functions in detail.
+The FastAPI app is mounted on `app = FastAPI(...)` inside [`src/main.py`](https://github.com/JakePeralta7/Ampy3/blob/main/src/main.py). Visit `/docs` at runtime for an interactive explorer; the pages below cover the underlying router functions in detail.
+
+### Auth
 
 ::: app.auth.router
     options:
@@ -58,33 +60,49 @@ The FastAPI app is mounted on `app = FastAPI(...)` inside [`main.py`](https://gi
         - auth_me
         - auth_logout
 
+### Targets
+
 ::: app.api.targets
     options:
       show_source: true
+
+### Playlists
 
 ::: app.api.playlists
     options:
       show_source: true
 
+### Schedules
+
 ::: app.api.schedules
     options:
       show_source: true
+
+### Syncs
 
 ::: app.api.syncs
     options:
       show_source: true
 
+### Match rules
+
 ::: app.api.match_rules
     options:
       show_source: true
+
+### Explore
 
 ::: app.api.explore
     options:
       show_source: true
 
+### Audit
+
 ::: app.api.audit
     options:
       show_source: true
+
+### Settings
 
 ::: app.api.settings
     options:

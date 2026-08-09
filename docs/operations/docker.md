@@ -29,7 +29,7 @@ Every service has a healthcheck:
 - **`postgres`**: `pg_isready -U ampy3` every 10s
 - **`valkey`**: `redis-cli ping` every 10s
 - **`web`**: `curl -f http://localhost:8000/health` every 30s with a 15s start period
-- **`worker`** does not have a Docker-level healthcheck — monitor via Celery logs or the `/api/celery/...` inspection endpoints instead
+- **`worker`** does not have a Docker-level healthcheck — monitor via Celery logs or the `celery inspect` commands shown in [Monitoring](monitoring.md).
 
 `web` and `worker` both wait for `postgres` and `valkey` to be `service_healthy` before starting.
 

@@ -6,12 +6,12 @@ hide:
 
 # Ampy3
 
-**Sync YouTube Music playlists to Plex or Jellyfin — matched by MusicBrainz IDs.**
+**Sync YouTube Music playlists to Plex or Jellyfin — matched against your media library.**
 
 [![CI](https://github.com/JakePeralta7/Ampy3/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/JakePeralta7/Ampy3/actions/workflows/ci.yml)
 [![Read the Docs](https://img.shields.io/readthedocs/ampy3)](https://ampy3.readthedocs.io/)
 
-Ampy3 turns YouTube Music playlists into first-class playlists in your self-hosted media server. It resolves every track through MusicBrainz so you get the right album, the right artist, and the right release on the Plex/Jellyfin side — no more "Topic - Topic (153 Remastered Versions)" clutter.
+Ampy3 turns YouTube Music playlists into first-class playlists in your self-hosted media server. For every source track, it searches your Plex or Jellyfin library using a configurable rule graph — scoring candidates by title, artist, and album similarity and keeping the best match above a threshold. A MusicBrainz lookup node is also available when you need canonical MB IDs.
 
 <div class="grid cards" markdown>
 
@@ -35,7 +35,7 @@ Ampy3 turns YouTube Music playlists into first-class playlists in your self-host
 
     ---
 
-    How the sync pipeline, MusicBrainz matching, and the Explore DAG actually work.
+    How the sync pipeline, match rules, and Explore discovery actually work.
 
     [:octicons-arrow-right-24: Read the guides](guides/sync-pipeline.md)
 
@@ -55,9 +55,9 @@ Ampy3 turns YouTube Music playlists into first-class playlists in your self-host
     Most sync tools copy YouTube URLs verbatim and end up with messy libraries. Ampy3 looks every track up on MusicBrainz and adds the canonical release to Plex/Jellyfin — so you get accurate tags, artwork, and gapless playback.
 
 - **Plug-and-play Docker stack** — `postgres`, `valkey`, API, Celery worker, and the web UI in one `docker compose up`.
-- **Configurable match rules** — tune confidence thresholds and fuzzy-match behaviour from the UI.
-- **Auditable runs** — every sync writes a per-track outcome to the audit log.
-- **Explore workflows** — build arbitrary DAGs of fetch → match → transform → write nodes, not just "one playlist = one sync".
+- **Tunable match rules** — adjust confidence thresholds and the search/compare logic from the UI; rules are YAML DAGs you can edit.
+- **Auditable runs** — every sync writes per-track outcomes to the audit log.
+- **Discover & sync** — the Explore page surfaces charts, moods, and new releases across your sources for one-click syncing.
 
 ## Screenshots
 
@@ -80,7 +80,7 @@ On first launch Ampy3 walks you through selecting your Plex or Jellyfin server. 
 | Backend  | Python / FastAPI + Celery workers                            |
 | Frontend | React / TypeScript / Tailwind (Vite)                          |
 | Infra    | Docker Compose, PostgreSQL 16, Valkey (Redis-compatible)     |
-| Matching | MusicBrainz (via `musicbrainzngs` + yt-dlp), Plex/Jellyfin APIs |
+| Matching | Target library search (Plex/Jellyfin) + MusicBrainz as an optional node |
 
 ## Next steps
 

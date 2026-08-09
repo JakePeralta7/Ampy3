@@ -46,13 +46,22 @@ Set `CELERY_LOG_LEVEL=debug` for noisier (more diagnostic) Celery output.
 
 Every meaningful action is recorded via [`log_event`][app.services.audit.log_event] (async) or [`log_event_sync`][app.services.audit.log_event_sync] (sync, used inside Celery tasks).
 
-| `event_type` examples | Triggered by |
-|----------------------|--------------|
+| `event_type` | Triggered by |
+|--------------|--------------|
 | `owner_registered` | First Plex SSO login |
 | `login`, `logout`, `login_rejected` | Plex SSO events |
 | `plex_target_configured` | Plex setup wizard completion |
-| `sync_started`, `sync_completed`, `sync_failed` | Sync run lifecycle |
-| (custom) | Plugin-defined |
+| `sync.started` | Worker begins `sync_playlists_task` |
+| `sync.completed` | Worker finishes successfully |
+| `sync.failed` | Worker raises |
+| `sync.manually_triggered` | User clicks **Run now** in the UI |
+| `sync.bulk_triggered` | Bulk "sync now" from the Schedules page |
+| `track.matched` | Per-track match inside the legacy matcher |
+| `settings.updated` | PUT `/api/v1/settings/` |
+| `schedule.created` / `schedule.updated` / `schedule.deleted` | Schedule CRUD |
+| `schedule.bulk_updated` / `schedule.bulk_deleted` | Bulk schedule operations |
+| `scheduler.reloaded` | `POST /api/v1/schedules/scheduler/reload` |
+| `match_rule.created` / `match_rule.cloned` / `match_rule.reordered` / `match_rule.updated` / `match_rule.deleted` | Match rule CRUD |
 
 View via the **Audit log** page in the UI, or query the table directly:
 
@@ -67,7 +76,7 @@ The audit log is **append-only**. Plan a retention policy in [Backup & restore](
 
 [`SchedulerService`][app.services.scheduler.SchedulerService] is an APScheduler instance that runs *in the API process*. It reads scheduled syncs from the DB and enqueues Celery tasks when their interval fires.
 
-- Triggers: `manual`, `hourly`, `daily`, `weekly`, cron expressions — see `INTERVAL_DELTAS` in `src/app/constants.py`.
+- Schedule intervals are defined in [`src/app/constants.py`](https://github.com/JakePeralta7/Ampy3/blob/main/src/app/constants.py) (`INTERVAL_DELTAS`): `every_6h`, `every_12h`, `every_24h`, `daily`, `weekly`. A scheduled sync with no interval ("manual") never fires automatically.
 - A scheduled sync missing its trigger is skipped, not queued late.
 - Restarting the API re-loads schedules from the DB on startup — no manual resync needed.
 
