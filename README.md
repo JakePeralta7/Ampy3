@@ -17,6 +17,22 @@ Open `http://localhost:8000` and complete setup/configuration to connect your ta
 
 ![Plex server setup](screenshots/plex-setup.png)
 
+![Dashboard](screenshots/dashboard.png)
+
+![Syncs](screenshots/syncs.png)
+
+![Adding a sync schedule](screenshots/sync-create.png)
+
+![Explore](screenshots/explore.png)
+
+![Audit log](screenshots/audit.png)
+
+![Settings — Config](screenshots/settings.png)
+
+![Settings — Targets](screenshots/settings-targets.png)
+
+![Settings — Match rules](screenshots/settings-matching.png)
+
 On first launch Ampy3 walks you through selecting your Plex server. Other pages (Dashboard, Syncs, Explore, Chat, Audit Log, Settings) unlock once a target server is configured.
 
 ## Stack
