@@ -1,0 +1,150 @@
+site_name: Ampy3
+site_description: Sync YouTube Music playlists to Plex or Jellyfin using MusicBrainz IDs.
+site_url: https://ampy3.readthedocs.io/
+repo_url: https://github.com/JakePeralta7/Ampy3
+repo_name: JakePeralta7/Ampy3
+edit_uri: edit/main/docs/
+
+docs_dir: docs
+site_dir: site
+
+copyright: Copyright &copy; JakePeralta7 and contributors.
+
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - navigation.tracking
+    - navigation.footer
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+    - content.action.edit
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  icon:
+    repo: fontawesome/brands/github
+
+plugins:
+  - search
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          paths: [src]
+          options:
+            docstring_style: google
+            show_source: true
+            show_root_heading: true
+            show_root_full_path: false
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+            members_order: source
+            separate_signature: true
+            show_signature_annotations: true
+            signature_crossrefs: true
+            merge_init_into_class: false
+            docstring_section_style: table
+            heading_level: 2
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - meta
+  - tables
+  - toc:
+      permalink: true
+      toc_depth: 4
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.tilde
+  - pymdownx.caret
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+nav:
+  - Home: index.md
+  - Getting started:
+      - getting-started/installation.md
+      - getting-started/configuration.md
+      - getting-started/first-sync.md
+  - Guides:
+      - guides/sync-pipeline.md
+      - guides/metadata-matching.md
+      - guides/sources-and-targets.md
+      - guides/explore.md
+      - guides/auth.md
+  - Operations:
+      - operations/docker.md
+      - operations/monitoring.md
+      - operations/backup-restore.md
+  - Development:
+      - development/local-setup.md
+      - development/architecture.md
+      - development/lint-format-test.md
+      - development/contributing.md
+  - Reference:
+      - reference/api.md
+      - reference/services.md
+      - reference/worker.md
+      - reference/core.md
+      - reference/schemas.md
+      - reference/models.md
+      - reference/auth.md
+      - reference/match-rules.md
+      - reference/db.md
+      - reference/cli.md
+      - reference/environment.md
+  - About:
+      - about/license.md
+      - about/changelog.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/JakePeralta7/Ampy3
+  generator: false
+
+validation:
+  omitted_files: ignore
+  absolute_links: ignore
+  unrecognized_links: ignore

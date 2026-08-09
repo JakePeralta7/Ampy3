@@ -78,6 +78,7 @@ Thumbs.db
 # Build output
 dist/
 build/
+site/
 .next/
 
 # Misc
