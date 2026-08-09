@@ -1,6 +1,6 @@
 """Application service container with dependency injection.
 
-Manages singleton instances of external services (Ollama, Celery, Valkey).
+Manages singleton instances of external services (Celery, Valkey).
 Provides factory functions for creating and retrieving service instances.
 """
 
@@ -8,7 +8,6 @@ import logging
 from typing import Any
 
 from src.app.services.celery import CeleryService
-from src.app.services.ollama import OllamaService
 from src.app.services.target import TargetService
 from src.app.services.valkey import ValkeyService
 
@@ -18,15 +17,9 @@ logger = logging.getLogger(__name__)
 def reset_services() -> None:
     """Reset all service instances (useful for testing)."""
     TargetService.reset()
-    OllamaService.reset()
     CeleryService.reset()
     ValkeyService.reset()
     logger.info("All services reset")
-
-
-def get_ollama_client() -> Any:
-    """Dependency injection: Get Ollama client instance (lazy singleton)."""
-    return OllamaService.get_instance()
 
 
 def get_celery_app() -> Any:
@@ -59,7 +52,6 @@ async def list_sync_targets() -> list[dict[str, str]]:
 
 __all__ = [
     "reset_services",
-    "get_ollama_client",
     "get_celery_app",
     "get_valkey_client",
     "get_sync_target",

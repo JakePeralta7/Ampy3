@@ -22,11 +22,6 @@ class Settings(BaseSettings):
     yt_dlp_cookies: str = ""
     yt_dlp_timeout: int = 300
 
-    # Ollama (external)
-    ollama_host: str = "http://localhost:11434"
-    ollama_model: str = "gemma4-e4b-128:latest"
-    ollama_timeout: int = 120
-
     # Auth (Plex SSO)
     require_auth: bool = False
     plex_client_id: str = ""

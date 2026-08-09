@@ -33,7 +33,7 @@ Open `http://localhost:8000` and complete setup/configuration to connect your ta
 
 ![Settings — Match rules](screenshots/settings-matching.png)
 
-On first launch Ampy3 walks you through selecting your Plex server. Other pages (Dashboard, Syncs, Explore, Chat, Audit Log, Settings) unlock once a target server is configured.
+On first launch Ampy3 walks you through selecting your Plex server. Other pages (Dashboard, Syncs, Explore, Audit Log, Settings) unlock once a target server is configured.
 
 ## Stack
 

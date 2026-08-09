@@ -12,7 +12,6 @@ src/                  # Python backend (FastAPI + Celery)
   app/
     api/              # Route handlers (registered via register_routers)
     services/         # Service layer with lazy singletons (ServiceContainer)
-    llm/              # LangGraph agent + Ollama integration
     amp/              # Music sync domain (orchestrator, Plex client, YTMusic source)
     tasks.py          # Celery task definitions
     db.py             # SQLAlchemy engines (async for FastAPI, sync for Celery)
@@ -36,9 +35,6 @@ ruff check src/ tests/
 
 # Run all tests
 pytest
-
-# Run a single test file
-pytest tests/test_chat_api.py
 
 # Start locally without Docker (from repo root)
 uvicorn main:app --host 0.0.0.0 --port 8000
@@ -76,7 +72,7 @@ Alembic migrations run automatically at API startup via `src/app/db.py:init_db()
 
 - **PYTHONPATH must include `src/`**. The Dockerfile sets `PYTHONPATH=/app/src`. Locally, run commands from repo root or set this explicitly.
 - **Dual database engines**: Async (`asyncpg`) for FastAPI routes, sync (`psycopg2`) for Celery workers. Both in `src/app/db.py`.
-- **Service container**: `src/app/services/__init__.py` provides lazy singletons via `get_plex_client()`, `get_ollama_client()`, etc. Use these instead of creating clients directly.
+- **Service container**: `src/app/services/__init__.py` provides lazy singletons via `get_celery_app()`, `get_valkey_client()`, etc. Use these instead of creating clients directly.
 - **Settings**: All config is in `src/app/settings.py` as a Pydantic `BaseSettings` singleton. No `.env` template files — env vars are the source of truth.
 - **CORS**: When `REQUIRE_AUTH=true`, only `APP_URL` is allowed. Otherwise `*`.
 - **SPA serving**: `src/main.py` mounts `web/dist/` as static and serves `index.html` for non-API routes. Build the frontend before running the API if you want the UI.
@@ -93,7 +89,6 @@ Alembic migrations run automatically at API startup via `src/app/db.py:init_db()
 ## Gotchas
 
 - The `cookies/` directory is mounted read-only into containers for `yt-dlp` cookie auth. It must exist or the volume mount fails.
-- `copilotkit==0.1.94` is pinned in `pyproject.toml` — do not bump without testing the chat agent.
 - Celery workers use the **sync** SQLAlchemy engine; the API uses async. Do not mix session factories.
 - The `alembic.ini` placeholder URL (`driver://user:password@localhost/dbname`) is overridden at runtime — never edit it directly.
 - `F401` (unused imports) is intentionally ignored in Ruff config.

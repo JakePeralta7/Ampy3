@@ -1,4 +1,4 @@
-import { Brain, Download, Save } from "lucide-react";
+import { Download, Save } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { type AppSettings, getSettings, updateSettings } from "../api/settings";
@@ -79,9 +79,6 @@ export function ConfigPage() {
       .then((data: AppSettings) => {
         if (cancelled) return;
         const flat: Record<string, string> = {
-          ollama_host: data.ollama_host,
-          ollama_model: data.ollama_model,
-          ollama_timeout: String(data.ollama_timeout),
           yt_dlp_cookies: data.yt_dlp_cookies,
           yt_dlp_timeout: String(data.yt_dlp_timeout),
         };
@@ -107,7 +104,7 @@ export function ConfigPage() {
       const payload: Record<string, unknown> = {};
       for (const key of Object.keys(values)) {
         if (values[key] !== original[key]) {
-          if (key === "ollama_timeout" || key === "yt_dlp_timeout") {
+          if (key === "yt_dlp_timeout") {
             payload[key] = Number(values[key]);
           } else {
             payload[key] = values[key];
@@ -116,9 +113,6 @@ export function ConfigPage() {
       }
       const result = await updateSettings(payload);
       const flat: Record<string, string> = {
-        ollama_host: result.ollama_host,
-        ollama_model: result.ollama_model,
-        ollama_timeout: String(result.ollama_timeout),
         yt_dlp_cookies: result.yt_dlp_cookies,
         yt_dlp_timeout: String(result.yt_dlp_timeout),
       };
@@ -154,30 +148,6 @@ export function ConfigPage() {
       }
     >
       <div className="space-y-8">
-        <SectionCard icon={<Brain size={20} className="text-accent-500" />} title="Ollama">
-          <SettingField
-            id="ollama_host"
-            label="Host URL"
-            value={values.ollama_host ?? ""}
-            onChange={(v) => setField("ollama_host", v)}
-            placeholder="http://localhost:11434"
-          />
-          <SettingField
-            id="ollama_model"
-            label="Model"
-            value={values.ollama_model ?? ""}
-            onChange={(v) => setField("ollama_model", v)}
-            placeholder="gemma4-e4b-128:latest"
-          />
-          <SettingField
-            id="ollama_timeout"
-            label="Timeout (seconds)"
-            type="number"
-            value={values.ollama_timeout ?? ""}
-            onChange={(v) => setField("ollama_timeout", v)}
-          />
-        </SectionCard>
-
         <SectionCard icon={<Download size={20} className="text-accent-500" />} title="yt-dlp">
           <SettingField
             id="yt_dlp_cookies"
@@ -196,9 +166,7 @@ export function ConfigPage() {
         </SectionCard>
 
         {hasChanges && (
-          <p className="text-sm text-warning-700 text-center">
-            Changes apply immediately. Ollama connection will be reset with the new values.
-          </p>
+          <p className="text-sm text-warning-700 text-center">Changes apply immediately.</p>
         )}
       </div>
     </PageLayout>

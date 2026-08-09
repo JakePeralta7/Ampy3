@@ -38,9 +38,6 @@ const EVENT_LABELS: Record<
   "match_rule.deleted": { label: "Match Rule Deleted", variant: "danger" },
   "match_rule.cloned": { label: "Match Rule Cloned", variant: "success" },
   "match_rule.reordered": { label: "Match Rules Reordered", variant: "neutral" },
-  "chat.invoked": { label: "Chat Invoked", variant: "neutral" },
-  "chat.streamed": { label: "Chat Streamed", variant: "neutral" },
-  "chat.history_cleared": { label: "Chat History Cleared", variant: "danger" },
 };
 
 interface AuditLogPageProps {

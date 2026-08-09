@@ -313,30 +313,3 @@ class SyncRunTrackTarget(Base):
         return (
             f"<SyncRunTrackTarget(id={self.id}, target={self.target_id}, item_id='{self.item_id}')>"
         )
-
-
-class ChatSession(Base):
-    """User chat sessions with agent."""
-
-    __tablename__ = "chat_sessions"
-
-    id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    plex_user_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    preview: Mapped[str] = mapped_column(String(255), nullable=False)
-    title: Mapped[str | None] = mapped_column(String(255), nullable=True)
-
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
-        nullable=False,
-        index=True,
-    )
-
-    def __repr__(self) -> str:
-        return (
-            f"<ChatSession(id={self.id}, plex_user_id={self.plex_user_id}, preview={self.preview})>"
-        )

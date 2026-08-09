@@ -3,7 +3,6 @@ import { ProtectedRoute } from "./components/Auth/ProtectedRoute";
 import { RequireServer } from "./components/Auth/RequireServer";
 import { SettingsLayout } from "./components/Settings/SettingsLayout";
 import { AuditLogPage } from "./pages/AuditLog";
-import { ChatPage } from "./pages/Chat";
 import { ExplorePage } from "./pages/Explore";
 import { HomePage } from "./pages/Home";
 import { LoginPage } from "./pages/Login";
@@ -43,26 +42,6 @@ export const routes: RouteObject[] = [
       <ProtectedRoute>
         <RequireServer>
           <SyncsPage />
-        </RequireServer>
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "/chat",
-    element: (
-      <ProtectedRoute>
-        <RequireServer>
-          <ChatPage />
-        </RequireServer>
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "/chat/:sessionId",
-    element: (
-      <ProtectedRoute>
-        <RequireServer>
-          <ChatPage />
         </RequireServer>
       </ProtectedRoute>
     ),

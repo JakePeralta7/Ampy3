@@ -1,13 +1,6 @@
 """Pydantic schemas for API request/response serialization."""
 
 from src.app.schemas.audit import AuditLogListResponse, AuditLogOut
-from src.app.schemas.chat import (
-    ChatClearResponse,
-    ChatHistoryResponse,
-    ChatInvokeResponse,
-    ChatMessage,
-    ChatRequest,
-)
 from src.app.schemas.common import DeleteResponse
 from src.app.schemas.explore import (
     ChartsBundleOut,
@@ -61,12 +54,6 @@ __all__ = [
     # Audit
     "AuditLogOut",
     "AuditLogListResponse",
-    # Chat
-    "ChatRequest",
-    "ChatMessage",
-    "ChatHistoryResponse",
-    "ChatInvokeResponse",
-    "ChatClearResponse",
     # Match rules
     "MatchRuleOut",
     "MatchRuleCreate",

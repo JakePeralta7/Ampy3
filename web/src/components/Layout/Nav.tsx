@@ -4,8 +4,6 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
-  MessageCircle,
-  MessageSquare,
   Music2,
   PanelLeftClose,
   PanelLeftOpen,
@@ -13,10 +11,8 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
-import { useChatSessions } from "../../contexts/ChatSessionContext";
-import { generateId } from "../../lib/utils";
 
 const COLLAPSE_KEY = "ampy3:sidebar-collapsed";
 
@@ -24,7 +20,6 @@ const links = [
   { path: "/", label: "Dashboard", icon: LayoutDashboard },
   { path: "/syncs", label: "Syncs", icon: Music2 },
   { path: "/explore", label: "Explore", icon: Compass },
-  { path: "/chat", label: "Chat", icon: MessageSquare },
   { path: "/audit", label: "Audit Log", icon: ScrollText },
   {
     path: "/settings",
@@ -40,9 +35,7 @@ const links = [
 
 export function Nav() {
   const location = useLocation();
-  const navigate = useNavigate();
   const { user, logout, requireAuth } = useAuth();
-  const { sessions: chatSessions } = useChatSessions();
   const [collapsed, setCollapsed] = useState(() => {
     try {
       return localStorage.getItem(COLLAPSE_KEY) === "1";
@@ -63,9 +56,7 @@ export function Nav() {
   const isActive = (path: string) =>
     path === "/settings" && location.pathname.startsWith("/settings")
       ? true
-      : path === "/chat" && location.pathname.startsWith("/chat")
-        ? true
-        : location.pathname === path;
+      : location.pathname === path;
 
   const linkClass = (path: string) => {
     const active = isActive(path);
@@ -120,41 +111,6 @@ export function Nav() {
                         }`}
                       >
                         {sub.label}
-                      </Link>
-                    );
-                  })}
-                </div>
-              )}
-              {!collapsed && link.path === "/chat" && active && chatSessions.length > 0 && (
-                <div className="ml-2 mt-1 flex flex-col gap-0.5 border-l border-border pl-3">
-                  <button
-                    onClick={() => {
-                      const newId = generateId();
-                      navigate(`/chat/${newId}`);
-                    }}
-                    className={`flex items-center gap-2 rounded px-3 py-1.5 text-sm transition-colors duration-fast ${
-                      location.pathname === "/chat"
-                        ? "bg-accent-50 text-accent-700 font-medium"
-                        : "text-fg-subtle hover:bg-bg-muted hover:text-fg"
-                    }`}
-                  >
-                    <MessageCircle size={14} className="shrink-0" />
-                    New Chat
-                  </button>
-                  {chatSessions.map((s) => {
-                    const sessionActive = location.pathname === `/chat/${s.id}`;
-                    return (
-                      <Link
-                        key={s.id}
-                        to={`/chat/${s.id}`}
-                        className={`flex items-center gap-2 rounded px-3 py-1.5 text-sm transition-colors duration-fast truncate ${
-                          sessionActive
-                            ? "bg-accent-50 text-accent-700 font-medium"
-                            : "text-fg-subtle hover:bg-bg-muted hover:text-fg"
-                        }`}
-                        title={s.preview}
-                      >
-                        <span className="truncate">{s.preview}</span>
                       </Link>
                     );
                   })}

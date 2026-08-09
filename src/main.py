@@ -13,7 +13,6 @@ from fastapi.staticfiles import StaticFiles
 from src.app.api import register_routers
 from src.app.auth.tokens import purge_expired_sessions, verify_session
 from src.app.db import init_db
-from src.app.llm.ollama import health_check as ollama_health_check
 from src.app.services import get_sync_target
 from src.app.services.scheduler import SchedulerService
 from src.app.settings import settings
@@ -69,17 +68,6 @@ async def lifespan(app: FastAPI):
         logger.warning("Could not initialize PlexClient on startup: %s", e)
 
     try:
-        tags = await ollama_health_check()
-        models = [m["name"] for m in tags.get("models", [])]
-        logger.info(
-            "Ollama connected: %s (models: %s)",
-            settings.ollama_host,
-            ", ".join(models) or "none pulled",
-        )
-    except Exception as e:
-        logger.warning("Ollama health check failed (%s): %s", settings.ollama_host, e)
-
-    try:
         await SchedulerService.start()
         logger.info("APScheduler started - scheduled syncs are now active")
     except Exception as e:
@@ -121,7 +109,6 @@ app = FastAPI(
     lifespan=lifespan,
     openapi_tags=[
         {"name": "auth", "description": "Plex SSO authentication"},
-        {"name": "chat", "description": "AI chat agent invocations and conversation history"},
         {
             "name": "playlists",
             "description": "Target playlist listing, search, sync, and track management",
@@ -131,7 +118,7 @@ app = FastAPI(
             "description": "Scheduled sync CRUD and manual trigger actions",
         },
         {"name": "match-rules", "description": "Music matching rule configuration and testing"},
-        {"name": "settings", "description": "Runtime configuration (Plex, Ollama, yt-dlp)"},
+        {"name": "settings", "description": "Runtime configuration (Plex, yt-dlp)"},
         {"name": "targets", "description": "Available sync target platforms"},
         {"name": "audit", "description": "Audit log querying"},
     ],

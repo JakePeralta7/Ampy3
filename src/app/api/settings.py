@@ -23,9 +23,6 @@ USER_CONFIG_KEYS = [
     "jellyfin_server_url",
     "jellyfin_api_key",
     "jellyfin_user_id",
-    "ollama_host",
-    "ollama_model",
-    "ollama_timeout",
     "yt_dlp_cookies",
     "yt_dlp_timeout",
 ]
@@ -41,9 +38,6 @@ def _build_settings_out(overrides: dict[str, str]) -> SettingsOut:
         jellyfin_server_url=overrides.get("jellyfin_server_url", ""),
         jellyfin_api_key_set=bool(overrides.get("jellyfin_api_key", "")),
         jellyfin_user_id=overrides.get("jellyfin_user_id", ""),
-        ollama_host=overrides.get("ollama_host", settings.ollama_host),
-        ollama_model=overrides.get("ollama_model", settings.ollama_model),
-        ollama_timeout=int(overrides.get("ollama_timeout", str(settings.ollama_timeout))),
         yt_dlp_cookies=overrides.get("yt_dlp_cookies", settings.yt_dlp_cookies),
         yt_dlp_timeout=int(overrides.get("yt_dlp_timeout", str(settings.yt_dlp_timeout))),
     )

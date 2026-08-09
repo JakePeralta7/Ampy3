@@ -10,9 +10,6 @@ export interface AppSettings {
   jellyfin_server_url: string;
   jellyfin_api_key_set: boolean;
   jellyfin_user_id: string;
-  ollama_host: string;
-  ollama_model: string;
-  ollama_timeout: number;
   yt_dlp_cookies: string;
   yt_dlp_timeout: number;
 }

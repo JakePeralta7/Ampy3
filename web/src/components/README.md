@@ -8,12 +8,7 @@ Ampy3 uses a component-based architecture with React. This guide clarifies the c
 
 ```
 src/components/
-├── Chat/                    # Chat-related components
-│   ├── AgentChatWrapper.tsx # Main chat UI container
-│   └── ChatInterface.css    # Chat styling
-├── Common/                  # Reusable UI components (WIP)
-│   └── [Add here as needed]
-├── Layout/                  # Page layout wrappers (WIP)
+├── Layout/                  # Page layout wrappers
 │   └── [Add here as needed]
 └── README.md               # This file
 ```
@@ -23,14 +18,14 @@ src/components/
 ### Page Components
 - Located in `src/pages/`
 - Represent top-level routes in the application
-- Example: `Chat.tsx` for the `/chat` route
+- Example: `Settings.tsx` for the `/settings` route
 - Can contain sub-components and manage page-level state
 
 ### Feature Components
-- Located in feature folders like `src/components/Chat/`
+- Located in feature folders like `src/components/Settings/`
 - Implement specific features or domain logic
 - Reusable within the feature context
-- Example: `AgentChatWrapper.tsx`
+- Example: `SettingsLayout.tsx`
 
 ### Common/Shared Components
 - Located in `src/components/Common/`
@@ -47,9 +42,9 @@ src/components/
 
 ## Naming Conventions
 
-- **Files**: PascalCase (e.g., `AgentChatWrapper.tsx`)
-- **Components**: PascalCase export (e.g., `export function AgentChatUI()`)
-- **CSS Modules**: `.module.css` for component-scoped styles (e.g., `AgentChat.module.css`)
+- **Files**: PascalCase (e.g., `SettingsLayout.tsx`)
+- **Components**: PascalCase export (e.g., `export function SettingsLayout()`)
+- **CSS Modules**: `.module.css` for component-scoped styles (e.g., `SettingsLayout.module.css`)
 - **Global styles**: `globals.css` in `src/`
 
 ## Styling
@@ -61,7 +56,7 @@ src/components/
 ## State Management
 
 - React hooks for local component state (`useState`, `useContext`)
-- Custom hooks for shared logic (example: `useAgentChat`)
+- Custom hooks for shared logic (example: `useScheduledSyncs`)
 - Context API for app-level state (authentication, theme, etc.)
 - Consider Redux or Zustand if state complexity increases
 
@@ -80,9 +75,9 @@ Example:
 import React, { useState, useCallback } from "react";
 import { useRouter } from "next/router";
 
-import type { ChatMessage } from "../api/chat";
-import { ChatComponent } from "./Chat";
-import { useAgentChat } from "../hooks/useAgentChat";
+import type { TrackTarget } from "../api/syncs";
+import { SyncItem } from "./SyncItem";
+import { useScheduledSyncs } from "../hooks/useScheduledSyncs";
 import "./MyComponent.css";
 ```
 
@@ -132,14 +127,14 @@ export function MyComponent({ title, onAction }: MyComponentProps) {
 ### Component with Custom Hook
 ```typescript
 import React from "react";
-import { useAgentChat } from "../hooks/useAgentChat";
+import { useScheduledSyncs } from "../hooks/useScheduledSyncs";
 
-export function ChatFeature() {
-  const { messages, sendMessage, loading } = useAgentChat();
+export function SyncList() {
+  const { syncs, loading } = useScheduledSyncs();
 
   return (
     <div>
-      {/* Render messages and input */}
+      {/* Render syncs */}
     </div>
   );
 }
@@ -147,6 +142,4 @@ export function ChatFeature() {
 
 ## Migration Notes
 
-- Old LangGraph client is still available as `langGraphClient` in `api/langgraph.ts` for backwards compatibility
-- New code should use `chatClient` from `api/chat.ts`
-- API utilities are exported from `api/index.ts` for convenience
+- API clients live in `src/api/<feature>/` and are imported directly by pages and hooks.
