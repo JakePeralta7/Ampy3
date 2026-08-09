@@ -9,6 +9,8 @@ TARGET_JELLYFIN = "Jellyfin"
 # Source platform IDs
 SOURCE_YOUTUBE_MUSIC = "youtube_music"
 SOURCE_YOUTUBE_MUSIC_DISPLAY = "YouTube Music"
+SOURCE_DEEZER = "deezer"
+SOURCE_DEEZER_DISPLAY = "Deezer"
 
 # Defaults
 DEFAULT_TARGET = TARGET_PLEX

@@ -39,3 +39,4 @@ class MoodCategoryOut(BaseModel):
 class ExploreProviderOut(BaseModel):
     provider_id: str
     display_name: str
+    anonymous: bool = True

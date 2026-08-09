@@ -2,7 +2,7 @@ import { ExternalLink } from "lucide-react";
 import { useState } from "react";
 import type { ExploreItemOut } from "../../api/explore";
 import { type CreateScheduledSyncInput, scheduledSyncsAPI } from "../../api/schedules";
-import { getSourceLabel } from "../../lib/constants";
+import { getSourceLabel, SOURCE_YOUTUBE_MUSIC } from "../../lib/constants";
 import { ScheduleFormModal } from "../Playlists/ScheduleFormModal";
 import { Button } from "../ui/Button";
 import { Modal } from "../ui/Modal";
@@ -98,7 +98,11 @@ export function SourcePlaylistModal({
         isOpen={showScheduleForm}
         onClose={() => setShowScheduleForm(false)}
         onSubmit={handleCreateSync}
-        prefill={{ sourceUrl: item.url || "", playlistName: item.title }}
+        prefill={{
+          sourceUrl: item.url || "",
+          playlistName: item.title,
+          source: item.source_id || SOURCE_YOUTUBE_MUSIC,
+        }}
         isLoading={saving}
         error={error}
       />

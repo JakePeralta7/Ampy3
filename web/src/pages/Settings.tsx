@@ -151,11 +151,15 @@ export function ConfigPage() {
         <SectionCard icon={<Download size={20} className="text-accent-500" />} title="yt-dlp">
           <SettingField
             id="yt_dlp_cookies"
-            label="Cookies file path"
+            label="Cookies file path (optional)"
             value={values.yt_dlp_cookies ?? ""}
             onChange={(v) => setField("yt_dlp_cookies", v)}
             placeholder="/cookies/cookies.txt"
           />
+          <p className="text-xs text-fg-subtle -mt-2">
+            Optional — only needed for age- or region-restricted content. Everything works without
+            it.
+          </p>
           <SettingField
             id="yt_dlp_timeout"
             label="Timeout (seconds)"

@@ -59,7 +59,14 @@ async def list_providers(
     _user: dict[str, Any] = Depends(get_current_user),  # noqa: B008
 ):
     """List all registered Explore providers."""
-    return [ExploreProviderOut(**p) for p in ExploreRegistry.list_providers()]
+    return [
+        ExploreProviderOut(
+            provider_id=str(p["provider_id"]),
+            display_name=str(p["display_name"]),
+            anonymous=bool(p["anonymous"]),
+        )
+        for p in ExploreRegistry.list_providers()
+    ]
 
 
 # ── Home (sections) ──────────────────────────────────────────────────
@@ -160,3 +167,23 @@ async def get_mood_playlists(
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     return [_item_out(i) for i in playlists]
+
+
+# ── Search ───────────────────────────────────────────────────────────
+
+
+@router.get("/search", response_model=list[ExploreItemOut])
+async def search_playlists(
+    q: str = Query(..., min_length=1, description="Search query"),
+    provider: str = Query("youtube_music", description="Provider ID"),
+    _user: dict[str, Any] = Depends(get_current_user),  # noqa: B008
+):
+    """Search a provider for playlists matching *q*."""
+    prov = _provider_instance(provider)
+    try:
+        results: list[ExploreItem] = await prov.search_playlists(q)
+    except Exception as exc:
+        logger.error("Explore search failed for '%s': %s", provider, exc, exc_info=True)
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    return [_item_out(i) for i in results]

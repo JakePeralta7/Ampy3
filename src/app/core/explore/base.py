@@ -21,6 +21,8 @@ class ExploreProvider(ABC):
 
     provider_id: str
     display_name: str
+    anonymous: bool = True
+    """Whether this provider works without any source authentication."""
 
     @abstractmethod
     async def get_home(self) -> ExploreHome:
@@ -40,4 +42,9 @@ class ExploreProvider(ABC):
     @abstractmethod
     async def get_mood_playlists(self, mood_id: str) -> list[ExploreItem]:
         """Return playlists for a given mood or genre category."""
+        ...
+
+    @abstractmethod
+    async def search_playlists(self, query: str) -> list[ExploreItem]:
+        """Search this source for playlists matching *query*."""
         ...

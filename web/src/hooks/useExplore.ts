@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
+  type ChartsBundleOut,
+  type ExploreHomeOut,
   type ExploreItemOut,
   type ExploreProviderOut,
   exploreAPI,
@@ -12,41 +14,67 @@ interface ExploreState {
   moods: MoodCategoryOut[] | null;
   moodPlaylists: ExploreItemOut[] | null;
   selectedMoodId: string | null;
+  home: ExploreHomeOut | null;
+  charts: ChartsBundleOut | null;
+  searchResults: ExploreItemOut[] | null;
+  searchQuery: string;
   loading: boolean;
   error: string | null;
 }
 
-export function useExplore() {
-  const [state, setState] = useState<ExploreState>({
-    providers: [],
-    activeProvider: "youtube_music",
-    moods: null,
-    moodPlaylists: null,
-    selectedMoodId: null,
-    loading: true,
-    error: null,
-  });
+const initialState: ExploreState = {
+  providers: [],
+  activeProvider: "youtube_music",
+  moods: null,
+  moodPlaylists: null,
+  selectedMoodId: null,
+  home: null,
+  charts: null,
+  searchResults: null,
+  searchQuery: "",
+  loading: true,
+  error: null,
+};
 
-  const fetchMoods = useCallback(async (provider: string) => {
-    setState((s) => ({ ...s, loading: true, error: null }));
-    try {
-      const moods = await exploreAPI.getMoods(provider);
-      setState((s) => ({
+export function useExplore() {
+  const [state, setState] = useState<ExploreState>(initialState);
+
+  const fetchProviderContent = useCallback(async (provider: string) => {
+    setState((s) => ({
+      ...initialState,
+      activeProvider: provider,
+      providers: s.providers,
+      loading: true,
+    }));
+
+    const [moodsRes, homeRes, chartsRes] = await Promise.allSettled([
+      exploreAPI.getMoods(provider),
+      exploreAPI.getHome(provider),
+      exploreAPI.getCharts(provider),
+    ]);
+
+    setState((s) => {
+      const errors: string[] = [];
+      const moods = moodsRes.status === "fulfilled" ? moodsRes.value : null;
+      const home = homeRes.status === "fulfilled" ? homeRes.value : null;
+      const charts = chartsRes.status === "fulfilled" ? chartsRes.value : null;
+      if (moodsRes.status === "rejected")
+        errors.push(moodsRes.reason?.message ?? "Failed to load moods");
+      if (homeRes.status === "rejected")
+        errors.push(homeRes.reason?.message ?? "Failed to load home");
+      if (chartsRes.status === "rejected")
+        errors.push(chartsRes.reason?.message ?? "Failed to load charts");
+      return {
         ...s,
-        activeProvider: provider,
         moods,
+        home,
+        charts,
         moodPlaylists: null,
         selectedMoodId: null,
         loading: false,
-        error: null,
-      }));
-    } catch (e) {
-      setState((s) => ({
-        ...s,
-        loading: false,
-        error: e instanceof Error ? e.message : "Failed to load moods",
-      }));
-    }
+        error: errors.length ? errors[0] : null,
+      };
+    });
   }, []);
 
   const selectMood = useCallback(async (moodId: string | null) => {
@@ -72,29 +100,56 @@ export function useExplore() {
     }
   }, []);
 
-  useEffect(() => {
-    exploreAPI.listProviders().then((providers) => {
-      setState((s) => ({ ...s, providers }));
-    });
+  const runSearch = useCallback(async (query: string) => {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      setState((s) => ({ ...s, searchResults: null, searchQuery: "" }));
+      return;
+    }
+    setState((s) => ({ ...s, loading: true, searchQuery: trimmed }));
+    try {
+      const results = await exploreAPI.searchPlaylists(trimmed);
+      setState((s) => ({ ...s, searchResults: results, loading: false, error: null }));
+    } catch (e) {
+      setState((s) => ({
+        ...s,
+        searchResults: [],
+        loading: false,
+        error: e instanceof Error ? e.message : "Failed to search playlists",
+      }));
+    }
   }, []);
 
   useEffect(() => {
-    fetchMoods(state.activeProvider);
-  }, [fetchMoods, state.activeProvider]);
+    let cancelled = false;
+    exploreAPI.listProviders().then((providers) => {
+      if (cancelled) return;
+      setState((s) => ({ ...s, providers }));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    fetchProviderContent(state.activeProvider);
+  }, [fetchProviderContent, state.activeProvider]);
 
   const setProvider = useCallback(
     (provider: string) => {
       if (provider !== state.activeProvider) {
-        fetchMoods(provider);
+        fetchProviderContent(provider);
       }
     },
-    [fetchMoods, state.activeProvider],
+    [fetchProviderContent, state.activeProvider],
   );
 
   return {
     ...state,
     selectMood,
     setProvider,
-    refresh: () => fetchMoods(state.activeProvider),
+    runSearch,
+    clearSearch: () => setState((s) => ({ ...s, searchResults: null, searchQuery: "" })),
+    refresh: () => fetchProviderContent(state.activeProvider),
   };
 }

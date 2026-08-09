@@ -1,7 +1,7 @@
 import type React from "react";
 import { useCallback, useEffect, useState } from "react";
 import type { CreateScheduledSyncInput, ScheduledSync } from "../../api/schedules";
-import { SOURCE_YOUTUBE_MUSIC, TARGET_PLEX } from "../../lib/constants";
+import { SOURCE_DEEZER, SOURCE_YOUTUBE_MUSIC, TARGET_PLEX } from "../../lib/constants";
 import { INPUT_STYLES, SELECT_STYLES } from "../../lib/styles";
 import { Button } from "../ui/Button";
 import { TargetSelectDropdown } from "../ui/TargetSelectDropdown";
@@ -9,6 +9,7 @@ import { TargetSelectDropdown } from "../ui/TargetSelectDropdown";
 export interface ScheduleFormPrefill {
   sourceUrl: string;
   playlistName: string;
+  source?: string;
 }
 
 interface ScheduleFormProps {
@@ -28,7 +29,10 @@ const SCHEDULE_INTERVALS = [
   { value: "weekly", label: "Weekly" },
 ];
 
-const SOURCES = [{ value: SOURCE_YOUTUBE_MUSIC, label: "YouTube Music" }];
+const SOURCES = [
+  { value: SOURCE_YOUTUBE_MUSIC, label: "YouTube Music" },
+  { value: SOURCE_DEEZER, label: "Deezer" },
+];
 
 export function ScheduleForm({
   onSubmit,
@@ -62,7 +66,7 @@ export function ScheduleForm({
       setTargetPlaylistName(editingSync.target_playlist_name);
       setScheduleInterval(editingSync.schedule_interval);
     } else if (prefill) {
-      setSource(SOURCE_YOUTUBE_MUSIC);
+      setSource(prefill.source ?? SOURCE_YOUTUBE_MUSIC);
       setTargetIds([TARGET_PLEX]);
       setSourceUrl(prefill.sourceUrl);
       setTargetPlaylistName(prefill.playlistName);

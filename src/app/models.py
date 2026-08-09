@@ -73,6 +73,7 @@ class ScheduleIntervalEnum(StrEnum):
 
 class PlaylistSourceEnum(StrEnum):
     YOUTUBE_MUSIC = "youtube_music"
+    DEEZER = "deezer"
 
 
 class ScheduledPlaylistSync(TimestampMixin, Base):

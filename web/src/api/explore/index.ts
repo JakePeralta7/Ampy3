@@ -36,6 +36,7 @@ export interface MoodCategoryOut {
 export interface ExploreProviderOut {
   provider_id: string;
   display_name: string;
+  anonymous: boolean;
 }
 
 export const exploreAPI = {
@@ -53,5 +54,10 @@ export const exploreAPI = {
   getMoodPlaylists: (moodId: string, provider = "youtube_music") =>
     apiGet<ExploreItemOut[]>(
       `/v1/explore/moods/${encodeURIComponent(moodId)}/playlists?provider=${encodeURIComponent(provider)}`,
+    ),
+
+  searchPlaylists: (query: string, provider = "youtube_music") =>
+    apiGet<ExploreItemOut[]>(
+      `/v1/explore/search?q=${encodeURIComponent(query)}&provider=${encodeURIComponent(provider)}`,
     ),
 };

@@ -48,11 +48,12 @@ class ExploreRegistry:
             raise KeyError(msg) from None
 
     @classmethod
-    def list_providers(cls) -> list[dict[str, str]]:
+    def list_providers(cls) -> list[dict[str, str | bool]]:
         return [
             {
                 "provider_id": provider_class.provider_id,
                 "display_name": provider_class.display_name,
+                "anonymous": provider_class.anonymous,
             }
             for provider_class in cls._providers.values()
         ]
