@@ -9,6 +9,14 @@ from src.app.schemas.chat import (
     ChatRequest,
 )
 from src.app.schemas.common import DeleteResponse
+from src.app.schemas.explore import (
+    ChartsBundleOut,
+    ExploreHomeOut,
+    ExploreItemOut,
+    ExploreProviderOut,
+    ExploreSectionOut,
+    MoodCategoryOut,
+)
 from src.app.schemas.match_rules import (
     MatchRuleCreate,
     MatchRuleDeleteResponse,
@@ -96,4 +104,11 @@ __all__ = [
     # Targets
     "TargetTestRequest",
     "TargetTestResponse",
+    # Explore
+    "ExploreItemOut",
+    "ExploreSectionOut",
+    "ExploreHomeOut",
+    "ChartsBundleOut",
+    "MoodCategoryOut",
+    "ExploreProviderOut",
 ]

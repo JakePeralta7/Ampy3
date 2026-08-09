@@ -551,9 +551,10 @@ class PlexTarget(BaseTarget):
     async def search_artist_tracks(self, artist: str, genre: str = "") -> list[dict[str, Any]]:
         """Search Plex for an artist directory and expand all their tracks."""
         query = _normalize_search_query(artist)
+        if not query:
+            return []
         params = {"query": query, "limit": "50"}
-        qs = "&".join(f"{k}={urllib.parse.quote(str(v))}" for k, v in params.items())
-        artist_resp = await self.client.get(f"/search?{qs}")
+        artist_resp = await self.client.get("/search", params=params)
         artist_resp.raise_for_status()
         artist_root = ET.fromstring(artist_resp.text)
         dirs = artist_root.findall(".//Directory")
@@ -562,8 +563,7 @@ class PlexTarget(BaseTarget):
             if len(words) > 1:
                 fallback_query = words[0]
                 params = {"query": fallback_query, "limit": "50"}
-                qs = "&".join(f"{k}={urllib.parse.quote(str(v))}" for k, v in params.items())
-                artist_resp = await self.client.get(f"/search?{qs}")
+                artist_resp = await self.client.get("/search", params=params)
                 artist_resp.raise_for_status()
                 artist_root = ET.fromstring(artist_resp.text)
                 dirs = artist_root.findall(".//Directory")
@@ -573,9 +573,11 @@ class PlexTarget(BaseTarget):
 
     async def search_title_only(self, title: str) -> list[dict[str, Any]]:
         """Direct Plex track search by title only."""
-        params = {"query": _normalize_search_query(title), "limit": "100"}
-        qs = "&".join(f"{k}={urllib.parse.quote(str(v))}" for k, v in params.items())
-        response = await self.client.get(f"/hubs/search?{qs}")
+        query = _normalize_search_query(title)
+        if not query:
+            return []
+        params = {"query": query, "limit": "100"}
+        response = await self.client.get("/hubs/search", params=params)
         response.raise_for_status()
         root = ET.fromstring(response.text)
         tracks = root.findall(".//Track")
@@ -592,7 +594,7 @@ class PlexTarget(BaseTarget):
         try:
             if genre and not title and not artist:
                 response = await self.client.get(
-                    f"/library/all?type=8&genre={urllib.parse.quote(genre)}"
+                    "/library/all", params={"type": "8", "genre": genre}
                 )
                 response.raise_for_status()
                 root = ET.fromstring(response.text)

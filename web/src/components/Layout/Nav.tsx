@@ -1,5 +1,6 @@
 import {
   Cog,
+  Compass,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -22,6 +23,7 @@ const COLLAPSE_KEY = "ampy3:sidebar-collapsed";
 const links = [
   { path: "/", label: "Dashboard", icon: LayoutDashboard },
   { path: "/syncs", label: "Syncs", icon: Music2 },
+  { path: "/explore", label: "Explore", icon: Compass },
   { path: "/chat", label: "Chat", icon: MessageSquare },
   { path: "/audit", label: "Audit Log", icon: ScrollText },
   {

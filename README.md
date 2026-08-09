@@ -13,6 +13,12 @@ docker compose up --build -d
 
 Open `http://localhost:8000` and complete setup/configuration to connect your target server.
 
+## Screenshots
+
+![Plex server setup](screenshots/plex-setup.png)
+
+On first launch Ampy3 walks you through selecting your Plex server. Other pages (Dashboard, Syncs, Explore, Chat, Audit Log, Settings) unlock once a target server is configured.
+
 ## Stack
 
 - **Backend:** Python / FastAPI + Celery workers

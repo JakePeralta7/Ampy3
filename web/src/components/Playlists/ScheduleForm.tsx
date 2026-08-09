@@ -6,9 +6,15 @@ import { INPUT_STYLES, SELECT_STYLES } from "../../lib/styles";
 import { Button } from "../ui/Button";
 import { TargetSelectDropdown } from "../ui/TargetSelectDropdown";
 
+export interface ScheduleFormPrefill {
+  sourceUrl: string;
+  playlistName: string;
+}
+
 interface ScheduleFormProps {
   onSubmit: (input: CreateScheduledSyncInput) => Promise<void>;
   editingSync?: ScheduledSync | null;
+  prefill?: ScheduleFormPrefill;
   onCancel?: () => void;
   isLoading?: boolean;
   error?: string | null;
@@ -27,6 +33,7 @@ const SOURCES = [{ value: SOURCE_YOUTUBE_MUSIC, label: "YouTube Music" }];
 export function ScheduleForm({
   onSubmit,
   editingSync,
+  prefill,
   onCancel,
   isLoading = false,
   error,
@@ -54,10 +61,17 @@ export function ScheduleForm({
       setSourceUrl(editingSync.source_url);
       setTargetPlaylistName(editingSync.target_playlist_name);
       setScheduleInterval(editingSync.schedule_interval);
+    } else if (prefill) {
+      setSource(SOURCE_YOUTUBE_MUSIC);
+      setTargetIds([TARGET_PLEX]);
+      setSourceUrl(prefill.sourceUrl);
+      setTargetPlaylistName(prefill.playlistName);
+      setScheduleInterval("daily");
+      setFormError(null);
     } else {
       resetForm();
     }
-  }, [editingSync, resetForm]);
+  }, [editingSync, prefill, resetForm]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

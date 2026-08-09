@@ -4,6 +4,7 @@ import { RequireServer } from "./components/Auth/RequireServer";
 import { SettingsLayout } from "./components/Settings/SettingsLayout";
 import { AuditLogPage } from "./pages/AuditLog";
 import { ChatPage } from "./pages/Chat";
+import { ExplorePage } from "./pages/Explore";
 import { HomePage } from "./pages/Home";
 import { LoginPage } from "./pages/Login";
 import { MatchRulesPage } from "./pages/MatchRules";
@@ -62,6 +63,16 @@ export const routes: RouteObject[] = [
       <ProtectedRoute>
         <RequireServer>
           <ChatPage />
+        </RequireServer>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/explore",
+    element: (
+      <ProtectedRoute>
+        <RequireServer>
+          <ExplorePage />
         </RequireServer>
       </ProtectedRoute>
     ),

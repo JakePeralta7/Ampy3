@@ -1,12 +1,13 @@
 import type { CreateScheduledSyncInput, ScheduledSync } from "../../api/schedules";
 import { Modal } from "../ui/Modal";
-import { ScheduleForm } from "./ScheduleForm";
+import { ScheduleForm, type ScheduleFormPrefill } from "./ScheduleForm";
 
 interface ScheduleFormModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (input: CreateScheduledSyncInput) => Promise<void>;
   editingSync?: ScheduledSync | null;
+  prefill?: ScheduleFormPrefill;
   isLoading?: boolean;
   error?: string | null;
 }
@@ -16,6 +17,7 @@ export function ScheduleFormModal({
   onClose,
   onSubmit,
   editingSync,
+  prefill,
   isLoading,
   error,
 }: ScheduleFormModalProps) {
@@ -23,7 +25,9 @@ export function ScheduleFormModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={editingSync ? "Edit Schedule" : "Add New Schedule"}
+      title={
+        editingSync ? "Edit Schedule" : prefill ? "Create Sync from Explore" : "Add New Schedule"
+      }
       size="sm"
     >
       <ScheduleForm
@@ -32,6 +36,7 @@ export function ScheduleFormModal({
           onClose();
         }}
         editingSync={editingSync}
+        prefill={prefill}
         onCancel={onClose}
         isLoading={isLoading}
         error={error}

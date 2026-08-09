@@ -1,4 +1,12 @@
-import { Cog, GitBranch, LayoutDashboard, MessageSquare, Music2, ScrollText } from "lucide-react";
+import {
+  Cog,
+  Compass,
+  GitBranch,
+  LayoutDashboard,
+  MessageSquare,
+  Music2,
+  ScrollText,
+} from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { Toaster } from "sonner";
@@ -10,6 +18,7 @@ import { Nav } from "./Nav";
 const paletteItems = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/syncs", label: "Syncs", icon: Music2 },
+  { to: "/explore", label: "Explore", icon: Compass },
   { to: "/chat", label: "Chat", icon: MessageSquare },
   { to: "/audit", label: "Audit Log", icon: ScrollText },
   { to: "/settings/config", label: "Settings", icon: Cog },

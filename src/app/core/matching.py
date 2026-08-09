@@ -37,7 +37,7 @@ def normalize(
     if strip_brackets:
         text = re.sub(r"[()\[\]]", "", text)
     if strip_quotes:
-        text = re.sub(r"['''`]", "", text)
+        text = re.sub(r"['\"`'']", "", text)
     text = text.lower().strip()
     if collapse_whitespace:
         text = re.sub(r"\s+", " ", text).strip()
