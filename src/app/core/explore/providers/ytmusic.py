@@ -116,9 +116,7 @@ class YTMusicExploreProvider(ExploreProvider):
     async def get_mood_playlists(self, mood_id: str) -> list[ExploreItem]:
         client = self._get_client()
         try:
-            raw_playlists: list[dict] = await asyncio.to_thread(
-                client.get_mood_playlists, mood_id
-            )
+            raw_playlists: list[dict] = await asyncio.to_thread(client.get_mood_playlists, mood_id)
         except (KeyError, TypeError, IndexError) as exc:
             logger.warning("Could not fetch playlists for mood %s: %s", mood_id, exc)
             return []
