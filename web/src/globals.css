@@ -1,8 +1,52 @@
+@import "tailwindcss";
+@import "tw-animate-css";
 @import "./design/tokens.css";
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-bg-app: hsl(var(--bg-app));
+  --color-bg-surface: hsl(var(--bg-surface));
+  --color-bg-muted: hsl(var(--bg-muted));
+  --color-bg-inset: hsl(var(--bg-inset));
+
+  --color-fg: hsl(var(--fg-default));
+  --color-fg-muted: hsl(var(--fg-muted));
+  --color-fg-subtle: hsl(var(--fg-subtle));
+  --color-fg-on-accent: hsl(var(--fg-on-accent));
+
+  --color-border: hsl(var(--border-default));
+  --color-border-strong: hsl(var(--border-strong));
+  --color-border-focus: hsl(var(--border-focus));
+
+  --color-accent-50: hsl(var(--accent-50));
+  --color-accent-100: hsl(var(--accent-100));
+  --color-accent-500: hsl(var(--accent-500));
+  --color-accent-600: hsl(var(--accent-600));
+  --color-accent-700: hsl(var(--accent-700));
+  --color-accent-fg: hsl(var(--accent-fg));
+
+  --color-danger-500: hsl(var(--danger-500));
+  --color-danger-fg: hsl(var(--danger-fg));
+  --color-success-50: hsl(var(--success-50));
+  --color-success-500: hsl(var(--success-500));
+  --color-warning-50: hsl(var(--warning-50));
+  --color-warning-300: hsl(var(--warning-300));
+  --color-warning-700: hsl(var(--warning-700));
+  --color-warning-800: hsl(var(--warning-800));
+  --color-warning-900: hsl(var(--warning-900));
+
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+
+  --duration-fast: var(--motion-fast);
+  --duration-base: var(--motion-base);
+}
 
 html,
 body,
@@ -14,30 +58,11 @@ body {
   @apply bg-bg-app text-fg antialiased;
 }
 
-/* Hide React Flow attribution */
 .react-flow__attribution {
   display: none;
 }
 
-/* Dark mode for React Flow minimap - comprehensive styling */
 .react-flow__minimap {
   background: hsl(var(--bg-inset));
   border: 1px solid hsl(var(--border-default));
-}
-
-.react-flow__minimap svg {
-  background: hsl(var(--bg-inset));
-}
-
-.react-flow__minimap svg rect {
-  fill: hsl(var(--bg-inset));
-}
-
-.react-flow__minimap-mask {
-  fill: rgba(0, 0, 0, 0.3);
-}
-
-.react-flow__minimap-node {
-  fill: hsl(var(--bg-muted));
-  stroke: hsl(var(--border-strong));
 }
