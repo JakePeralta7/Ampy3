@@ -209,8 +209,6 @@ export function TargetsPage() {
     };
   }, []);
 
-  const _hasChanges = Object.keys(values).some((k) => values[k] !== original[k]);
-
   const handleTest = async (targetId: string) => {
     const setTesting = targetId === TARGET_PLEX ? setPlexTesting : setJellyfinTesting;
     const setResult = targetId === TARGET_PLEX ? setPlexTestResult : setJellyfinTestResult;

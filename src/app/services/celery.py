@@ -15,5 +15,7 @@ class CeleryService(ServiceBase):
     def create(cls) -> Any:
         from src.app.worker.app import celery_app
 
-        logger.info("Using Celery app from src.app.tasks (broker: %s)", celery_app.conf.broker_url)
+        logger.info(
+            "Using Celery app from src.app.worker.app (broker: %s)", celery_app.conf.broker_url
+        )
         return celery_app

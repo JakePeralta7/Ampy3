@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 
-import requests
+import httpx
 
 from src.app.core.explore.base import ExploreProvider
 from src.app.core.explore.models import (
@@ -112,14 +112,14 @@ class DeezerExploreProvider(ExploreProvider):
 
     def _get(self, endpoint: str, params: dict | None = None) -> dict | None:
         try:
-            resp = requests.get(
+            resp = httpx.get(
                 f"{BASE_URL}/{endpoint}",
                 params=params,
                 timeout=REQUEST_TIMEOUT,
             )
             resp.raise_for_status()
             return resp.json()
-        except (requests.RequestException, ValueError) as exc:
+        except (httpx.HTTPError, ValueError) as exc:
             logger.warning("Deezer API request to %r failed: %s", endpoint, exc)
             return None
 

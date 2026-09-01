@@ -21,10 +21,9 @@ import { Button } from "../ui/Button";
 
 interface TestPanelProps {
   ruleId: number | null;
-  onTestResult?: (result: TestResponse) => void;
 }
 
-export function TestPanel({ ruleId, onTestResult }: TestPanelProps) {
+export function TestPanel({ ruleId }: TestPanelProps) {
   const [title, setTitle] = useState("");
   const [artist, setArtist] = useState("");
   const [album, setAlbum] = useState("");
@@ -67,7 +66,6 @@ export function TestPanel({ ruleId, onTestResult }: TestPanelProps) {
       const res = await matchRulesAPI.test(track, ruleIds, targetId);
       setResult(res);
       setExpandedTraces(new Set(res.matches?.length ? res.matches.map((m) => m.rule_id) : []));
-      onTestResult?.(res);
     } catch (e) {
       const message = e instanceof Error ? e.message : "Test request failed";
       setError(message);
@@ -75,7 +73,7 @@ export function TestPanel({ ruleId, onTestResult }: TestPanelProps) {
     } finally {
       setLoading(false);
     }
-  }, [title, artist, album, ruleId, targetId, onTestResult]);
+  }, [title, artist, album, ruleId, targetId]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {

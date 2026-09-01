@@ -32,10 +32,6 @@ const INTERVAL_LABELS: Record<string, string> = {
   weekly: "Weekly",
 };
 
-function formatTargetName(targetId: string): string {
-  return targetId;
-}
-
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return "Never";
   return new Date(dateStr).toLocaleDateString("en-US", {
@@ -151,13 +147,13 @@ export function SchedulesList({
         header: "Target",
         sortable: true,
         filterable: true,
-        sortValue: (sync: ScheduledSync) => sync.target_ids.map(formatTargetName).join(", "),
+        sortValue: (sync: ScheduledSync) => sync.target_ids.join(", "),
         cell: (sync: ScheduledSync) => (
           <span className="text-fg-muted inline-flex items-center gap-1.5 group">
             <span className="inline-flex gap-1">
               {sync.target_ids.map((tid) => (
                 <Badge key={tid} variant="neutral">
-                  {formatTargetName(tid)}
+                  {tid}
                 </Badge>
               ))}
             </span>

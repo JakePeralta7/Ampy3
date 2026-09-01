@@ -7,7 +7,7 @@ import re
 import urllib.parse
 from typing import Any
 
-import requests
+import httpx
 
 from src.app.core.matching import normalize
 
@@ -26,7 +26,7 @@ class MusicBrainzResolver:
         url = f"{self.BASE_URL}/{endpoint}"
         query = params.get("query", "")
         logger.debug(f"[MusicBrainz] Searching {endpoint} with query: {query}")
-        resp = requests.get(url, params=params, headers=self.headers, timeout=15)
+        resp = httpx.get(url, params=params, headers=self.headers, timeout=15)
         resp.raise_for_status()
         result = resp.json()
         # Log result counts for debugging
@@ -296,7 +296,7 @@ class MusicBrainzResolver:
                 "release",
                 {"id": mbid, "fmt": "json", "includes": ["recordings", "artists"]},
             )
-        except requests.RequestException as exc:
+        except httpx.HTTPError as exc:
             logger.warning("Failed to lookup release %s: %s", mbid, exc)
             return None
 

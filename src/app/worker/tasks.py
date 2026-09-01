@@ -140,7 +140,6 @@ def match_track_task(
     return matcher.match(item_id or "")
 
 
-@celery_app.task
 def get_sync_status_task(task_id: str):
     """Poll the Celery backend for task status and result."""
     from celery.result import AsyncResult

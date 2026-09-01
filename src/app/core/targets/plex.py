@@ -186,7 +186,7 @@ class PlexTarget(BaseTarget):
             logger.warning("Failed to parse playlist details XML for %s", playlist_id)
             return None
         except httpx.HTTPStatusError as e:
-            print(f"HTTP error getting playlist {playlist_id}: {e}")
+            logger.warning("HTTP error getting playlist %s: %s", playlist_id, e)
             return None
 
     async def create_playlist(

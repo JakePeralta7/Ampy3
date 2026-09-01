@@ -33,34 +33,6 @@ export function RuleProgramPage() {
     setRule((prev) => (prev ? { ...prev, name } : prev));
   }, []);
 
-  /**
-   * Serialise the React Flow canvas back to YAML via the backend API.
-   * The backend computes canonical positions; we only need to send nodes/edges.
-   *
-   * For now we send the canvas dict directly and let the backend's
-   * canvas_to_yaml convert it. The update endpoint accepts yaml_content,
-   * so we first retrieve the current yaml_content from the rule and patch
-   * the node configs in it — or simply save as canvas (which the backend
-   * will reject if there's no yaml_content).
-   *
-   * Since the backend no longer accepts canvas directly, we call the
-   * update endpoint with yaml_content built from the canvas by serialising
-   * the node/edge data. The backend's canvas_to_yaml helper does this job.
-   *
-   * Until a proper client-side YAML serialiser is wired, we round-trip
-   * through the backend: POST the canvas as JSON and let it build YAML.
-   *
-   * Simple approach: keep using yaml_content from the rule for non-structural
-   * edits; for structural (node/edge) changes, send canvas and let the backend
-   * rebuild yaml. The backend PUT now accepts yaml_content only — so we need
-   * a dedicated endpoint or we build YAML on the client.
-   *
-   * For now: on save, fetch the updated rule with new canvas, and persist
-   * yaml_content from the latest server state (which was computed on-load).
-   * We do this by calling update with the node configs merged from the canvas.
-   *
-   * TODO: implement client-side canvas→YAML serialiser to avoid the round-trip.
-   */
   const handleSave = useCallback(
     async (canvas: MatchRuleCanvas) => {
       if (!rule || !numericId) return;

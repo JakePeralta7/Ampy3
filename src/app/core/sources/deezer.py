@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import re
 
-import requests
+import httpx
 
 from src.app.constants import SOURCE_DEEZER, SOURCE_DEEZER_DISPLAY
 from src.app.core.models import IPlatformSource, PlaylistMetadata, TrackMetadata
@@ -47,13 +47,13 @@ class DeezerSource(IPlatformSource):
     async def _fetch_playlist(self, playlist_url: str) -> PlaylistMetadata:
         playlist_id = self._parse_playlist_id(playlist_url)
         try:
-            resp = requests.get(
+            resp = httpx.get(
                 f"{BASE_URL}/playlist/{playlist_id}",
                 timeout=REQUEST_TIMEOUT,
             )
             resp.raise_for_status()
             data = resp.json()
-        except requests.RequestException as exc:
+        except httpx.HTTPError as exc:
             raise RuntimeError(f"Deezer API request failed: {exc}") from exc
 
         if not isinstance(data, dict) or "tracks" not in data:

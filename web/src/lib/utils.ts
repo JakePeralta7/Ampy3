@@ -52,7 +52,3 @@ export function formatRelativeTime(iso: string | null): string {
   const diffDay = Math.floor(diffHr / 24);
   return `${diffDay}d ago`;
 }
-
-export function generateId(): string {
-  return crypto.randomUUID();
-}

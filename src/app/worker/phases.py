@@ -7,14 +7,13 @@ SyncPhase without modifying the pipeline.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import delete, insert, select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import selectinload
 
 from src.app.constants import INTERVAL_DELTAS
@@ -31,9 +30,6 @@ from src.app.models import (
 )
 from src.app.worker.context import MatchResult, SyncContext
 from src.app.worker.session import run_async, session_scope
-
-if False:  # TYPE_CHECKING
-    from src.app.worker.context import SyncContext
 
 logger = logging.getLogger(__name__)
 

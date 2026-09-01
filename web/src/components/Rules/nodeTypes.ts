@@ -273,12 +273,6 @@ export const NODE_TYPE_DEFS: Record<string, NodeTypeDef> = {
   },
 };
 
-export const NODE_CATEGORIES = [
-  { id: "string", label: "Transform", color: "#06b6d4" },
-  { id: "plex", label: "Search & Match", color: "#e11d48" },
-  { id: "compare", label: "Compare", color: "#10b981" },
-] as const;
-
 export function getNodeDef(type: string): NodeTypeDef | undefined {
   return NODE_TYPE_DEFS[type];
 }
