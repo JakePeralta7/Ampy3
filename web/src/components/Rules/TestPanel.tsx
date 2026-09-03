@@ -514,19 +514,6 @@ export function TestPanel({ ruleId }: TestPanelProps) {
             )}
           </div>
         )}
-
-        {/* Empty state */}
-        {!hasResults && !error && (
-          <div className="mt-2 text-center py-4">
-            <p className="text-xs text-fg-subtle">
-              Enter a track title{ruleId ? "" : " to test all active rules"} or pick from unmatched
-              tracks, then press{" "}
-              <kbd className="px-1 py-0.5 bg-bg-muted rounded-sm text-fg-muted font-mono">
-                Enter
-              </kbd>
-            </p>
-          </div>
-        )}
       </div>
     </div>
   );

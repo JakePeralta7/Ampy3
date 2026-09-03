@@ -78,9 +78,6 @@ export function PlexSetupPage() {
             A
           </div>
           <h1 className="text-xl font-semibold text-fg mb-1">Select Your Plex Server</h1>
-          <p className="text-sm text-fg-muted">
-            Choose which Plex Media Server Ampy3 should sync to.
-          </p>
         </div>
 
         {loading && (

@@ -293,9 +293,6 @@ export function PlaylistDetails({
                 <div className="mb-4 flex items-center justify-between">
                   <div>
                     <p className="text-sm text-fg-muted">
-                      Click a track to see source and match details
-                    </p>
-                    <p className="text-sm text-fg-muted">
                       Matched: {rows.filter((r) => r.status === "matched").length} | Failed:{" "}
                       {rows.filter((r) => r.status === "unmatched").length} | Total: {rows.length}
                     </p>

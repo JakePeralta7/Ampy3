@@ -30,8 +30,7 @@ export function LoginPage() {
             </div>
           </div>
 
-          <h1 className="text-xl font-semibold text-fg mb-1">Ampy3</h1>
-          <p className="text-sm text-fg-muted mb-8">Sign in with your Plex account</p>
+          <h1 className="text-xl font-semibold text-fg mb-8">Ampy3</h1>
 
           {errorMessage && (
             <div className="mb-6 px-4 py-3 rounded-md bg-red-50 border border-red-200 text-red-700 text-sm">
@@ -56,10 +55,6 @@ export function LoginPage() {
             Sign in with Plex
           </button>
         </div>
-
-        <p className="text-center text-xs text-fg-subtle mt-4">
-          Only the server owner can access this application.
-        </p>
       </div>
     </div>
   );

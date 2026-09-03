@@ -156,10 +156,6 @@ export function ConfigPage() {
             onChange={(v) => setField("yt_dlp_cookies", v)}
             placeholder="/cookies/cookies.txt"
           />
-          <p className="text-xs text-fg-subtle -mt-2">
-            Optional — only needed for age- or region-restricted content. Everything works without
-            it.
-          </p>
           <SettingField
             id="yt_dlp_timeout"
             label="Timeout (seconds)"
@@ -168,10 +164,6 @@ export function ConfigPage() {
             onChange={(v) => setField("yt_dlp_timeout", v)}
           />
         </SectionCard>
-
-        {hasChanges && (
-          <p className="text-sm text-warning-700 text-center">Changes apply immediately.</p>
-        )}
       </div>
     </PageLayout>
   );

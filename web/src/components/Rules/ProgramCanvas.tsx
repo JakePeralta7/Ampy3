@@ -475,8 +475,7 @@ export function ProgramCanvasInner({
       {isDefault && (
         <div className="flex items-center gap-2 px-4 py-2 bg-accent-500/10 border-b border-accent-500/20 text-xs text-accent-500">
           <AlignLeft size={12} />
-          This is a built-in default rule and cannot be edited. Clone it to create a customisable
-          copy.
+          This is a built-in default rule and cannot be edited.
         </div>
       )}
 

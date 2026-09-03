@@ -84,7 +84,7 @@ export function SyncHistory({ syncId }: SyncHistoryProps) {
   if (runs.length === 0) {
     return (
       <div className="text-center py-8">
-        <p className="text-sm text-fg-muted">No sync history yet. Run a sync to see history.</p>
+        <p className="text-sm text-fg-muted">No sync history yet.</p>
       </div>
     );
   }

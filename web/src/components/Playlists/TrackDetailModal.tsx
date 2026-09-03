@@ -93,9 +93,6 @@ function TargetPanel({ target }: { target: TrackTargetInfo | null }) {
           <Music2 size={40} />
         </div>
         <p className="text-sm font-medium text-fg-muted">No Match Found</p>
-        <p className="text-xs text-fg-subtle mt-1 text-center">
-          This track could not be matched to any item in your library
-        </p>
       </div>
     );
   }

@@ -1,4 +1,4 @@
-import { RefreshCw, Search, ShieldCheck, X } from "lucide-react";
+import { RefreshCw, Search, X } from "lucide-react";
 import { useState } from "react";
 import type { ExploreItemOut } from "../api/explore";
 import { ExploreSection } from "../components/Explore/ExploreSection";
@@ -33,9 +33,6 @@ export function ExplorePage() {
 
   const [query, setQuery] = useState("");
   const [selectedItem, setSelectedItem] = useState<ExploreItemOut | null>(null);
-
-  const activeProviderMeta = providers.find((p) => p.provider_id === activeProvider);
-  const anonymous = activeProviderMeta?.anonymous ?? true;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -110,12 +107,6 @@ export function ExplorePage() {
             </Button>
           )}
         </form>
-        {anonymous && (
-          <p className="mt-3 flex items-center gap-1.5 text-xs text-fg-subtle">
-            <ShieldCheck size={14} className="text-emerald-500" />
-            No login required — browsing and syncing work without source credentials.
-          </p>
-        )}
       </Card>
 
       {loading && !moods && !home && !charts && <LoadingSpinner fullPage />}
