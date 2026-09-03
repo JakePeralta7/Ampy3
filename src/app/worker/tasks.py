@@ -4,8 +4,10 @@ import logging
 from typing import Any
 
 from celery import Celery
+from sqlalchemy import select
 
 from src.app.constants import DEFAULT_SOURCE, DEFAULT_TARGET
+from src.app.models import SyncRun
 from src.app.services.audit import log_event_sync
 from src.app.worker.app import celery_app
 from src.app.worker.context import SyncContext
@@ -117,6 +119,23 @@ def sync_target_task(
         )
         return {"status": "SUCCESS", "stats": stats}
     except Exception as e:
+        try:
+            with ctx.session() as db:
+                stmt = (
+                    select(SyncRun)
+                    .where(
+                        SyncRun.sync_id == sync_id,
+                        SyncRun.target_id == target_id,
+                    )
+                    .order_by(SyncRun.created_at.desc())
+                    .limit(1)
+                )
+                run = db.execute(stmt).scalars().first()
+                if run:
+                    run.status = "failed"
+        except Exception as db_exc:
+            logger.warning("Failed to mark SyncRun as failed: %s", db_exc)
+
         log_event_sync(
             event_type="sync.failed",
             resource_type="playlist",

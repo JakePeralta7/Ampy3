@@ -63,6 +63,9 @@ class TrackTestInput(BaseModel):
     album_name: str | None = None
     duration_ms: int | None = None
     source_id: str | None = None
+    mbid: str | None = None
+    artist_mbid: str | None = None
+    album_mbid: str | None = None
 
 
 class TestRequest(BaseModel):

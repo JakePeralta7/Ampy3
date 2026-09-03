@@ -84,6 +84,7 @@ Alembic migrations run automatically at API startup via `src/app/db.py:init_db()
 - **CORS**: When `REQUIRE_AUTH=true`, only `APP_URL` is allowed. Otherwise `*`.
 - **SPA serving**: `src/main.py` mounts `web/dist/` as static and serves `index.html` for non-API routes. Build the frontend before running the API if you want the UI.
 - **Frontend dev server**: Vite on `:5173` proxies `/api` to `:8000`. No API key or auth needed in dev.
+- **pnpm only**: The frontend uses pnpm (`packageManager` pinned in `web/package.json`, consumed by Corepack/CI). Do not add `package-lock.json` — it is git-ignored; install with `pnpm install --frozen-lockfile`.
 - **pytest asyncio_mode**: Set to `"auto"` in `pyproject.toml` — no need for `@pytest.mark.asyncio`.
 - **No conftest.py**: Tests rely on individual monkeypatching; there's no shared test fixture file.
 

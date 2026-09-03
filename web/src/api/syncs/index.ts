@@ -103,6 +103,10 @@ export interface SyncDiffResponse {
   to_run_id: number;
 }
 
+export interface TargetOpenUrlResponse {
+  url: string | null;
+}
+
 export const syncsAPI = {
   getSyncTracks: (syncId: number): Promise<SyncTracksResponse> =>
     apiRequest<SyncTracksResponse>(`/v1/syncs/${syncId}/tracks`, {
@@ -141,4 +145,9 @@ export const syncsAPI = {
     taskId: string,
   ): Promise<{ task_id: string; status: string; ready: boolean; result: unknown }> =>
     apiRequest(`/v1/syncs/status/${taskId}`, { method: "GET" }),
+
+  getSyncOpenUrl: (syncId: number, targetId: string): Promise<TargetOpenUrlResponse> =>
+    apiRequest<TargetOpenUrlResponse>(`/v1/syncs/${syncId}/open-url?target_id=${targetId}`, {
+      method: "GET",
+    }),
 };

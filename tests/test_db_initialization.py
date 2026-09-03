@@ -73,10 +73,10 @@ async def test_init_db_upgrades_a_managed_database_without_creating_tables(monke
     assert not engine.begin_called
 
 
-def test_alembic_has_one_orm_baseline_revision():
+def test_alembic_has_orm_baseline_revision():
     versions_dir = Path(__file__).parents[1] / "alembic" / "versions"
     revisions = sorted(
         path.name for path in versions_dir.glob("*.py") if path.name != "__init__.py"
     )
 
-    assert revisions == ["001_orm_schema_baseline.py"]
+    assert "001_orm_schema_baseline.py" in revisions

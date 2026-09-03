@@ -13,6 +13,40 @@ from src.app.core.nodes.registry import register_node
 logger = logging.getLogger(__name__)
 
 
+@register_node("mbid_compare")
+class MBIDCompareNode(NodeHandlerBase):
+    """Exact MusicBrainz ID matching node.
+
+    Returns the candidate if source MBID matches target MBID exactly.
+    Source track MBID comes from track.mbid (provided by TrackSourceNode).
+    Target MBID comes from candidate.mbid (returned by search nodes).
+
+    Config:
+    - field: which MBID field to compare (mbid, artist_mbid, album_mbid). Default: mbid
+    """
+
+    async def execute(self, track: TrackMetadata, inputs: NodeInputs) -> NodeOutputs:
+        candidates = inputs.get("candidates") or []
+        if not isinstance(candidates, list) or not candidates:
+            return {"out": None}
+
+        field = self._config.get("field", "mbid")
+        source_mbid = getattr(track, field, None)
+
+        if not source_mbid:
+            return {"out": None}
+
+        for candidate in candidates:
+            if not isinstance(candidate, dict):
+                continue
+            target_mbid = candidate.get(field)
+            if target_mbid and source_mbid == target_mbid:
+                logger.debug("[MBID_COMPARE] Exact MBID match: %s", source_mbid)
+                return {"out": candidate}
+
+        return {"out": None}
+
+
 @register_node("pick_best")
 class PickBestNode(NodeHandlerBase):
     async def execute(self, track: TrackMetadata, inputs: NodeInputs) -> NodeOutputs:

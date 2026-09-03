@@ -45,11 +45,12 @@ class TrackMatcher:
                 album_name=db_row.source_album,
                 duration_ms=db_row.source_duration_ms,
                 source_id=db_row.item_id,
+                mbid=db_row.source_mbid,
+                artist_mbid=db_row.source_artist_mbid,
+                album_mbid=db_row.source_album_mbid,
             )
 
             match = self._match_with_rules(track)
-            if not match:
-                match = self._fallback_search(db_row)
 
             if not match:
                 return MatchResult(
@@ -124,22 +125,4 @@ class TrackMatcher:
                     return matches[0]
         except Exception:
             logger.warning("MatchEngine failed for track '%s'", track.title)
-        return None
-
-    def _fallback_search(self, db_row: PlaylistTrack) -> dict[str, Any] | None:
-        """Direct library search as fallback when MatchEngine finds nothing."""
-        from src.app.worker.session import run_async
-
-        try:
-            hits = run_async(
-                self.ctx.target.search_library(
-                    title=db_row.source_title or "",
-                    artist=db_row.source_artist or "",
-                    album=db_row.source_album or "",
-                )
-            )
-            if hits:
-                return hits[0]
-        except Exception:
-            logger.warning("Direct search failed for track '%s'", db_row.source_title)
         return None

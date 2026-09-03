@@ -15,7 +15,7 @@ class PlaylistSearchResponse(BaseModel):
 class TrackSource(BaseModel):
     """Source track metadata."""
 
-    source_id: str = "YouTube Music"
+    source_id: str
     item_id: str | None = None
     title: str | None = None
     artist_name: str | None = None

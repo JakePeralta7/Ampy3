@@ -156,7 +156,7 @@ class NodeGraphExecutor:
                     }
                 )
 
-            if node["type"] == "compare":
+            if node["type"] in ("compare", "mbid_compare"):
                 match_data = result.get("out")
                 if match_data is not None:
                     match_results.append(match_data)

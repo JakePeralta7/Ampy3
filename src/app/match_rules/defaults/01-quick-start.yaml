@@ -1,8 +1,8 @@
 name: "Quick Start"
 description: >
-  Simple search-then-compare pipeline. Searches Plex by title, artist and album,
-  then scores candidates with a 0.75 weighted threshold. A good first rule that
-  covers the majority of well-tagged tracks.
+  Search-then-compare pipeline with MusicBrainz ID fast-path.
+  First tries exact MBID matching (if both source and target have MBIDs),
+  then falls back to text-based search+compare with 0.75 weighted threshold.
 
 nodes:
   source:
@@ -16,6 +16,11 @@ nodes:
         - search_artist
         - search_album
       max_results: 50
+
+  mbid_compare:
+    type: mbid_compare
+    config:
+      field: mbid
 
   compare:
     type: compare
@@ -36,6 +41,14 @@ nodes:
 edges:
   - from: source
     to: search
+
+  - from: search
+    to: mbid_compare
+    source_handle: out
+    target_handle: candidates
+
+  - from: mbid_compare
+    to: output
 
   - from: search
     to: compare

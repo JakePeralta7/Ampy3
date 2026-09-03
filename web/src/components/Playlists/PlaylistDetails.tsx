@@ -1,8 +1,9 @@
-import { RotateCw } from "lucide-react";
+import { ExternalLink, RotateCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { ScheduledSync } from "../../api/schedules";
 import type { SyncTracksResponse, TrackDetail } from "../../api/syncs";
+import { syncsAPI } from "../../api/syncs";
 import { getSourceLabel } from "../../lib/constants";
 import { CopyButton } from "../ui/CopyButton";
 import { type Column, DataTable } from "../ui/DataTable";
@@ -91,6 +92,8 @@ export function PlaylistDetails({
     () => activeTab ?? targetIds[0] ?? "history",
   );
 
+  const [openUrl, setOpenUrl] = useState<string | null>(null);
+
   // Sync selectedTab changes to URL
   const handleTabChangeLocal = useCallback(
     (tabId: string) => {
@@ -99,6 +102,26 @@ export function PlaylistDetails({
     },
     [onTabChange],
   );
+
+  // Fetch the open URL when tab changes (and it's not "history")
+  useEffect(() => {
+    if (!sync || selectedTab === "history") {
+      setOpenUrl(null);
+      return;
+    }
+
+    const fetchOpenUrl = async () => {
+      try {
+        const response = await syncsAPI.getSyncOpenUrl(sync.id, selectedTab);
+        setOpenUrl(response.url);
+      } catch (_err) {
+        // Silently fail; if the URL fails to load, we just don't show the link
+        setOpenUrl(null);
+      }
+    };
+
+    fetchOpenUrl();
+  }, [sync, selectedTab]);
 
   // Update local state when URL tab param changes (e.g., browser back/forward)
   useEffect(() => {
@@ -267,14 +290,28 @@ export function PlaylistDetails({
 
             {selectedTab !== "history" && (
               <>
-                <div className="mb-4">
-                  <p className="text-sm text-fg-muted">
-                    Click a track to see source and match details
-                  </p>
-                  <p className="text-sm text-fg-muted">
-                    Matched: {rows.filter((r) => r.status === "matched").length} | Failed:{" "}
-                    {rows.filter((r) => r.status === "unmatched").length} | Total: {rows.length}
-                  </p>
+                <div className="mb-4 flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-fg-muted">
+                      Click a track to see source and match details
+                    </p>
+                    <p className="text-sm text-fg-muted">
+                      Matched: {rows.filter((r) => r.status === "matched").length} | Failed:{" "}
+                      {rows.filter((r) => r.status === "unmatched").length} | Total: {rows.length}
+                    </p>
+                  </div>
+                  {openUrl && (
+                    <a
+                      href={openUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-accent-500 text-white hover:bg-accent-600 transition-colors text-sm font-medium"
+                      title={`Open in ${selectedTab}`}
+                    >
+                      Open in {selectedTab}
+                      <ExternalLink size={16} />
+                    </a>
+                  )}
                 </div>
 
                 {playlistDetails.tracks.length === 0 ? (

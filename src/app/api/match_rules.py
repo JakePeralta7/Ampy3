@@ -237,6 +237,9 @@ async def test_rules(
             album_name=body.track.album_name or "",
             duration_ms=body.track.duration_ms,
             source_id=body.track.source_id,
+            mbid=body.track.mbid,
+            artist_mbid=body.track.artist_mbid,
+            album_mbid=body.track.album_mbid,
         )
 
         target = await get_sync_target(body.target_id or "Plex")

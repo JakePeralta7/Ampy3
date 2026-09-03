@@ -47,6 +47,9 @@ class TrackColumns:
     source_album: Mapped[str | None] = mapped_column(String(255), nullable=True)
     source_duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     item_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    source_mbid: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    source_artist_mbid: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    source_album_mbid: Mapped[str | None] = mapped_column(String(36), nullable=True)
 
 
 class MatchRule(TimestampMixin, Base):
@@ -223,6 +226,7 @@ class SyncRun(CreatedAtMixin, Base):
         index=True,
     )
     target_id: Mapped[str] = mapped_column(String(50), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="running", nullable=False)
     matched_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     failed_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 

@@ -87,6 +87,9 @@ class FetchPhase(SyncPhase):
                 "source_album": t.album_name,
                 "source_duration_ms": t.duration_ms,
                 "item_id": t.source_id,
+                "source_mbid": t.mbid,
+                "source_artist_mbid": t.artist_mbid,
+                "source_album_mbid": t.album_mbid,
             }
             for pos, t in enumerate(playlist.tracks)
         ]
@@ -164,6 +167,9 @@ class FetchPhase(SyncPhase):
                     source_album=row_data.get("source_album"),
                     source_duration_ms=row_data.get("source_duration_ms"),
                     item_id=row_data.get("item_id"),
+                    source_mbid=row_data.get("source_mbid"),
+                    source_artist_mbid=row_data.get("source_artist_mbid"),
+                    source_album_mbid=row_data.get("source_album_mbid"),
                 )
                 db.add(new_track)
                 db.flush()
@@ -221,11 +227,12 @@ class MatchPhase(SyncPhase):
             album_name=db_row.source_album,
             duration_ms=db_row.source_duration_ms,
             source_id=db_row.item_id,
+            mbid=db_row.source_mbid,
+            artist_mbid=db_row.source_artist_mbid,
+            album_mbid=db_row.source_album_mbid,
         )
 
         match = self._match_with_rules(ctx, track)
-        if not match:
-            match = self._fallback_search(ctx, db_row)
 
         if not match:
             return MatchResult(matched=False, message=f"No match for '{db_row.source_title}'")
@@ -288,22 +295,6 @@ class MatchPhase(SyncPhase):
             logger.warning("MatchEngine failed for track '%s'", track.title)
         return None
 
-    def _fallback_search(self, ctx: SyncContext, db_row: PlaylistTrack) -> dict[str, Any] | None:
-        """Direct library search as fallback."""
-        try:
-            hits = run_async(
-                ctx.target.search_library(
-                    title=db_row.source_title or "",
-                    artist=db_row.source_artist or "",
-                    album=db_row.source_album or "",
-                )
-            )
-            if hits:
-                return hits[0]
-        except Exception:
-            logger.warning("Direct search failed for track '%s'", db_row.source_title)
-        return None
-
 
 # ─── Phase 3: Finalize ────────────────────────────────────────
 
@@ -338,7 +329,7 @@ class FinalizePhase(SyncPhase):
         )
 
     def _finalize_counts(self, db, ctx: SyncContext, matched: int, failed: int) -> None:  # noqa: ANN001
-        """Update SyncRun with match counts."""
+        """Update SyncRun with match counts and mark it completed."""
         stmt = (
             select(SyncRun)
             .where(SyncRun.sync_id == ctx.sync_id, SyncRun.target_id == ctx.target_id)
@@ -349,6 +340,7 @@ class FinalizePhase(SyncPhase):
         if run:
             run.matched_count = matched
             run.failed_count = failed
+            run.status = "completed"
 
     def _snapshot_history(self, db, ctx: SyncContext) -> None:  # noqa: ANN001
         """Populate SyncRunTrackTarget rows for the diff.

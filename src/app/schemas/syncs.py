@@ -87,6 +87,12 @@ class SyncRunOut(BaseModel):
     created_at: str | None = None
 
 
+class TargetOpenUrlResponse(BaseModel):
+    """URL to open a synced playlist in the target's web app."""
+
+    url: str | None = None
+
+
 class SyncDiffItem(BaseModel):
     """A single track in a sync diff."""
 

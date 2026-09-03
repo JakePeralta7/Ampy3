@@ -8,7 +8,16 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from src.app.auth.dependencies import get_current_user
-from src.app.constants import DEFAULT_SOURCE, DEFAULT_TARGET, SOURCE_YOUTUBE_MUSIC_DISPLAY
+from src.app.constants import (
+    DEFAULT_SOURCE,
+    DEFAULT_TARGET,
+    SOURCE_DEEZER,
+    SOURCE_DEEZER_DISPLAY,
+    SOURCE_YOUTUBE_MUSIC,
+    SOURCE_YOUTUBE_MUSIC_DISPLAY,
+    TARGET_JELLYFIN,
+    TARGET_PLEX,
+)
 from src.app.db import AsyncSessionLocal
 from src.app.models import (
     PlaylistTrack,
@@ -29,6 +38,7 @@ from src.app.schemas.syncs import (
     SyncTracksResponse,
     SyncTriggerRequest,
     SyncTriggerResponse,
+    TargetOpenUrlResponse,
     UnmatchedTrackOut,
 )
 from src.app.services import get_sync_target
@@ -38,6 +48,11 @@ from src.app.worker.tasks import match_track_task, sync_playlists_task
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/syncs", tags=["syncs"])
+
+_SOURCE_DISPLAY_NAMES = {
+    SOURCE_YOUTUBE_MUSIC: SOURCE_YOUTUBE_MUSIC_DISPLAY,
+    SOURCE_DEEZER: SOURCE_DEEZER_DISPLAY,
+}
 
 
 # ─── Shared Helpers ──────────────────────────────────────────────
@@ -100,7 +115,7 @@ def _build_track_response(
         track_details.append(
             TrackDetail(
                 source=TrackSource(
-                    source_id=SOURCE_YOUTUBE_MUSIC_DISPLAY,
+                    source_id=_SOURCE_DISPLAY_NAMES.get(sync_record.source, sync_record.source),
                     item_id=r.item_id,
                     title=r.source_title,
                     artist_name=r.source_artist,
@@ -227,6 +242,53 @@ async def get_sync_tracks(
     except Exception as e:
         logger.error(f"Error getting sync tracks: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get sync tracks: {str(e)}") from e
+
+
+@router.get("/{sync_id}/open-url", response_model=TargetOpenUrlResponse)
+async def get_sync_open_url(
+    sync_id: int,
+    target_id: str = Query(default=DEFAULT_TARGET),
+    _user: dict[str, Any] = Depends(get_current_user),  # noqa: B008
+):
+    """Return the target web-app URL to open the synced playlist.
+
+    The URL is built at request time: the Plex route needs the server's
+    machine identifier, which is fetched live (and cached on the target
+    instance). Returns ``url: null`` when the target is not configured,
+    the playlist has not been created yet, or the target is unreachable.
+    """
+    try:
+        async with AsyncSessionLocal() as session:
+            stmt = (
+                select(ScheduledPlaylistSync)
+                .where(ScheduledPlaylistSync.id == sync_id)
+                .options(selectinload(ScheduledPlaylistSync.schedule_targets))
+            )
+            result = await session.execute(stmt)
+            sync_record = result.scalars().first()
+
+            if not sync_record:
+                raise HTTPException(status_code=404, detail=f"Sync {sync_id} not found")
+
+            playlist_id = next(
+                (
+                    t.playlist_id
+                    for t in sync_record.schedule_targets
+                    if t.target_id == target_id and t.playlist_id
+                ),
+                None,
+            )
+            if not playlist_id:
+                return TargetOpenUrlResponse(url=None)
+
+            target = await get_sync_target(target_id)
+            url = await target.client_url(playlist_id)
+            return TargetOpenUrlResponse(url=url)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.warning("Failed to build open url for sync %s target %s: %s", sync_id, target_id, e)
+        return TargetOpenUrlResponse(url=None)
 
 
 # ─── Unmatched ───────────────────────────────────────────────────

@@ -99,6 +99,22 @@ class PlexTarget(BaseTarget):
             raise RuntimeError("Could not determine Plex server machine identifier")
         return self._machine_identifier
 
+    async def client_url(self, playlist_id: str) -> str:
+        """Return the Plex web-app URL that opens the given playlist.
+
+        Plex web is a hash-routed SPA served from the server base URL.
+        A playlist deep link uses the format:
+        ``/web/index.html#!/server/{machineId}/playlist?key=%2Fplaylists%2F{ratingKey}``
+        The key parameter is URL-encoded to /playlists/{ratingKey}.
+        """
+        machine_id = await self._ensure_machine_id()
+        rating_key = self._rating_key(playlist_id)
+        key_param = urllib.parse.quote(f"/playlists/{rating_key}", safe="")
+        return (
+            f"{self._base_url.rstrip('/')}/web/index.html"
+            f"#!/server/{machine_id}/playlist?key={key_param}"
+        )
+
     @staticmethod
     def _rating_key(item_id: str) -> str:
         """Extracts the numeric rating_key from an item_id.

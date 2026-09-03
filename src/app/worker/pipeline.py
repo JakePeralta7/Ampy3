@@ -95,6 +95,7 @@ class SyncPipeline:
             run = SyncRun(
                 sync_id=self.ctx.sync_id,
                 target_id=self.ctx.target_id,
+                status="running",
                 matched_count=0,
                 failed_count=0,
             )

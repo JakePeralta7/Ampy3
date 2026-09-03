@@ -97,8 +97,17 @@ class JellyfinTarget(BaseTarget):
             "track_count": int(item.get("ChildCount") or 0),
         }
 
+    def client_url(self, playlist_id: str) -> str:
+        """Return the Jellyfin web-app URL that opens the given playlist item.
+
+        Jellyfin web is a hash-routed SPA served from the server base URL.
+        The item details page is reached via ``/web/index.html#/itemdetails?id={itemId}``.
+        """
+        return f"{self._base_url}/web/index.html#/itemdetails?id={playlist_id}"
+
     def _track_out(self, item: dict[str, Any]) -> dict[str, Any]:
         item_id = str(item.get("Id", ""))
+        provider_ids = item.get("ProviderIds") or {}
         return {
             "item_id": item_id,
             "title": item.get("Name", "") or "",
@@ -107,6 +116,9 @@ class JellyfinTarget(BaseTarget):
             "duration": self._to_duration_seconds(item.get("RunTimeTicks")),
             "duration_ms": int((item.get("RunTimeTicks") or 0) / 10_000),
             "playlist_item_id": item.get("PlaylistItemId"),
+            "mbid": provider_ids.get("MusicBrainzRecording"),
+            "artist_mbid": provider_ids.get("MusicBrainzArtist"),
+            "album_mbid": provider_ids.get("MusicBrainzAlbum"),
         }
 
     # ── Playlist operations ──────────────────────────────────────
@@ -292,7 +304,7 @@ class JellyfinTarget(BaseTarget):
             "IncludeItemTypes": "Audio",
             "Recursive": "true",
             "Limit": "200",
-            "Fields": "RunTimeTicks,ArtistItems,Album",
+            "Fields": "RunTimeTicks,ArtistItems,Album,ProviderIds",
         }
         if search_term:
             params["SearchTerm"] = search_term
