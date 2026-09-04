@@ -120,7 +120,10 @@ async def create_scheduled_sync(
     result = await db.execute(
         select(ScheduledPlaylistSync)
         .where(ScheduledPlaylistSync.id == db_sync.id)
-        .options(selectinload(ScheduledPlaylistSync.schedule_targets))
+        .options(
+            selectinload(ScheduledPlaylistSync.schedule_targets),
+            selectinload(ScheduledPlaylistSync.runs),
+        )
     )
     db_sync = result.scalar_one()
 
