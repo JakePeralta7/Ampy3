@@ -1,0 +1,40 @@
+name: ampy3-dev
+
+# Dev overlay for docker-compose.yml. Run with:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+#
+# Adds hot reload for the backend (uvicorn --reload) and runs the Vite dev
+# server on http://localhost:5173, proxying /api to the web service.
+services:
+  web:
+    build:
+      context: .
+      target: base
+    image: ampy3-web-dev
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - ./src:/app/src
+      - ./alembic:/app/alembic
+      - ./migrate.py:/app/migrate.py
+      - ./cookies:/cookies:ro
+    # Drop the compiled SPA port mapping; the UI is served by the frontend
+    # service below. The API remains reachable on 8000 for /api calls.
+    depends_on:
+      valkey:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    image: node:26-alpine
+    working_dir: /app/web
+    environment:
+      - VITE_PROXY_TARGET=http://web:8000
+      - CI=true
+    command: sh -c "npm i -g pnpm@11.16.0 && pnpm install --frozen-lockfile && pnpm run dev --host 0.0.0.0"
+    volumes:
+      - ./web:/app/web
+    ports:
+      - "5173:5173"
+    depends_on:
+      - web

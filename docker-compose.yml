@@ -16,6 +16,7 @@ services:
       retries: 5
 
   web:
+    image: ghcr.io/jakeperalta7/ampy3-web:latest
     build:
       context: .
       target: web
@@ -42,6 +43,7 @@ services:
       - ./cookies:/cookies:ro
 
   worker:
+    image: ghcr.io/jakeperalta7/ampy3-worker:latest
     build:
       context: .
       target: worker

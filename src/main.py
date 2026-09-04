@@ -184,6 +184,13 @@ async def session_middleware(request: Request, call_next):
 
 register_routers(app)
 
+
+@app.get("/health")
+async def health():
+    """Liveness probe for container healthchecks."""
+    return {"status": "ok"}
+
+
 # ── Static files / SPA ──────────────────────────────────────────────────
 
 web_dist_path = Path(__file__).parent.parent / "web" / "dist"
