@@ -38,6 +38,8 @@ router = APIRouter(prefix="/api/v1/schedules", tags=["schedules"])
 
 
 def _sync_to_out(model: ScheduledPlaylistSync) -> ScheduledSyncOut:
+    # Check if any run for this sync is currently running
+    running_run = next((r for r in model.runs if r.status == "running"), None)
     return ScheduledSyncOut(
         id=model.id,
         source=model.source,
@@ -51,6 +53,7 @@ def _sync_to_out(model: ScheduledPlaylistSync) -> ScheduledSyncOut:
         created_at=model.created_at.isoformat() if model.created_at else None,
         updated_at=model.updated_at.isoformat() if model.updated_at else None,
         error_message=model.error_message,
+        status="running" if running_run else None,
     )
 
 
@@ -154,7 +157,8 @@ async def list_scheduled_syncs(
 ):
     """List all scheduled syncs, optionally filtered to active only."""
     query = select(ScheduledPlaylistSync).options(
-        selectinload(ScheduledPlaylistSync.schedule_targets)
+        selectinload(ScheduledPlaylistSync.schedule_targets),
+        selectinload(ScheduledPlaylistSync.runs),
     )
     if active_only:
         query = query.where(ScheduledPlaylistSync.is_active)

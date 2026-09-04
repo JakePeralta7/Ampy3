@@ -1,5 +1,5 @@
 import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
-import { apiPost } from "../api/client";
+import { apiGet, apiPost } from "../api/client";
 
 export interface AuthUser {
   plex_user_id: string;
@@ -34,13 +34,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/auth/me", { credentials: "include" })
-      .then((res) => {
-        if (res.ok) return res.json();
-        throw new Error("unauthenticated");
-      })
+    apiGet<{ require_auth?: boolean }>("/auth/me")
       .then((data) => {
-        setUser(data);
+        setUser(data as AuthUser);
         setRequireAuth(data.require_auth ?? true);
       })
       .catch(() => setUser(null))

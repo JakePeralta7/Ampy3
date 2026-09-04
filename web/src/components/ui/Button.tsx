@@ -5,6 +5,8 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: "primary" | "secondary" | "danger" | "ghost";
   size?: "xs" | "sm" | "md";
   loading?: boolean;
+  startIcon?: React.ReactNode;
+  endIcon?: React.ReactNode;
   icon?: React.ReactNode;
 }
 
@@ -28,6 +30,8 @@ export function Button({
   variant = "primary",
   size = "md",
   loading = false,
+  startIcon,
+  endIcon,
   icon,
   children,
   disabled,
@@ -40,7 +44,13 @@ export function Button({
       className={`inline-flex items-center justify-center gap-2 font-medium transition-colors duration-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-app ${variantStyles[variant]} ${sizeStyles[size]} ${className}`}
       {...props}
     >
-      {loading ? <Loader2 size={size === "xs" ? 12 : 16} className="animate-spin" /> : icon}
+      {startIcon && <span className="shrink-0">{startIcon}</span>}
+      {loading ? (
+        <Loader2 size={size === "xs" ? 12 : 16} className="animate-spin" />
+      ) : icon ? (
+        <span className="shrink-0">{icon}</span>
+      ) : null}
+      {endIcon && <span className="shrink-0">{endIcon}</span>}
       {children}
     </button>
   );

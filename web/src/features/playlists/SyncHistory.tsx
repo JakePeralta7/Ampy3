@@ -1,84 +1,24 @@
-import { ChevronDown, ChevronRight, GitCompare } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
-import { type SyncDiffItem, type SyncDiffResponse, type SyncRun, syncsAPI } from "../../api/syncs";
-import { Badge } from "../ui/Badge";
-import { LoadingSpinner } from "../ui/LoadingSpinner";
+import { ChevronDown, ChevronRight, GitCompare, Loader2 } from "lucide-react";
+import { Alert } from "../../components/ui/Alert";
+import { Badge } from "../../components/ui/Badge";
+import { LoadingSpinner } from "../../components/ui/LoadingSpinner";
+import { useSyncHistory } from "../../hooks/useSyncHistory";
+import { formatTimestamp } from "../../lib/utils";
 
 interface SyncHistoryProps {
   syncId: number;
 }
 
 export function SyncHistory({ syncId }: SyncHistoryProps) {
-  const [runs, setRuns] = useState<SyncRun[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedRunId, setSelectedRunId] = useState<number | null>(null);
-  const [diff, setDiff] = useState<SyncDiffResponse | null>(null);
-  const [diffLoading, setDiffLoading] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    syncsAPI
-      .getSyncHistory(syncId)
-      .then((data) => {
-        if (!cancelled) setRuns(data);
-      })
-      .catch(() => {
-        if (!cancelled) setError("Failed to load sync history");
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [syncId]);
-
-  const handleSelectRun = useCallback(
-    async (run: SyncRun) => {
-      if (selectedRunId === run.id) {
-        setSelectedRunId(null);
-        setDiff(null);
-        return;
-      }
-
-      // Find the previous run with the same target (runs are sorted newest-first by backend)
-      const currentIndex = runs.findIndex((r) => r.id === run.id);
-      const prevRun =
-        runs.slice(currentIndex + 1).find((r) => r.target_id === run.target_id) || null;
-
-      if (!prevRun) {
-        setSelectedRunId(run.id);
-        setDiff(null);
-        return;
-      }
-
-      setSelectedRunId(run.id);
-      setDiffLoading(true);
-      try {
-        const result = await syncsAPI.getSyncDiff(syncId, prevRun.id, run.id);
-        setDiff(result);
-      } catch {
-        setDiff(null);
-      } finally {
-        setDiffLoading(false);
-      }
-    },
-    [runs, selectedRunId, syncId],
-  );
+  const { runs, loading, error, selectedRunId, diff, diffLoading, selectRun } =
+    useSyncHistory(syncId);
 
   if (loading) {
     return <LoadingSpinner text="Loading history..." />;
   }
 
   if (error) {
-    return (
-      <div className="p-3 bg-danger-500/10 text-danger-500 border border-danger-500/20 rounded-md text-sm">
-        {error}
-      </div>
-    );
+    return <Alert>{error}</Alert>;
   }
 
   if (runs.length === 0) {
@@ -104,36 +44,43 @@ export function SyncHistory({ syncId }: SyncHistoryProps) {
               className="bg-bg-surface rounded-lg border border-border overflow-hidden"
             >
               <button
-                onClick={() => handleSelectRun(run)}
-                className="w-full flex items-center justify-between px-3 py-2.5 text-left hover:bg-bg-muted transition-colors duration-fast"
+                onClick={() => selectRun(run)}
+                disabled={run.status === "running"}
+                aria-disabled={run.status === "running"}
+                className="w-full flex items-center justify-between px-3 py-2.5 text-left hover:bg-bg-muted transition-colors duration-fast disabled:cursor-default"
               >
                 <div className="flex items-center gap-2">
-                  {isSelected ? (
+                  {run.status === "running" ? (
+                    <span className="text-fg-subtle shrink-0">•</span>
+                  ) : isSelected ? (
                     <ChevronDown size={12} className="text-fg-subtle shrink-0" />
                   ) : (
                     <ChevronRight size={12} className="text-fg-subtle shrink-0" />
                   )}
                   <Badge variant="neutral">{run.target_id}</Badge>
                   <span className="text-xs text-fg-muted">
-                    {run.created_at
-                      ? new Date(run.created_at).toLocaleString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })
-                      : "Unknown date"}
+                    {run.created_at ? formatTimestamp(run.created_at) : "Unknown date"}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Badge variant="success">{run.matched_count} matched</Badge>
-                  {run.failed_count > 0 && (
-                    <Badge variant="danger">{run.failed_count} failed</Badge>
+                  {run.status === "running" ? (
+                    <Badge variant="warning">
+                      <span className="inline-flex items-center gap-1">
+                        <Loader2 size={10} className="animate-spin" /> running
+                      </span>
+                    </Badge>
+                  ) : (
+                    <>
+                      <Badge variant="success">{run.matched_count} matched</Badge>
+                      {run.failed_count > 0 && (
+                        <Badge variant="danger">{run.failed_count} failed</Badge>
+                      )}
+                    </>
                   )}
                 </div>
               </button>
 
-              {isSelected && (
+              {run.status !== "running" && isSelected && (
                 <div className="border-t border-border px-3 py-3">
                   {diffLoading ? (
                     <p className="text-xs text-fg-muted">Loading diff...</p>
@@ -154,7 +101,7 @@ export function SyncHistory({ syncId }: SyncHistoryProps) {
   );
 }
 
-function DiffView({ diff }: { diff: SyncDiffResponse }) {
+function DiffView({ diff }: { diff: import("../../api/syncs").SyncDiffResponse }) {
   const hasChanges = diff.added.length > 0 || diff.removed.length > 0;
 
   if (!hasChanges) {
@@ -209,7 +156,13 @@ function DiffView({ diff }: { diff: SyncDiffResponse }) {
   );
 }
 
-function DiffTrackRow({ item, variant }: { item: SyncDiffItem; variant: "added" | "removed" }) {
+function DiffTrackRow({
+  item,
+  variant,
+}: {
+  item: import("../../api/syncs").SyncDiffItem;
+  variant: "added" | "removed";
+}) {
   const bgClass = variant === "added" ? "bg-success-500/5" : "bg-danger-500/5";
   const borderClass = variant === "added" ? "border-success-500/20" : "border-danger-500/20";
 

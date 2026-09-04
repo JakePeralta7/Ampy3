@@ -1,13 +1,13 @@
 import { RefreshCw, Search, X } from "lucide-react";
 import { useState } from "react";
 import type { ExploreItemOut } from "../api/explore";
-import { ExploreSection } from "../components/Explore/ExploreSection";
-import { MoodGrid } from "../components/Explore/MoodGrid";
-import { SourcePlaylistModal } from "../components/Explore/SourcePlaylistModal";
-import { PageLayout } from "../components/Layout/PageLayout";
+import { PageLayout } from "../components/layout/PageLayout";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { LoadingSpinner } from "../components/ui/LoadingSpinner";
+import { ExploreSection } from "../features/explore/ExploreSection";
+import { MoodGrid } from "../features/explore/MoodGrid";
+import { SourcePlaylistModal } from "../features/explore/SourcePlaylistModal";
 import { useExplore } from "../hooks/useExplore";
 import { INPUT_STYLES } from "../lib/styles";
 

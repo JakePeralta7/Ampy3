@@ -1,6 +1,6 @@
 import { Navigate, type RouteObject, useRoutes } from "react-router-dom";
-import { ProtectedRoute } from "./components/Auth/ProtectedRoute";
-import { RequireServer } from "./components/Auth/RequireServer";
+import { ProtectedRoute } from "./components/auth/ProtectedRoute";
+import { RequireServer } from "./components/auth/RequireServer";
 import { SettingsLayout } from "./components/Settings/SettingsLayout";
 import { AuditLogPage } from "./pages/AuditLog";
 import { ExplorePage } from "./pages/Explore";

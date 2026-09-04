@@ -16,8 +16,9 @@ import {
 import { useCallback, useState } from "react";
 import { matchRulesAPI, type TestResponse, type TrackTestInput } from "../../api/rules";
 import { syncsAPI, type UnmatchedTrack } from "../../api/syncs";
+import { Button } from "../../components/ui/Button";
 import { TARGET_JELLYFIN, TARGET_PLEX } from "../../lib/constants";
-import { Button } from "../ui/Button";
+import { getErrorMessage } from "../../lib/utils";
 
 interface TestPanelProps {
   ruleId: number | null;
@@ -67,7 +68,7 @@ export function TestPanel({ ruleId }: TestPanelProps) {
       setResult(res);
       setExpandedTraces(new Set(res.matches?.length ? res.matches.map((m) => m.rule_id) : []));
     } catch (e) {
-      const message = e instanceof Error ? e.message : "Test request failed";
+      const message = getErrorMessage(e, "Test request failed");
       setError(message);
       setResult(null);
     } finally {

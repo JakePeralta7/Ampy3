@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%" style="max-width: 400px; border-radius: 45px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+  <title>Ampy3</title>
+  <!-- Definitions -->
+  <defs>
+    <!-- YouTube Music / Plex Gold Gradient -->
+    <linearGradient id="goldGrad" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#FFB300" />
+      <stop offset="100%" stop-color="#F4511E" />
+    </linearGradient>
+
+    <!-- Sync Blue Gradient -->
+    <linearGradient id="blueGrad" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#29B6F6" />
+      <stop offset="100%" stop-color="#0277BD" />
+    </linearGradient>
+
+    <!-- Subtle Glow for Waveform -->
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="2" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- App Icon Background -->
+  <rect width="200" height="200" fill="#1A1A1D" rx="45" stroke="#2C2C30" stroke-width="2" />
+
+  <!-- Left Arrow: Gold (Clockwise) -->
+  <!-- Rotated -15deg to adjust gap spacing -->
+  <g transform="rotate(-15, 100, 100)">
+    <path d="M 65 160.62 A 70 70 0 0 1 100 30"
+          fill="none" stroke="url(#goldGrad)" stroke-width="10" stroke-linecap="round" />
+    <polygon points="88,12 118,30 88,48" fill="url(#goldGrad)" />
+  </g>
+
+  <!-- Right Arrow: Blue (Clockwise) -->
+  <!-- Rotated +15deg to perfectly mirror the left side -->
+  <g transform="rotate(15, 100, 100)">
+    <path d="M 100 30 A 70 70 0 0 1 135 160.62"
+          fill="none" stroke="url(#blueGrad)" stroke-width="10" stroke-linecap="round" />
+    <polygon points="154.4,170.2 119.4,169.6 136.4,139.0" fill="url(#blueGrad)" />
+  </g>
+
+  <!-- Center Audio Waveform -->
+  <g fill="#FFFFFF" filter="url(#glow)">
+    <rect x="67" y="94" width="6" height="12" rx="3" />
+    <rect x="77" y="86" width="6" height="28" rx="3" />
+    <rect x="87" y="76" width="6" height="48" rx="3" />
+    <rect x="97" y="66" width="6" height="68" rx="3" />
+    <rect x="107" y="74" width="6" height="52" rx="3" />
+    <rect x="117" y="84" width="6" height="32" rx="3" />
+    <rect x="127" y="92" width="6" height="16" rx="3" />
+  </g>
+</svg>

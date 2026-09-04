@@ -2,12 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import type { CreateScheduledSyncInput, ScheduledSync } from "../api/schedules";
-import { PageLayout } from "../components/Layout/PageLayout";
-import { PlaylistDetails } from "../components/Playlists/PlaylistDetails";
-import { ScheduleFormModal } from "../components/Playlists/ScheduleFormModal";
-import { SchedulesList } from "../components/Playlists/SchedulesList";
+import { PageLayout } from "../components/layout/PageLayout";
 import { Button } from "../components/ui/Button";
 import { ConfirmDialog } from "../components/ui/ConfirmDialog";
+import { PlaylistDetails } from "../features/playlists/PlaylistDetails";
+import { ScheduleFormModal } from "../features/playlists/ScheduleFormModal";
+import { SchedulesList } from "../features/playlists/SchedulesList";
 import { usePlaylistDetails } from "../hooks/usePlaylistDetails";
 import { useScheduledSyncs } from "../hooks/useScheduledSyncs";
 import { getErrorMessage } from "../lib/utils";
@@ -189,7 +189,7 @@ export function SyncsPage() {
   };
 
   const handleCloseDetailsModal = () => {
-    setSearchParams({});
+    setSearchParams({ tab: tabParam ?? "history" });
   };
 
   const handleTrackSelect = (index: number) => {

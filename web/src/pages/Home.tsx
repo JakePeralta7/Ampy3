@@ -8,7 +8,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { useMemo } from "react";
-import { PageLayout } from "../components/Layout/PageLayout";
+import { PageLayout } from "../components/layout/PageLayout";
 import { Card } from "../components/ui/Card";
 import { StatCard } from "../components/ui/StatCard";
 import { useScheduledSyncs } from "../hooks/useScheduledSyncs";
@@ -32,7 +32,7 @@ export function HomePage() {
       .filter((s) => s.is_active && s.next_sync_at)
       .map((s) => s.next_sync_at)
       .sort()
-      .find((t) => new Date(t) > new Date());
+      .find((t) => t !== null && new Date(t) > new Date());
     const sources = syncs.reduce(
       (acc, s) => {
         const label = getSourceLabel(s.source);

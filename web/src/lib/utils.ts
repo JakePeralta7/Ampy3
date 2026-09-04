@@ -38,6 +38,18 @@ export function formatNextSync(nextSyncAt: string | null): string {
   return `in ${diffDay}d`;
 }
 
+export function formatDuration(seconds: number | null | undefined): string {
+  if (!seconds || seconds <= 0) return "—";
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+export function formatDurationMs(ms: number | null | undefined): string {
+  if (!ms || ms <= 0) return "—";
+  return formatDuration(Math.floor(ms / 1000));
+}
+
 export function formatRelativeTime(iso: string | null): string {
   if (!iso) return "Never";
   const now = new Date();

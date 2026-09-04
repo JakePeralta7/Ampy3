@@ -1,15 +1,13 @@
 import { CheckCircle, Plug, Save, XCircle } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
-import { toast } from "sonner";
-import { type AppSettings, getSettings, testTarget, updateSettings } from "../api/settings";
 import jellyfinSvg from "../assets/jellyfin.svg";
 import plexSvg from "../assets/plex.svg";
-import { PageLayout } from "../components/Layout/PageLayout";
+import { PageLayout } from "../components/layout/PageLayout";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
+import { FormField } from "../components/ui/FormField";
+import { Skeleton } from "../components/ui/Skeleton";
+import { useTargets } from "../hooks/useTargets";
 import { TARGET_JELLYFIN, TARGET_PLEX } from "../lib/constants";
-import { INPUT_STYLES } from "../lib/styles";
-import { getErrorMessage } from "../lib/utils";
 
 function PlexIcon({ size = 20 }: { size?: number }) {
   return <img src={plexSvg} alt="Plex" width={size} height={size} className="shrink-0" />;
@@ -17,45 +15,6 @@ function PlexIcon({ size = 20 }: { size?: number }) {
 
 function JellyfinIcon({ size = 20 }: { size?: number }) {
   return <img src={jellyfinSvg} alt="Jellyfin" width={size} height={size} className="shrink-0" />;
-}
-
-function SettingField({
-  id,
-  label,
-  value,
-  onChange,
-  type = "text",
-  placeholder,
-  secretSet,
-}: {
-  id: string;
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  type?: "text" | "password";
-  placeholder?: string;
-  secretSet?: boolean;
-}) {
-  const [focused, setFocused] = useState(false);
-  const masked = secretSet && !value && !focused;
-
-  return (
-    <div className="space-y-1.5">
-      <label htmlFor={id} className="block text-sm font-medium text-fg-muted">
-        {label}
-      </label>
-      <input
-        id={id}
-        type={type}
-        value={masked ? "••••••••••••••••••••" : value}
-        onChange={(e) => onChange(e.target.value)}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
-        placeholder={placeholder}
-        className={`${INPUT_STYLES} ${masked ? "text-fg-subtle" : ""}`}
-      />
-    </div>
-  );
 }
 
 function StatusBadge({ configured }: { configured: boolean }) {
@@ -119,7 +78,7 @@ function TargetSection({
       </div>
 
       {fields.map((field) => (
-        <SettingField
+        <FormField
           key={field.key}
           id={`${targetId}-${field.key}`}
           label={field.label}
@@ -158,152 +117,26 @@ function TargetSection({
 }
 
 export function TargetsPage() {
-  const [values, setValues] = useState<Record<string, string>>({});
-  const [original, setOriginal] = useState<Record<string, string>>({});
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-
-  // Per-target test state
-  const [plexTesting, setPlexTesting] = useState(false);
-  const [plexTestResult, setPlexTestResult] = useState<"pass" | "fail" | null>(null);
-  const [jellyfinTesting, setJellyfinTesting] = useState(false);
-  const [jellyfinTestResult, setJellyfinTestResult] = useState<"pass" | "fail" | null>(null);
-
-  // Configured status from API
-  const [plexConfigured, setPlexConfigured] = useState(false);
-  const [jellyfinConfigured, setJellyfinConfigured] = useState(false);
-
-  const setField = useCallback((key: string, val: string) => {
-    setValues((prev) => ({ ...prev, [key]: val }));
-    // Reset test result when fields change
-    if (key.startsWith("plex_")) setPlexTestResult(null);
-    if (key.startsWith("jellyfin_")) setJellyfinTestResult(null);
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    getSettings()
-      .then((data: AppSettings) => {
-        if (cancelled) return;
-        const flat: Record<string, string> = {
-          plex_host: data.plex_host,
-          plex_token: "",
-          jellyfin_server_url: data.jellyfin_server_url,
-          jellyfin_api_key: "",
-          jellyfin_user_id: data.jellyfin_user_id,
-        };
-        setValues(flat);
-        setOriginal(flat);
-        setPlexConfigured(data.plex_token_set);
-        setJellyfinConfigured(data.jellyfin_api_key_set);
-      })
-      .catch((err) => {
-        if (!cancelled) toast.error(getErrorMessage(err, "Failed to load settings"));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const handleTest = async (targetId: string) => {
-    const setTesting = targetId === TARGET_PLEX ? setPlexTesting : setJellyfinTesting;
-    const setResult = targetId === TARGET_PLEX ? setPlexTestResult : setJellyfinTestResult;
-
-    setTesting(true);
-    setResult(null);
-    try {
-      const config: Record<string, string> = {};
-      if (targetId === TARGET_PLEX) {
-        config.plex_host = values.plex_host ?? "";
-        config.plex_token = values.plex_token ?? "";
-      } else {
-        config.jellyfin_server_url = values.jellyfin_server_url ?? "";
-        config.jellyfin_api_key = values.jellyfin_api_key ?? "";
-        config.jellyfin_user_id = values.jellyfin_user_id ?? "";
-      }
-      const result = await testTarget(targetId, config);
-      setResult(result.ok ? "pass" : "fail");
-      if (!result.ok) {
-        toast.error(result.error ?? "Connection failed");
-      }
-    } catch (err) {
-      setResult("fail");
-      toast.error(getErrorMessage(err, "Test failed"));
-    } finally {
-      setTesting(false);
-    }
-  };
-
-  const handleSubmit = async (targetId: string) => {
-    setSaving(true);
-    try {
-      const payload: Record<string, unknown> = {};
-      if (targetId === TARGET_PLEX) {
-        if (values.plex_host !== original.plex_host) payload.plex_host = values.plex_host;
-        if (values.plex_token) payload.plex_token = values.plex_token;
-      } else {
-        if (values.jellyfin_server_url !== original.jellyfin_server_url)
-          payload.jellyfin_server_url = values.jellyfin_server_url;
-        if (values.jellyfin_api_key) payload.jellyfin_api_key = values.jellyfin_api_key;
-        if (values.jellyfin_user_id !== original.jellyfin_user_id)
-          payload.jellyfin_user_id = values.jellyfin_user_id;
-      }
-      const result = await updateSettings(payload);
-
-      // Update state with new values
-      setValues((prev) => {
-        const next = { ...prev };
-        if (targetId === TARGET_PLEX) {
-          next.plex_host = result.plex_host;
-          next.plex_token = "";
-          setPlexConfigured(result.plex_token_set);
-        } else {
-          next.jellyfin_server_url = result.jellyfin_server_url;
-          next.jellyfin_api_key = "";
-          next.jellyfin_user_id = result.jellyfin_user_id;
-          setJellyfinConfigured(result.jellyfin_api_key_set);
-        }
-        return next;
-      });
-      setOriginal((prev) => {
-        const next = { ...prev };
-        if (targetId === TARGET_PLEX) {
-          next.plex_host = result.plex_host;
-          next.plex_token = "";
-        } else {
-          next.jellyfin_server_url = result.jellyfin_server_url;
-          next.jellyfin_api_key = "";
-          next.jellyfin_user_id = result.jellyfin_user_id;
-        }
-        return next;
-      });
-
-      // Reset test state after successful save
-      if (targetId === TARGET_PLEX) {
-        setPlexTestResult(null);
-      } else {
-        setJellyfinTestResult(null);
-      }
-
-      toast.success(`${targetId} settings saved`);
-    } catch (err) {
-      toast.error(getErrorMessage(err, "Failed to save settings"));
-    } finally {
-      setSaving(false);
-    }
-  };
+  const {
+    values,
+    original,
+    loading,
+    saving,
+    plexConfigured,
+    jellyfinConfigured,
+    plexTesting,
+    plexTestResult,
+    jellyfinTesting,
+    jellyfinTestResult,
+    setField,
+    testConnection,
+    save,
+  } = useTargets();
 
   if (loading) {
     return (
       <div className="max-w-3xl p-8">
-        <div className="animate-pulse space-y-6">
-          <div className="h-8 w-48 bg-bg-muted rounded" />
-          <div className="h-64 bg-bg-muted rounded-lg" />
-        </div>
+        <Skeleton />
       </div>
     );
   }
@@ -328,8 +161,8 @@ export function TargetsPage() {
           ]}
           values={values}
           onFieldChange={setField}
-          onTest={() => handleTest(TARGET_PLEX)}
-          onSubmit={() => handleSubmit(TARGET_PLEX)}
+          onTest={() => testConnection(TARGET_PLEX)}
+          onSubmit={() => save(TARGET_PLEX)}
           testing={plexTesting}
           testingResult={plexTestResult}
           saving={saving}
@@ -362,8 +195,8 @@ export function TargetsPage() {
           ]}
           values={values}
           onFieldChange={setField}
-          onTest={() => handleTest(TARGET_JELLYFIN)}
-          onSubmit={() => handleSubmit(TARGET_JELLYFIN)}
+          onTest={() => testConnection(TARGET_JELLYFIN)}
+          onSubmit={() => save(TARGET_JELLYFIN)}
           testing={jellyfinTesting}
           testingResult={jellyfinTestResult}
           saving={saving}

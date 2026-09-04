@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { type MatchRule, matchRulesAPI } from "../api/rules";
+import { getErrorMessage } from "../lib/utils";
 
 export function useMatchRules() {
   const [rules, setRules] = useState<MatchRule[]>([]);
@@ -11,7 +12,7 @@ export function useMatchRules() {
       const data = await matchRulesAPI.list();
       setRules(data);
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Failed to load rules";
+      const msg = getErrorMessage(e, "Failed to load rules");
       toast.error(msg);
     } finally {
       setLoading(false);
@@ -29,7 +30,7 @@ export function useMatchRules() {
       toast.success(`Rule "${name}" created`);
       return rule;
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Failed to create rule";
+      const msg = getErrorMessage(e, "Failed to create rule");
       toast.error(msg);
       return null;
     }
@@ -42,7 +43,7 @@ export function useMatchRules() {
       toast.success(`Rule cloned as "${rule.name}"`);
       return rule;
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Failed to clone rule";
+      const msg = getErrorMessage(e, "Failed to clone rule");
       toast.error(msg);
       return null;
     }
@@ -55,7 +56,7 @@ export function useMatchRules() {
         setRules((prev) => prev.map((r) => (r.id === id ? rule : r)));
         return rule;
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "Failed to update rule";
+        const msg = getErrorMessage(e, "Failed to update rule");
         toast.error(msg);
         return null;
       }
@@ -69,7 +70,7 @@ export function useMatchRules() {
       setRules((prev) => prev.filter((r) => r.id !== id));
       toast.success("Rule deleted");
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Failed to delete rule";
+      const msg = getErrorMessage(e, "Failed to delete rule");
       toast.error(msg);
     }
   }, []);
@@ -81,7 +82,7 @@ export function useMatchRules() {
         setRules(updated);
         toast.success("Rules reordered");
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "Failed to reorder rules";
+        const msg = getErrorMessage(e, "Failed to reorder rules");
         toast.error(msg);
         await fetchRules();
       }

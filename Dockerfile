@@ -12,6 +12,7 @@ RUN CI=true pnpm install --frozen-lockfile
 
 # Copy source files (excluding node_modules via .dockerignore)
 COPY web/src ./src
+COPY web/public ./public
 COPY web/index.html web/tsconfig.json web/vite.config.ts web/biome.json ./
 
 RUN pnpm run build

@@ -22,8 +22,19 @@ src/                  # Python backend (FastAPI + Celery)
     settings.py       # Pydantic BaseSettings — all config from env vars
     constants.py      # Platform IDs and shared constants
 web/                  # React SPA (Vite + Tailwind + Biome)
+  src/
+    features/<domain>/  # Feature components grouped by domain: explore/, playlists/, rules/
+    hooks/              # Custom hooks, one per API domain (usePlaylistDetails, useSyncHistory, ...)
+    api/<resource>/     # API clients, one folder per backend resource + client.ts HTTP wrapper
+    components/
+      ui/               # Design-system primitives (Button, Modal, FormField, ...)
+      layout/           # AppLayout, PageLayout, Nav
+      auth/             # Route guards (ProtectedRoute, RequireServer)
+    lib/                # Shared utils/constants/styles (formatTimestamp, getErrorMessage, ...)
+    pages/              # Top-level route components
 alembic/              # Database migrations (PostgreSQL)
 tests/                # Pytest tests
+docs/                 # MkDocs site (Material + mkdocstrings), published on Read the Docs
 ```
 
 ## Commands
@@ -82,6 +93,7 @@ Alembic migrations run automatically at API startup via `src/app/db.py:init_db()
 - **Source registry**: Music sources (YouTube Music, Deezer) register in `src/app/core/sources/`.
 - **Settings**: All config is in `src/app/settings.py` as a Pydantic `BaseSettings` singleton. No `.env` template files — env vars are the source of truth. See `.env.example` for reference.
 - **CORS**: When `REQUIRE_AUTH=true`, only `APP_URL` is allowed. Otherwise `*`.
+- **Docs site**: MkDocs + Material + mkdocstrings under `docs/` (built to `site/`, wired via `.readthedocs.yaml`). `dev` building needs the `docs` extra (`pip install -e ".[docs]"` then `mkdocs serve`). `docs/development/architecture.md` has deeper backend context than this file.
 - **SPA serving**: `src/main.py` mounts `web/dist/` as static and serves `index.html` for non-API routes. Build the frontend before running the API if you want the UI.
 - **Frontend dev server**: Vite on `:5173` proxies `/api` to `:8000`. No API key or auth needed in dev.
 - **pnpm only**: The frontend uses pnpm (`packageManager` pinned in `web/package.json`, consumed by Corepack/CI). Do not add `package-lock.json` — it is git-ignored; install with `pnpm install --frozen-lockfile`.

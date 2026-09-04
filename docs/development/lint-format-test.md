@@ -1,18 +1,18 @@
 # Lint, format & test
 
-The repo uses **Black + Ruff + mypy + pytest** on the backend and **Biome** on the frontend. None of these are enforced by pre-commit hooks or CI in this repo today — you're expected to run them locally.
+The repo uses **Ruff (lint + format), mypy, and pytest** on the backend and **Biome** on the frontend. CI (`.github/workflows/ci.yml`) enforces `ruff check`, `ruff format --check`, Biome, `tsc --noEmit`, and pytest on PRs against `main`. `mypy` is configured `strict` in `pyproject.toml` but only run locally. There are no pre-commit hooks.
 
-## Python — Black
+## Python — Ruff format
 
 ```bash
 # Format the codebase
-black src/ tests/ alembic/ migrate.py
+ruff format src/ tests/
 
 # Verify (no changes) — useful in CI
-black --check src/ tests/ alembic/ migrate.py
+ruff format --check src/ tests/
 ```
 
-Line length is **100**, target version is **py314** (see `pyproject.toml`).
+Line length is **100**, target version is **py314** (see `pyproject.toml`). Ruff handles both linting and formatting.
 
 ## Python — Ruff
 
@@ -48,7 +48,7 @@ pytest --co                  # collect-only, no run
 
 ```bash
 cd web
-pnpm install
+pnpm install --frozen-lockfile
 pnpm run lint                # biome check
 pnpm run format              # biome format --write
 pnpm run build               # tsc + vite build
@@ -63,7 +63,7 @@ Before opening a PR:
 
 ```bash
 # Python
-black --check src/ tests/ alembic/ migrate.py
+ruff format --check src/ tests/
 ruff check src/ tests/
 mypy src/
 pytest

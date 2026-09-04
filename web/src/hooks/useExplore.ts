@@ -7,6 +7,7 @@ import {
   exploreAPI,
   type MoodCategoryOut,
 } from "../api/explore";
+import { getErrorMessage } from "../lib/utils";
 
 interface ExploreState {
   providers: ExploreProviderOut[];
@@ -59,11 +60,11 @@ export function useExplore() {
       const home = homeRes.status === "fulfilled" ? homeRes.value : null;
       const charts = chartsRes.status === "fulfilled" ? chartsRes.value : null;
       if (moodsRes.status === "rejected")
-        errors.push(moodsRes.reason?.message ?? "Failed to load moods");
+        errors.push(getErrorMessage(moodsRes.reason, "Failed to load moods"));
       if (homeRes.status === "rejected")
-        errors.push(homeRes.reason?.message ?? "Failed to load home");
+        errors.push(getErrorMessage(homeRes.reason, "Failed to load home"));
       if (chartsRes.status === "rejected")
-        errors.push(chartsRes.reason?.message ?? "Failed to load charts");
+        errors.push(getErrorMessage(chartsRes.reason, "Failed to load charts"));
       return {
         ...s,
         moods,
@@ -95,30 +96,33 @@ export function useExplore() {
       setState((s) => ({
         ...s,
         loading: false,
-        error: e instanceof Error ? e.message : "Failed to load playlists",
+        error: getErrorMessage(e, "Failed to load playlists"),
       }));
     }
   }, []);
 
-  const runSearch = useCallback(async (query: string) => {
-    const trimmed = query.trim();
-    if (!trimmed) {
-      setState((s) => ({ ...s, searchResults: null, searchQuery: "" }));
-      return;
-    }
-    setState((s) => ({ ...s, loading: true, searchQuery: trimmed }));
-    try {
-      const results = await exploreAPI.searchPlaylists(trimmed);
-      setState((s) => ({ ...s, searchResults: results, loading: false, error: null }));
-    } catch (e) {
-      setState((s) => ({
-        ...s,
-        searchResults: [],
-        loading: false,
-        error: e instanceof Error ? e.message : "Failed to search playlists",
-      }));
-    }
-  }, []);
+  const runSearch = useCallback(
+    async (query: string) => {
+      const trimmed = query.trim();
+      if (!trimmed) {
+        setState((s) => ({ ...s, searchResults: null, searchQuery: "" }));
+        return;
+      }
+      setState((s) => ({ ...s, loading: true, searchQuery: trimmed }));
+      try {
+        const results = await exploreAPI.searchPlaylists(trimmed, state.activeProvider);
+        setState((s) => ({ ...s, searchResults: results, loading: false, error: null }));
+      } catch (e) {
+        setState((s) => ({
+          ...s,
+          searchResults: [],
+          loading: false,
+          error: getErrorMessage(e, "Failed to search playlists"),
+        }));
+      }
+    },
+    [state.activeProvider],
+  );
 
   useEffect(() => {
     let cancelled = false;

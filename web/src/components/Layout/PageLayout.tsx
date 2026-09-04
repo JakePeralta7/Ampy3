@@ -1,7 +1,7 @@
 import { AlertTriangle } from "lucide-react";
 import type React from "react";
 import { Link } from "react-router-dom";
-import { useServerConfigured } from "../Auth/RequireServer";
+import { useServerConfigured } from "../auth/RequireServer";
 
 interface PageLayoutProps {
   title: string;

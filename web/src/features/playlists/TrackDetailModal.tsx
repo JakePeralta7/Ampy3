@@ -1,8 +1,9 @@
 import { Album, ArrowRight, Clock, Hash, Music2, User } from "lucide-react";
 import type { TrackDetail, TrackTargetInfo } from "../../api/syncs";
-import { Badge } from "../ui/Badge";
-import { CopyButton } from "../ui/CopyButton";
-import { Modal } from "../ui/Modal";
+import { Badge } from "../../components/ui/Badge";
+import { CopyButton } from "../../components/ui/CopyButton";
+import { Modal } from "../../components/ui/Modal";
+import { formatDuration, formatDurationMs } from "../../lib/utils";
 
 interface TrackDetailModalProps {
   track: TrackDetail | null;
@@ -10,18 +11,6 @@ interface TrackDetailModalProps {
   isOpen: boolean;
   onClose: () => void;
   targetId?: string;
-}
-
-function formatDuration(seconds: number | null | undefined): string {
-  if (!seconds || seconds <= 0) return "—";
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${m}:${String(s).padStart(2, "0")}`;
-}
-
-function formatDurationMs(ms: number | null | undefined): string {
-  if (!ms || ms <= 0) return "—";
-  return formatDuration(Math.floor(ms / 1000));
 }
 
 function Field({

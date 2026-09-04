@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { getConfiguredTargets } from "../../api/settings";
+import { LoadingSpinner } from "../ui/LoadingSpinner";
 
 interface ServerContextValue {
   configured: boolean | null;
@@ -22,11 +23,7 @@ export function RequireServer({ children }: { children: React.ReactNode }) {
   }, []);
 
   if (configured === null) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-border border-t-accent-500" />
-      </div>
-    );
+    return <LoadingSpinner />;
   }
 
   if (!configured) {

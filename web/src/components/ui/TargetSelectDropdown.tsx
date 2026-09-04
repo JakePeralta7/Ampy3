@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { getConfiguredTargets } from "../../api/settings";
+import { useConfiguredTargets } from "../../hooks/useTargets";
 import { TARGET_LABELS } from "../../lib/constants";
 
 interface TargetSelectDropdownProps {
@@ -13,30 +13,10 @@ export function TargetSelectDropdown({
   onChange,
   disabled = false,
 }: TargetSelectDropdownProps) {
-  const [availableTargets, setAvailableTargets] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { targets: availableTargets, loading } = useConfiguredTargets();
+  const [error] = useState<string | null>(null);
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const fetchTargets = async () => {
-      try {
-        setLoading(true);
-        const targets = await getConfiguredTargets();
-        setAvailableTargets(targets);
-        setError(null);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : "Failed to load targets";
-        setError(msg);
-        setAvailableTargets([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchTargets();
-  }, []);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {

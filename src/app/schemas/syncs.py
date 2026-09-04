@@ -82,6 +82,7 @@ class SyncRunOut(BaseModel):
     id: int
     sync_id: int
     target_id: str
+    status: str
     matched_count: int
     failed_count: int
     created_at: str | None = None

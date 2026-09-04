@@ -1,11 +1,12 @@
 import { RefreshCw } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { type AuditLogEntry, auditLogsAPI } from "../api/audit";
-import { PageLayout } from "../components/Layout/PageLayout";
+import { useMemo } from "react";
+import type { AuditLogEntry } from "../api/audit";
+import { PageLayout } from "../components/layout/PageLayout";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { type Column, DataTable } from "../components/ui/DataTable";
+import { useAuditLogs } from "../hooks/useAuditLogs";
 import { formatTimestamp } from "../lib/utils";
 
 const EVENT_LABELS: Record<
@@ -45,26 +46,7 @@ interface AuditLogPageProps {
 }
 
 export function AuditLogPage({ limit = 100 }: AuditLogPageProps) {
-  const [logs, setLogs] = useState<AuditLogEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [total, setTotal] = useState(0);
-
-  const fetchLogs = useCallback(async () => {
-    setLoading(true);
-    try {
-      const resp = await auditLogsAPI.list({ limit });
-      setLogs(resp.logs);
-      setTotal(resp.total);
-    } catch {
-      // handled by DataTable empty state
-    } finally {
-      setLoading(false);
-    }
-  }, [limit]);
-
-  useEffect(() => {
-    fetchLogs();
-  }, [fetchLogs]);
+  const { logs, loading, total, refresh } = useAuditLogs(limit);
 
   const columns: Column<AuditLogEntry>[] = useMemo(
     () => [
@@ -107,7 +89,7 @@ export function AuditLogPage({ limit = 100 }: AuditLogPageProps) {
       title="Audit Log"
       subtitle="Track of all important operations in the system"
       actions={
-        <Button onClick={fetchLogs} icon={<RefreshCw size={14} />} variant="secondary" size="sm">
+        <Button onClick={refresh} icon={<RefreshCw size={14} />} variant="secondary" size="sm">
           Refresh
         </Button>
       }

@@ -20,7 +20,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "@xyflow/react/dist/style.css";
 
 import type { MatchRuleCanvas, MatchRuleEdge, MatchRuleNode } from "../../api/rules";
-import { Button } from "../ui/Button";
+import { Button } from "../../components/ui/Button";
 import { NODE_COMPONENTS } from "./NodeComponents";
 import { NodeInspector } from "./NodeInspector";
 import { NodePalette } from "./NodePalette";

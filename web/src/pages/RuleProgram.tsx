@@ -2,8 +2,9 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { type MatchRule, type MatchRuleCanvas, matchRulesAPI } from "../api/rules";
-import { ProgramCanvas } from "../components/Rules/ProgramCanvas";
 import { LoadingSpinner } from "../components/ui/LoadingSpinner";
+import { ProgramCanvas } from "../features/rules/ProgramCanvas";
+import { getErrorMessage } from "../lib/utils";
 
 export function RuleProgramPage() {
   const { ruleId } = useParams<{ ruleId: string }>();
@@ -49,7 +50,7 @@ export function RuleProgramPage() {
         setRule(updated);
         toast.success("Rule saved");
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Failed to save rule");
+        toast.error(getErrorMessage(err, "Failed to save rule"));
       } finally {
         setSaving(false);
       }
@@ -64,7 +65,7 @@ export function RuleProgramPage() {
       toast.success(`Cloned as "${cloned.name}"`);
       navigate(`/settings/matching/${cloned.id}`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to clone rule");
+      toast.error(getErrorMessage(err, "Failed to clone rule"));
     }
   }, [numericId, navigate]);
 

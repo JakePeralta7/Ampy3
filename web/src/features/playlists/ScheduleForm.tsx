@@ -1,10 +1,11 @@
 import type React from "react";
 import { useCallback, useEffect, useState } from "react";
 import type { CreateScheduledSyncInput, ScheduledSync } from "../../api/schedules";
+import { Alert } from "../../components/ui/Alert";
+import { Button } from "../../components/ui/Button";
+import { TargetSelectDropdown } from "../../components/ui/TargetSelectDropdown";
 import { SOURCE_DEEZER, SOURCE_YOUTUBE_MUSIC, TARGET_PLEX } from "../../lib/constants";
 import { INPUT_STYLES, SELECT_STYLES } from "../../lib/styles";
-import { Button } from "../ui/Button";
-import { TargetSelectDropdown } from "../ui/TargetSelectDropdown";
 
 export interface ScheduleFormPrefill {
   sourceUrl: string;
@@ -118,11 +119,7 @@ export function ScheduleForm({
       }}
     >
       <div className="space-y-4">
-        {(formError || error) && (
-          <div className="p-3 bg-danger-500/10 text-danger-500 border border-danger-500/20 rounded-md text-sm">
-            {formError || error}
-          </div>
-        )}
+        {(formError || error) && <Alert>{formError || error}</Alert>}
 
         <div>
           <label className="block text-sm font-medium text-fg-muted mb-1">Source *</label>

@@ -42,6 +42,7 @@ class ScheduledSyncOut(BaseModel):
     created_at: str | None = None
     updated_at: str | None = None
     error_message: str | None = None
+    status: str | None = None
 
 
 class SyncNowResponse(BaseModel):

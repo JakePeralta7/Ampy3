@@ -13,10 +13,11 @@ export interface ScheduledSync {
   schedule_interval: string;
   is_active: boolean;
   last_synced_at: string | null;
-  next_sync_at: string;
+  next_sync_at: string | null;
   created_at: string;
   updated_at: string;
   error_message: string | null;
+  status: string | null;
 }
 
 export interface CreateScheduledSyncInput {

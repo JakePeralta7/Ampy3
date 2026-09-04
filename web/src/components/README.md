@@ -7,10 +7,20 @@ Ampy3 uses a component-based architecture with React. This guide clarifies the c
 ## Directory Structure
 
 ```
-src/components/
-├── Layout/                  # Page layout wrappers
-│   └── [Add here as needed]
-└── README.md               # This file
+src/
+├── components/              # Shared, reusable components
+│   ├── auth/                # Auth guards (ProtectedRoute, RequireServer)
+│   ├── layout/              # Page layout wrappers (AppLayout, PageLayout)
+│   ├── Settings/            # Settings-specific sub-components
+│   └── ui/                  # Design-system primitives (Button, Modal, Card, ...)
+├── features/                # Feature-scoped components, grouped by domain
+│   ├── explore/             # Explore feature (ExploreSection, MoodGrid, ...)
+│   ├── playlists/           # Playlists feature (PlaylistDetails, Schedules, ...)
+│   └── rules/               # Match rules feature (RuleList, TestPanel, ...)
+├── hooks/                   # Custom hooks (one per API domain)
+├── api/                     # API clients (one folder per backend resource)
+├── lib/                     # Shared utilities & constants
+└── pages/                   # Top-level route components
 ```
 
 ## Component Types
@@ -22,23 +32,26 @@ src/components/
 - Can contain sub-components and manage page-level state
 
 ### Feature Components
-- Located in feature folders like `src/components/Settings/`
+- Located in `src/features/<domain>/` (e.g., `src/features/playlists/`)
 - Implement specific features or domain logic
-- Reusable within the feature context
-- Example: `SettingsLayout.tsx`
+- Grouped by domain: `explore/`, `playlists/`, `rules/`
+- Example: `PlaylistDetails` lives in `features/playlists/`
 
 ### Common/Shared Components
-- Located in `src/components/Common/`
+- Located in `src/components/ui/`
 - Used across multiple features
 - Should be stateless or have minimal state
 - Examples: Buttons, modals, form inputs, cards
-- Currently WIP - add as needed
 
 ### Layout Components
-- Located in `src/components/Layout/`
+- Located in `src/components/layout/`
 - Provide consistent structure and styling across pages
 - Examples: Header, footer, sidebar, navigation
-- Currently WIP - add as needed
+
+### Auth Components
+- Located in `src/components/auth/`
+- Route guards and auth-related wrappers
+- Examples: `ProtectedRoute`, `RequireServer`
 
 ## Naming Conventions
 
@@ -143,3 +156,5 @@ export function SyncList() {
 ## Migration Notes
 
 - API clients live in `src/api/<feature>/` and are imported directly by pages and hooks.
+- Domain hooks live in `src/hooks/` (one per API domain, e.g. `usePlaylistDetails`).
+- Feature components live in `src/features/<domain>/`, not in `src/components/`.

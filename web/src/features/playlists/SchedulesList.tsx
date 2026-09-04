@@ -1,13 +1,15 @@
 import { Pause, Pencil, Play, RotateCw, Trash2 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import type { ScheduledSync } from "../../api/schedules";
+import { Alert } from "../../components/ui/Alert";
+import { Badge } from "../../components/ui/Badge";
+import { Button } from "../../components/ui/Button";
+import { Card } from "../../components/ui/Card";
+import { ConfirmDialog } from "../../components/ui/ConfirmDialog";
+import { CopyButton } from "../../components/ui/CopyButton";
+import { type Column, DataTable } from "../../components/ui/DataTable";
 import { getSourceLabel } from "../../lib/constants";
-import { Badge } from "../ui/Badge";
-import { Button } from "../ui/Button";
-import { Card } from "../ui/Card";
-import { ConfirmDialog } from "../ui/ConfirmDialog";
-import { CopyButton } from "../ui/CopyButton";
-import { type Column, DataTable } from "../ui/DataTable";
+import { formatTimestamp } from "../../lib/utils";
 
 interface SchedulesListProps {
   syncs: ScheduledSync[];
@@ -31,16 +33,6 @@ const INTERVAL_LABELS: Record<string, string> = {
   daily: "Daily",
   weekly: "Weekly",
 };
-
-function formatDate(dateStr: string | null): string {
-  if (!dateStr) return "Never";
-  return new Date(dateStr).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 export function SchedulesList({
   syncs,
@@ -180,16 +172,20 @@ export function SchedulesList({
         sortable: true,
         sortValue: (sync: ScheduledSync) => sync.last_synced_at || "",
         cell: (sync: ScheduledSync) => (
-          <span className="text-fg-muted">{formatDate(sync.last_synced_at)}</span>
+          <span className="text-fg-muted">
+            {formatTimestamp(sync.last_synced_at ?? "") || "Never"}
+          </span>
         ),
       },
       {
         id: "next_sync",
         header: "Next Sync",
         sortable: true,
-        sortValue: (sync: ScheduledSync) => sync.next_sync_at,
+        sortValue: (sync: ScheduledSync) => sync.next_sync_at || "",
         cell: (sync: ScheduledSync) => (
-          <span className="text-fg-muted">{formatDate(sync.next_sync_at)}</span>
+          <span className="text-fg-muted">
+            {formatTimestamp(sync.next_sync_at ?? "") || "Never"}
+          </span>
         ),
       },
       {
@@ -255,9 +251,7 @@ export function SchedulesList({
   if (error && syncs.length === 0) {
     return (
       <Card padding="md">
-        <div className="p-3 bg-danger-500/10 text-danger-500 border border-danger-500/20 rounded-md">
-          {error}
-        </div>
+        <Alert>{error}</Alert>
       </Card>
     );
   }

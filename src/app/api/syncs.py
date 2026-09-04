@@ -359,6 +359,7 @@ async def get_sync_history(
                 id=run.id,
                 sync_id=run.sync_id,
                 target_id=run.target_id,
+                status=run.status,
                 matched_count=run.matched_count,
                 failed_count=run.failed_count,
                 created_at=run.created_at.isoformat() if run.created_at else None,

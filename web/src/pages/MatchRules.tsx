@@ -3,10 +3,10 @@ import { useCallback, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import type { MatchRule } from "../api/rules";
-import { RuleList } from "../components/Rules/RuleList";
-import { TestPanel } from "../components/Rules/TestPanel";
 import { Button } from "../components/ui/Button";
 import { ConfirmDialog } from "../components/ui/ConfirmDialog";
+import { RuleList } from "../features/rules/RuleList";
+import { TestPanel } from "../features/rules/TestPanel";
 import { useMatchRules } from "../hooks/useMatchRules";
 
 /** Minimal starter YAML for a brand-new rule. */

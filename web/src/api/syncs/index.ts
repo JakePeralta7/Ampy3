@@ -83,6 +83,7 @@ export interface SyncRun {
   id: number;
   sync_id: number;
   target_id: string;
+  status: string;
   matched_count: number;
   failed_count: number;
   created_at: string | null;

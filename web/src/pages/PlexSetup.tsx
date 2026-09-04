@@ -1,56 +1,21 @@
 import { CheckCircle, Loader2, Server, Wifi, WifiOff } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import {
-  getConfiguredTargets,
-  getPlexResources,
-  type PlexResource,
-  setupPlexTarget,
-} from "../api/settings";
 import { Card } from "../components/ui/Card";
+import { usePlexSetup } from "../hooks/useTargets";
 import { getErrorMessage } from "../lib/utils";
 
 export function PlexSetupPage() {
   const navigate = useNavigate();
-  const [resources, setResources] = useState<PlexResource[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { resources, loading, error, configured, setupPlex } = usePlexSetup();
   const [selectedIdx, setSelectedIdx] = useState<{
     serverIdx: number;
     connIdx: number;
   } | null>(null);
   const [saving, setSaving] = useState(false);
-  const [alreadyConfigured, setAlreadyConfigured] = useState<boolean | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    Promise.all([getConfiguredTargets(), getPlexResources()])
-      .then(([targets, data]) => {
-        if (cancelled) return;
-        if (targets.includes("Plex")) {
-          setAlreadyConfigured(true);
-          return;
-        }
-        setAlreadyConfigured(false);
-        setResources(data.servers);
-        if (data.servers.length === 0) {
-          setError("No Plex Media Servers found on your account.");
-        }
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setError(getErrorMessage(err, "Failed to discover Plex servers"));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  if (alreadyConfigured) {
+  if (configured) {
     return <Navigate to="/" replace />;
   }
 
@@ -60,8 +25,7 @@ export function PlexSetupPage() {
     const conn = server.connections[selectedIdx.connIdx];
     setSaving(true);
     try {
-      await setupPlexTarget(conn.uri, server.access_token);
-      toast.success("Plex server configured");
+      await setupPlex(conn.uri, server.access_token);
       navigate("/", { replace: true });
     } catch (err) {
       toast.error(getErrorMessage(err, "Failed to configure Plex server"));

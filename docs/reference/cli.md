@@ -2,17 +2,6 @@
 
 Ampy3 ships with a small command-line tool: `migrate.py`. It manages database schema migrations and is what runs automatically at API startup.
 
-## `python migrate.py`
-
-::: migrate
-    options:
-      show_source: true
-      members:
-        - upgrade
-        - bootstrap
-        - status
-        - autogen
-
 ## Commands
 
 | Command | What it does |

@@ -5,7 +5,7 @@ This page walks through running Ampy3 end-to-end on your laptop, without Docker,
 ## Prerequisites
 
 - **Python** 3.12+ (project targets 3.14 per `pyproject.toml`)
-- **Node.js** 20+ and **pnpm** 9+
+- **Node.js** 26 and **pnpm** 11 (see `web/package.json` for the exact pinned version)
 - **Postgres** 16 reachable from your laptop (or run it in Docker: `docker run -d --name ampy3-pg -p 5432:5432 -e POSTGRES_USER=ampy3 -e POSTGRES_PASSWORD=ampy3 -e POSTGRES_DB=ampy3 postgres:16-alpine`)
 - **Valkey** (or Redis) reachable from your laptop: `docker run -d --name ampy3-valkey -p 6379:6379 valkey/valkey:7.2-alpine`
 
@@ -56,7 +56,7 @@ In a third terminal:
 
 ```bash
 cd web
-pnpm install
+pnpm install --frozen-lockfile
 pnpm run dev
 ```
 
@@ -94,7 +94,7 @@ celery -A app.worker.app inspect ping -d celery@$(hostname)
 
 | Task | Command |
 |------|---------|
-| Format code | `black src/ tests/ alembic/ migrate.py` |
+| Format code | `ruff format src/ tests/` |
 | Lint | `ruff check src/ tests/` |
 | Run tests | `pytest` |
 | Type-check | `mypy src/` |

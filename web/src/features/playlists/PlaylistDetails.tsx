@@ -1,14 +1,15 @@
-import { ExternalLink, RotateCw } from "lucide-react";
+import { ExternalLink, Loader2, RotateCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { ScheduledSync } from "../../api/schedules";
 import type { SyncTracksResponse, TrackDetail } from "../../api/syncs";
 import { syncsAPI } from "../../api/syncs";
+import { CopyButton } from "../../components/ui/CopyButton";
+import { type Column, DataTable } from "../../components/ui/DataTable";
+import { Slideover } from "../../components/ui/Slideover";
+import { Tabs } from "../../components/ui/Tabs";
 import { getSourceLabel } from "../../lib/constants";
-import { CopyButton } from "../ui/CopyButton";
-import { type Column, DataTable } from "../ui/DataTable";
-import { Slideover } from "../ui/Slideover";
-import { Tabs } from "../ui/Tabs";
+import { formatDuration } from "../../lib/utils";
 import { SyncHistory } from "./SyncHistory";
 import { TrackDetailModal } from "./TrackDetailModal";
 
@@ -211,13 +212,7 @@ export function PlaylistDetails({
         header: "Duration",
         sortable: true,
         sortValue: (r: TrackRow) => r.duration,
-        cell: (r: TrackRow) => (
-          <span className="text-fg-muted">
-            {r.duration > 0
-              ? `${Math.floor(r.duration / 60)}:${String(r.duration % 60).padStart(2, "0")}`
-              : "—"}
-          </span>
-        ),
+        cell: (r: TrackRow) => <span className="text-fg-muted">{formatDuration(r.duration)}</span>,
       },
       {
         id: "status",
@@ -292,10 +287,17 @@ export function PlaylistDetails({
               <>
                 <div className="mb-4 flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-fg-muted">
-                      Matched: {rows.filter((r) => r.status === "matched").length} | Failed:{" "}
-                      {rows.filter((r) => r.status === "unmatched").length} | Total: {rows.length}
-                    </p>
+                    {sync?.status === "running" ? (
+                      <p className="text-sm text-fg-muted flex items-center gap-2">
+                        <Loader2 size={14} className="animate-spin" />
+                        Sync in progress — counts will update when complete
+                      </p>
+                    ) : (
+                      <p className="text-sm text-fg-muted">
+                        Matched: {rows.filter((r) => r.status === "matched").length} | Failed:{" "}
+                        {rows.filter((r) => r.status === "unmatched").length} | Total: {rows.length}
+                      </p>
+                    )}
                   </div>
                   {openUrl && (
                     <a

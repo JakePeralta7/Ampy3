@@ -28,7 +28,7 @@ This repo doesn't enforce a convention. Recommended:
 
 These are baked into the existing code — please follow them.
 
-- **Python 3.14**, line length 100, Black + Ruff + mypy strict.
+- **Python 3.14**, line length 100, Ruff (lint + format) + mypy strict.
 - **Async in FastAPI routes**, **sync in Celery tasks**. Don't mix.
 - **Type hints everywhere** — `mypy --strict` is on.
 - **Pydantic** for all request/response shapes — see `src/app/schemas/`.

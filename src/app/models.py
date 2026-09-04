@@ -106,6 +106,9 @@ class ScheduledPlaylistSync(TimestampMixin, Base):
     schedule_targets: Mapped[list[ScheduleTarget]] = relationship(
         back_populates="sync", cascade="all, delete-orphan"
     )
+    runs: Mapped[list[SyncRun]] = relationship(
+        back_populates="sync", cascade="all, delete-orphan", order_by="SyncRun.created_at.desc()"
+    )
 
     def __repr__(self) -> str:
         return f"<ScheduledPlaylistSync(id={self.id}, playlist={self.target_playlist_name})>"
@@ -229,6 +232,8 @@ class SyncRun(CreatedAtMixin, Base):
     status: Mapped[str] = mapped_column(String(20), default="running", nullable=False)
     matched_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     failed_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    sync: Mapped[ScheduledPlaylistSync] = relationship(back_populates="runs")
 
     tracks: Mapped[list[SyncRunTrack]] = relationship(
         back_populates="run", cascade="all, delete-orphan", order_by="SyncRunTrack.position"

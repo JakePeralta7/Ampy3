@@ -1,5 +1,5 @@
 import type { CreateScheduledSyncInput, ScheduledSync } from "../../api/schedules";
-import { Modal } from "../ui/Modal";
+import { Modal } from "../../components/ui/Modal";
 import { ScheduleForm, type ScheduleFormPrefill } from "./ScheduleForm";
 
 interface ScheduleFormModalProps {

@@ -1,8 +1,8 @@
 import { Copy, Pause, Pencil, Play, Trash2 } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import type { MatchRule } from "../../api/rules";
-import { Badge } from "../ui/Badge";
-import { Button } from "../ui/Button";
+import { Badge } from "../../components/ui/Badge";
+import { Button } from "../../components/ui/Button";
 
 interface RuleListProps {
   rules: MatchRule[];

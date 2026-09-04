@@ -2,10 +2,12 @@ import { ExternalLink } from "lucide-react";
 import { useState } from "react";
 import type { ExploreItemOut } from "../../api/explore";
 import { type CreateScheduledSyncInput, scheduledSyncsAPI } from "../../api/schedules";
+import { Alert } from "../../components/ui/Alert";
+import { Button } from "../../components/ui/Button";
+import { Modal } from "../../components/ui/Modal";
 import { getSourceLabel, SOURCE_YOUTUBE_MUSIC } from "../../lib/constants";
-import { ScheduleFormModal } from "../Playlists/ScheduleFormModal";
-import { Button } from "../ui/Button";
-import { Modal } from "../ui/Modal";
+import { getErrorMessage } from "../../lib/utils";
+import { ScheduleFormModal } from "../playlists/ScheduleFormModal";
 
 interface SourcePlaylistModalProps {
   item: ExploreItemOut | null;
@@ -33,7 +35,7 @@ export function SourcePlaylistModal({
       onClose();
       onSyncCreated();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to create sync");
+      setError(getErrorMessage(e, "Failed to create sync"));
     } finally {
       setSaving(false);
     }
@@ -69,11 +71,7 @@ export function SourcePlaylistModal({
             </div>
           </div>
 
-          {error && (
-            <div className="p-3 bg-danger-500/10 text-danger-500 border border-danger-500/20 rounded-md text-sm">
-              {error}
-            </div>
-          )}
+          {error && <Alert>{error}</Alert>}
 
           <div className="flex gap-2">
             <Button onClick={() => setShowScheduleForm(true)} variant="primary">
@@ -87,7 +85,7 @@ export function SourcePlaylistModal({
                 className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-bg-surface px-4 py-2 text-sm font-medium text-fg-muted hover:bg-bg-muted hover:text-fg transition-colors duration-fast"
               >
                 <ExternalLink size={14} />
-                Open in YouTube Music
+                Open in {getSourceLabel(item.source_id)}
               </a>
             )}
           </div>

@@ -54,7 +54,7 @@ celery -A app.worker.app worker --loglevel=info --concurrency=1
 
 ```bash
 cd web
-pnpm install
+pnpm install --frozen-lockfile
 pnpm run dev      # http://localhost:5173 — Vite proxies /api to :8000
 ```
 

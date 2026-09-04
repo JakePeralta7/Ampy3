@@ -19,34 +19,10 @@ export type SettingsUpdate = Partial<AppSettings> & {
   jellyfin_api_key?: string;
 };
 
-export async function getSettings(): Promise<AppSettings> {
-  return apiGet<AppSettings>("/v1/settings/");
-}
-
-export async function updateSettings(input: SettingsUpdate): Promise<AppSettings> {
-  return apiPut<AppSettings>("/v1/settings/", input);
-}
-
-export async function getConfiguredTargets(): Promise<string[]> {
-  return apiGet<string[]>("/v1/targets/configured");
-}
-
 export interface TargetTestResult {
   ok: boolean;
   error?: string;
 }
-
-export async function testTarget(
-  targetId: string,
-  config: Record<string, string>,
-): Promise<TargetTestResult> {
-  return apiPost<TargetTestResult>("/v1/targets/test", {
-    target_id: targetId,
-    config,
-  });
-}
-
-// ── Plex SSO server discovery ─────────────────────────────────────
 
 export interface PlexResourceConnection {
   uri: string;
@@ -69,10 +45,26 @@ export interface PlexResourcesResponse {
   servers: PlexResource[];
 }
 
-export async function getPlexResources(): Promise<PlexResourcesResponse> {
-  return apiGet<PlexResourcesResponse>("/auth/plex/resources");
-}
+export const settingsAPI = {
+  getSettings: () => apiGet<AppSettings>("/v1/settings/"),
 
-export async function setupPlexTarget(serverUrl: string, token: string): Promise<void> {
-  return apiPost("/auth/plex/setup", { server_url: serverUrl, token });
-}
+  updateSettings: (input: SettingsUpdate) => apiPut<AppSettings>("/v1/settings/", input),
+
+  getConfiguredTargets: () => apiGet<string[]>("/v1/targets/configured"),
+
+  testTarget: (targetId: string, config: Record<string, string>) =>
+    apiPost<TargetTestResult>("/v1/targets/test", { target_id: targetId, config }),
+
+  getPlexResources: () => apiGet<PlexResourcesResponse>("/auth/plex/resources"),
+
+  setupPlexTarget: (serverUrl: string, token: string) =>
+    apiPost("/auth/plex/setup", { server_url: serverUrl, token }),
+};
+
+// Legacy named exports for backward compatibility during migration
+export const getSettings = settingsAPI.getSettings;
+export const updateSettings = settingsAPI.updateSettings;
+export const getConfiguredTargets = settingsAPI.getConfiguredTargets;
+export const testTarget = settingsAPI.testTarget;
+export const getPlexResources = settingsAPI.getPlexResources;
+export const setupPlexTarget = settingsAPI.setupPlexTarget;

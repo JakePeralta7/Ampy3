@@ -73,9 +73,7 @@ export function Nav() {
   const sidebarContent = (
     <>
       <div className="flex items-center gap-2 p-4">
-        <div className="h-8 w-8 rounded-lg bg-accent-500 text-accent-fg flex items-center justify-center font-bold text-sm shrink-0">
-          A
-        </div>
+        <img src="/ampy3.svg" alt="" className="h-8 w-8 shrink-0" />
         {!collapsed && <span className="font-bold text-accent-700">Ampy3</span>}
       </div>
 
