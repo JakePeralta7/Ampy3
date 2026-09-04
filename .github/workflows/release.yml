@@ -32,11 +32,15 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Lowercase owner
+        id: owner
+        run: echo "name=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+
       - name: Extract metadata (web)
         id: meta-web
         uses: docker/metadata-action@v6
         with:
-          images: ${{ env.REGISTRY }}/${{ lower(github.repository_owner) }}/ampy3-web
+          images: ${{ env.REGISTRY }}/${{ steps.owner.outputs.name }}/ampy3-web
           tags: |
             type=sha,prefix=sha-
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
@@ -46,7 +50,7 @@ jobs:
         id: meta-worker
         uses: docker/metadata-action@v6
         with:
-          images: ${{ env.REGISTRY }}/${{ lower(github.repository_owner) }}/ampy3-worker
+          images: ${{ env.REGISTRY }}/${{ steps.owner.outputs.name }}/ampy3-worker
           tags: |
             type=sha,prefix=sha-
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
