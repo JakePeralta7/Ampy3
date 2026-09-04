@@ -34,6 +34,43 @@ export function useScheduledSyncs(): UseScheduledSyncsReturn {
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const fastPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const prevSyncsRef = useRef<ScheduledSync[]>([]);
+
+  // Helper to check if syncs have meaningfully changed (only compares UI-relevant fields)
+  const hasSyncsChanged = useCallback((newSyncs: ScheduledSync[]): boolean => {
+    const prev = prevSyncsRef.current;
+    const prevKey = JSON.stringify(
+      prev.map((s) => ({
+        id: s.id,
+        source: s.source,
+        target_ids: s.target_ids,
+        target_playlist_name: s.target_playlist_name,
+        schedule_interval: s.schedule_interval,
+        is_active: s.is_active,
+        status: s.status,
+        last_synced_at: s.last_synced_at,
+        next_sync_at: s.next_sync_at,
+        error_message: s.error_message,
+      })),
+    );
+
+    const newKey = JSON.stringify(
+      newSyncs.map((s) => ({
+        id: s.id,
+        source: s.source,
+        target_ids: s.target_ids,
+        target_playlist_name: s.target_playlist_name,
+        schedule_interval: s.schedule_interval,
+        is_active: s.is_active,
+        status: s.status,
+        last_synced_at: s.last_synced_at,
+        next_sync_at: s.next_sync_at,
+        error_message: s.error_message,
+      })),
+    );
+
+    return prevKey !== newKey;
+  }, []);
 
   const stopFastPoll = useCallback(() => {
     if (fastPollRef.current) {
@@ -44,23 +81,30 @@ export function useScheduledSyncs(): UseScheduledSyncsReturn {
   }, []);
 
   // Fetch syncs
-  const refetch = useCallback(async (isBackground = false) => {
-    if (isBackground) {
-      setRefreshing(true);
-    } else {
-      setLoading(true);
-    }
-    setError(null);
-    try {
-      const data = await scheduledSyncsAPI.listScheduledSyncs();
-      setSyncs(data);
-    } catch (err) {
-      setError(getErrorMessage(err, "Failed to load syncs"));
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
+  const refetch = useCallback(
+    async (isBackground = false) => {
+      if (isBackground) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+      setError(null);
+      try {
+        const data = await scheduledSyncsAPI.listScheduledSyncs();
+        // Only update state if data meaningfully changed (prevents unnecessary re-renders)
+        if (hasSyncsChanged(data)) {
+          setSyncs(data);
+          prevSyncsRef.current = data;
+        }
+      } catch (err) {
+        setError(getErrorMessage(err, "Failed to load syncs"));
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [hasSyncsChanged],
+  );
 
   // Create sync
   const createSync = useCallback(
@@ -117,7 +161,11 @@ export function useScheduledSyncs(): UseScheduledSyncsReturn {
         fastPollRef.current = setInterval(async () => {
           try {
             const data = await scheduledSyncsAPI.listScheduledSyncs();
-            setSyncs(data);
+            // Only update state if data meaningfully changed
+            if (hasSyncsChanged(data)) {
+              setSyncs(data);
+              prevSyncsRef.current = data;
+            }
             const updated = data.find((s) => s.id === syncId);
             if (updated && updated.last_synced_at !== lastSyncedBefore) {
               stopFastPoll();
@@ -136,7 +184,7 @@ export function useScheduledSyncs(): UseScheduledSyncsReturn {
         throw err;
       }
     },
-    [syncs, stopFastPoll],
+    [syncs, stopFastPoll, hasSyncsChanged],
   );
 
   // Bulk: trigger sync now for multiple syncs
