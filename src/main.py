@@ -33,14 +33,12 @@ SESSION_COOKIE = "ampy3_session"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Fall back to no auth when SECRET_KEY is missing
+    # Fail closed: REQUIRE_AUTH=true without SECRET_KEY is a hard error
     if settings.require_auth and not settings.secret_key:
-        logger.warning(
-            "SECRET_KEY is not set but REQUIRE_AUTH=true — "
-            "falling back to no authentication. "
-            'Generate a key with: python -c "import secrets; print(secrets.token_hex(32))"'
+        raise RuntimeError(
+            "REQUIRE_AUTH=true requires SECRET_KEY to be set. "
+            'Generate one with: python -c "import secrets; print(secrets.token_hex(32))"'
         )
-        settings.require_auth = False
 
     logger.info("Starting Ampy3 API...")
 
@@ -201,10 +199,12 @@ if web_dist_path.exists():
     async def serve_spa(path: str):
         """Serve SPA - return index.html for any non-API routes."""
         if path.startswith("api/"):
-            raise JSONResponse(status_code=404, content={"detail": "Not found"})
-        file_path = web_dist_path / path
-        if file_path.is_file():
-            return FileResponse(file_path)
+            return JSONResponse(status_code=404, content={"detail": "Not found"})
+        # Confine file serving to the web dist directory to prevent path traversal
+        web_dist_resolved = web_dist_path.resolve()
+        requested = (web_dist_resolved / path).resolve()
+        if requested.is_file() and requested.is_relative_to(web_dist_resolved):
+            return FileResponse(requested)
         return FileResponse(
             web_dist_path / "index.html",
             headers={"Cache-Control": "no-store, no-cache, must-revalidate"},

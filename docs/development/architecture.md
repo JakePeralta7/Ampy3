@@ -24,7 +24,7 @@ tests/                     # Pytest
 
 ## Dual database engines
 
-`src/app/db.py` creates **two** SQLAlchemy engines from the same `DATABASE_URL`:
+`src/app/db.py` creates **two** SQLAlchemy engines from the configured DSN:
 
 | Engine | Driver | Used by | Session factory |
 |--------|--------|---------|-----------------|

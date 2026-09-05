@@ -6,7 +6,7 @@ All Ampy3 configuration is read from **environment variables**. There are no `.e
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DATABASE_URL` | `postgresql://ampy3:ampy3@localhost:5432/ampy3` | PostgreSQL DSN. The Docker stack points this at the `postgres` service automatically. |
+| `POSTGRES_PASSWORD` | _(required in Docker)_ | Postgres password for the Compose stack. `docker compose` fails to start if unset. It becomes part of the database DSN verbatim, so stick to letters, digits, `-` and `_` (URL-reserved chars like `/` would break the connection). |
 | `CELERY_BROKER_URL` | `redis://valkey:6379/0` | Celery broker (Valkey/Redis). |
 | `CELERY_RESULT_BACKEND` | `redis://valkey:6379/1` | Celery result backend. |
 | `CELERY_WORKER_CONCURRENCY` | `1` | Worker prefork count. ≥1. |
@@ -17,21 +17,19 @@ All Ampy3 configuration is read from **environment variables**. There are no `.e
 | `REQUIRE_AUTH` | `false` | When `true`, only `APP_URL` is allowed by CORS and Plex SSO is enforced. |
 | `PLEX_CLIENT_ID` | _(empty)_ | OAuth client identifier for Plex SSO (only used when `REQUIRE_AUTH=true`). |
 | `APP_URL` | `http://localhost:8000` | Public URL used for OAuth redirects and CORS. |
-| `SECRET_KEY` | _(empty)_ | Session-signing key. **Required when `REQUIRE_AUTH=true`.** Generate with `openssl rand -hex 32`. |
+| `SECRET_KEY` | _(empty)_ | Session-signing key. **Required when `REQUIRE_AUTH=true`** — the app refuses to start otherwise (fail-closed). Generate with `openssl rand -hex 32`. |
 | `SESSION_TTL_HOURS` | `168` | Session lifetime in hours (default = 1 week). |
 | `APP_ENV` | `development` | Free-form env label, surfaced in logs. |
 | `DEBUG` | `false` | Enable verbose error pages. |
 
 ## Section: Database
 
-`DATABASE_URL` is the only knob. Two engines are created from it:
+In Docker, the PostgreSQL DSN is built automatically from `POSTGRES_PASSWORD` — no extra configuration needed. Two SQLAlchemy engines are created from it:
 
 - **Async** (`asyncpg`) — used by FastAPI request handlers
 - **Sync** (`psycopg2-binary`) — used by Celery workers
 
-```bash
-DATABASE_URL=postgresql://user:pass@db.example.internal:5432/ampy3
-```
+When running locally (no Docker), the default DSN `postgresql://ampy3:ampy3@localhost:5432/ampy3` applies; see [Local setup](../development/local-setup.md).
 
 !!! danger "Don't mix session factories"
     FastAPI routes get an `AsyncSession` via the `get_async_session()` dependency in [`src/app/db.py`][app.db]. Celery tasks get a `Session` via [`session_scope`][app.worker.session.session_scope] (or `get_sync_session()`). Using an async session inside a Celery task will deadlock; using a sync session inside an async route will block the event loop.
@@ -94,7 +92,6 @@ DEBUG=false
 There is no `tests/conftest.py` in this repo — each test sets the env vars it needs directly (see [`tests/test_db_initialization.py`](https://github.com/JakePeralta7/Ampy3/blob/main/tests/test_db_initialization.py) for the pattern). When running locally without Docker, export at least these before launching Uvicorn / Celery:
 
 ```bash
-export DATABASE_URL=postgresql://ampy3:ampy3@localhost:5432/ampy3
 export CELERY_BROKER_URL=redis://localhost:6379/0
 export CELERY_RESULT_BACKEND=redis://localhost:6379/1
 ```

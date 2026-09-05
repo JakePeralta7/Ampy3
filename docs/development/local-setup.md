@@ -25,8 +25,7 @@ pip install -e ".[dev,docs]"
 # Set PYTHONPATH — the package lives under src/, not at the repo root
 export PYTHONPATH=$PWD/src         # Windows PowerShell: $env:PYTHONPATH = "$PWD\src"
 
-# Point at your local Postgres + Valkey
-export DATABASE_URL=postgresql://ampy3:ampy3@localhost:5432/ampy3
+# Point at your local Valkey
 export CELERY_BROKER_URL=redis://localhost:6379/0
 export CELERY_RESULT_BACKEND=redis://localhost:6379/1
 
@@ -37,7 +36,7 @@ python migrate.py upgrade
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
 # In a second terminal, run a Celery worker
-export PYTHONPATH=$PWD/src         # and the same DATABASE_URL / CELERY_BROKER_URL
+export PYTHONPATH=$PWD/src         # and the same CELERY_BROKER_URL
 celery -A app.worker.app worker --loglevel=info --concurrency=1
 ```
 
@@ -47,7 +46,6 @@ celery -A app.worker.app worker --loglevel=info --concurrency=1
 !!! tip "PowerShell users"
     ```powershell
     $env:PYTHONPATH = "$PWD\src"
-    $env:DATABASE_URL = "postgresql://ampy3:ampy3@localhost:5432/ampy3"
     ```
 
 ## Frontend setup

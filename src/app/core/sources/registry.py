@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeVar
 
 if TYPE_CHECKING:
     from src.app.core.models import IPlatformSource
 
 logger = logging.getLogger(__name__)
+
+_TSource = TypeVar("_TSource", bound="IPlatformSource")
 
 
 class SourceRegistry:
@@ -71,7 +73,9 @@ class SourceRegistry:
         ]
 
 
-def register_source(source_id: str) -> Callable[[type[IPlatformSource]], type[IPlatformSource]]:
+def register_source(
+    source_id: str,
+) -> Callable[[type[_TSource]], type[_TSource]]:
     """Decorator to register a source adapter class.
 
     Usage::
@@ -83,7 +87,7 @@ def register_source(source_id: str) -> Callable[[type[IPlatformSource]], type[IP
             ...
     """
 
-    def decorator(cls: type[IPlatformSource]) -> type[IPlatformSource]:
+    def decorator(cls: type[_TSource]) -> type[_TSource]:
         cls.source_id = source_id
         SourceRegistry.register(source_id, cls)
         return cls

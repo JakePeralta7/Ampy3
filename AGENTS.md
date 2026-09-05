@@ -109,7 +109,12 @@ Alembic migrations run automatically at API startup via `src/app/db.py:init_db()
 
 ## Gotchas
 
-- The `cookies/` directory is mounted read-only into containers for `yt-dlp` cookie auth. It must exist or the volume mount fails.
+- The `cookies/` directory is mounted read-only into containers for `yt-dlp` cookie auth. It must exist or the volume mount fails. On Linux hosts, the container runs as the non-root `appuser` (uid 999), so the directory needs read/traverse permission for that uid (`chmod 755 cookies/`) or yt-dlp gets unusable cookies.
+- **`POSTGRES_PASSWORD` charset**: `docker compose` requires `POSTGRES_PASSWORD` (set via env or `.env`). It becomes part of the database DSN verbatim (the DSN is always derived — never configure it directly). Keep it to letters, digits, `-`, `_` — URL-reserved characters (`/`, `?`, `@`) silently break the connection. The postgres port is no longer published to the host.
+- **Auth is fail-closed**: `REQUIRE_AUTH=true` without a `SECRET_KEY` (≥32 chars) makes the app refuse to start — never fall back to disabling auth. `SECRET_KEY` under 32 characters is rejected in `settings.py`.
+- **`docker compose` requires `POSTGRES_PASSWORD`** (set via env or `.env`); the postgres port is no longer published to the host.
+- Containers run as the non-root `appuser` (see `Dockerfile`). The dev overlay (`docker-compose.dev.yml`) overrides `user: "0:0"` so hot-reload can write bytecode.
+- Python 3.14 (PEP 758) allows `except A, B:` without parens; ruff targets py314 so it strips the "redundant" parens — don't re-add them or `ruff format --check` fails.
 - Celery workers use the **sync** SQLAlchemy engine; the API uses async. Do not mix session factories.
 - The `alembic.ini` placeholder URL (`driver://user:password@localhost/dbname`) is overridden at runtime — never edit it directly.
 - `F401` (unused imports) is intentionally ignored in Ruff config.

@@ -18,6 +18,7 @@ from src.app.constants import (
     TARGET_JELLYFIN,
     TARGET_PLEX,
 )
+from src.app.core.sources.ytmusic import YouTubeMusicSource
 from src.app.db import AsyncSessionLocal
 from src.app.models import (
     PlaylistTrack,
@@ -159,9 +160,15 @@ async def trigger_sync(
 ):
     """Initiate a background sync job for a playlist."""
     try:
-        is_yt_music = body.source == DEFAULT_SOURCE and "music.youtube.com" not in body.playlist_url
+        is_yt_music = body.source == DEFAULT_SOURCE and not YouTubeMusicSource.is_valid_url(
+            body.playlist_url
+        )
         if is_yt_music:
-            raise HTTPException(status_code=422, detail="Invalid YouTube Music URL format.")
+            raise HTTPException(
+                status_code=422,
+                detail="Invalid YouTube Music URL format. Must be a valid "
+                "https://music.youtube.com/playlist?list=... URL.",
+            )
 
         task = sync_playlists_task.delay(
             playlist_url=body.playlist_url,

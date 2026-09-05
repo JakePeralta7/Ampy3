@@ -11,6 +11,9 @@ services:
       context: .
       target: base
     image: ampy3-web-dev
+    # Dev overlay runs as root so hot-reload can write bytecode caches into the
+    # bind-mounted source tree. Production images run as the non-root appuser.
+    user: "0:0"
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
     volumes:
       - ./src:/app/src

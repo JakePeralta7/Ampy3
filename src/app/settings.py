@@ -1,6 +1,6 @@
-from typing import Any
+from typing import Any, Self
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -28,6 +28,15 @@ class Settings(BaseSettings):
     app_url: str = "http://localhost:8000"
     secret_key: str = ""
     session_ttl_hours: int = 168
+
+    @model_validator(mode="after")
+    def _validate_secret_key(self) -> Self:
+        if self.require_auth and self.secret_key and len(self.secret_key) < 32:
+            raise ValueError(
+                "SECRET_KEY must be at least 32 characters when REQUIRE_AUTH=true. "
+                'Generate one with: python -c "import secrets; print(secrets.token_hex(32))"'
+            )
+        return self
 
     # App
     app_env: str = "development"

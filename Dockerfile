@@ -44,6 +44,9 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends ffmpeg curl && \
     rm -rf /var/lib/apt/lists/*
 
+# Run as a non-root user inside the container
+RUN groupadd --system app && useradd --system --gid app --home-dir /app appuser
+
 WORKDIR /app
 
 COPY --from=builder /install /usr/local
@@ -54,6 +57,8 @@ COPY src/ ./src/
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app/src
 ENV APP_ENV=production
+
+USER appuser
 
 # --- Web image (API + SPA) ---
 FROM base AS web

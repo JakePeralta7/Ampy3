@@ -6,6 +6,7 @@ import json
 import re
 from pathlib import Path
 from typing import Any
+from urllib import parse as urlparse
 
 from src.app.constants import SOURCE_YOUTUBE_MUSIC, SOURCE_YOUTUBE_MUSIC_DISPLAY
 from src.app.core.models import IPlatformSource, PlaylistMetadata, TrackMetadata
@@ -20,18 +21,44 @@ class YouTubeMusicSource(IPlatformSource):
     source_id = SOURCE_YOUTUBE_MUSIC
     display_name = SOURCE_YOUTUBE_MUSIC_DISPLAY
 
-    YTM_URL_PATTERN = re.compile(r"(https?://music\.youtube\.com/playlist\?list=[a-zA-Z0-9_-]+)")
+    YTM_HOSTS = ("music.youtube.com", "www.music.youtube.com")
+    YTM_URL_PATTERN = re.compile(r"[a-zA-Z0-9_-]+")
 
     @classmethod
     def supports_url(cls, url: str) -> bool:
-        return bool(cls.YTM_URL_PATTERN.search(url))
+        return cls.is_valid_url(url)
+
+    @classmethod
+    def is_valid_url(cls, url: object) -> bool:
+        """Return True only for well-formed public YouTube Music playlist URLs.
+
+        Enforces scheme, host, and path so that arbitrary URLs (e.g. for
+        SSRF against internal networks) never reach the underlying fetcher.
+        Extra query parameters beyond ``list=`` are tolerated, matching how
+        YouTube Music share links are commonly generated.
+        """
+        if not isinstance(url, str) or not url:
+            return False
+        try:
+            parsed = urlparse.urlparse(url)
+        except ValueError:
+            return False
+        if parsed.scheme not in ("http", "https"):
+            return False
+        if parsed.netloc.lower() not in cls.YTM_HOSTS:
+            return False
+        if parsed.path.rstrip("/") != "/playlist":
+            return False
+        playlist_ids = urlparse.parse_qs(parsed.query).get("list")
+        return bool(playlist_ids) and bool(cls.YTM_URL_PATTERN.fullmatch(playlist_ids[0]))
 
     @classmethod
     def _parse_playlist_id(cls, url: str) -> str | None:
-        match = cls.YTM_URL_PATTERN.search(url)
-        if not match:
-            return f"PL{url.split('list=')[-1]}"
-        return match.group(1).split("list=")[-1]
+        parsed = urlparse.urlparse(url)
+        playlist_ids = urlparse.parse_qs(parsed.query).get("list") if parsed.scheme else []
+        if playlist_ids:
+            return playlist_ids[0]
+        return f"PL{url.split('list=')[-1]}"
 
     def get_playlist_cache_identifier(self, playlist_url: str) -> str:
         playlist_id = self._parse_playlist_id(playlist_url)
@@ -50,7 +77,7 @@ class YouTubeMusicSource(IPlatformSource):
         ]
         if settings.yt_dlp_cookies and Path(settings.yt_dlp_cookies).exists():
             cmd.extend(["--cookies", settings.yt_dlp_cookies])
-        cmd.append(playlist_url)
+        cmd.extend(["--", playlist_url])
 
         import subprocess
 

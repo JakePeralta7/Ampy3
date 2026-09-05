@@ -10,6 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from src.app.auth.dependencies import get_current_user
+from src.app.constants import SOURCE_YOUTUBE_MUSIC
+from src.app.core.sources.ytmusic import YouTubeMusicSource
 from src.app.db import get_async_session
 from src.app.models import (
     PlaylistSourceEnum,
@@ -84,6 +86,12 @@ async def create_scheduled_sync(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid source. Must be one of: {[e.value for e in PlaylistSourceEnum]}",
+        )
+    if body.source == SOURCE_YOUTUBE_MUSIC and not YouTubeMusicSource.is_valid_url(body.source_url):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid YouTube Music source URL. Must be a valid "
+            "https://music.youtube.com/playlist?list=... URL.",
         )
     if body.schedule_interval not in [e.value for e in ScheduleIntervalEnum]:
         raise HTTPException(

@@ -76,6 +76,12 @@ class FetchPhase(SyncPhase):
 
         source_cls = SourceRegistry.get(source_id)
         source_adapter = source_cls()
+        validate_url = getattr(source_cls, "is_valid_url", source_cls.supports_url)
+        if not validate_url(source_url):
+            return PhaseResult(
+                success=False,
+                error=f"Invalid {source_id} source URL: {source_url}",
+            )
         playlist = run_async(source_adapter.get_playlist(source_url))
 
         playlist_title = ctx.playlist_title or playlist.title

@@ -3,13 +3,11 @@ services:
     image: postgres:16-alpine
     environment:
       - POSTGRES_USER=ampy3
-      - POSTGRES_PASSWORD=ampy3
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
       - POSTGRES_DB=ampy3
       - POSTGRES_INITDB_ARGS=-c max_connections=200
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ampy3"]
       interval: 10s
@@ -34,7 +32,7 @@ services:
         condition: service_healthy
     environment:
       - YT_DLP_COOKIES=/cookies/cookies.txt
-      - DATABASE_URL=${DATABASE_URL:-postgresql://ampy3:ampy3@postgres:5432/ampy3}
+      - DATABASE_URL=postgresql://ampy3:${POSTGRES_PASSWORD}@postgres:5432/ampy3
       - REQUIRE_AUTH=${REQUIRE_AUTH:-false}
       - APP_URL=${APP_URL:-http://localhost:8000}
       - SECRET_KEY=${SECRET_KEY:-}
@@ -55,7 +53,7 @@ services:
         condition: service_healthy
     environment:
       - YT_DLP_COOKIES=/cookies/cookies.txt
-      - DATABASE_URL=${DATABASE_URL:-postgresql://ampy3:ampy3@postgres:5432/ampy3}
+      - DATABASE_URL=postgresql://ampy3:${POSTGRES_PASSWORD}@postgres:5432/ampy3
       - CELERY_WORKER_CONCURRENCY=${CELERY_WORKER_CONCURRENCY:-1}
       - CELERY_LOG_LEVEL=${CELERY_LOG_LEVEL:-info}
     volumes:
