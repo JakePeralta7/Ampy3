@@ -22,7 +22,7 @@ RUN rm -rf node_modules
 
 
 # --- Python dependency builder ---
-FROM python:latest-slim AS builder
+FROM python:slim AS builder
 
 WORKDIR /app
 
@@ -38,7 +38,7 @@ COPY alembic/ ./alembic/
 
 
 # --- Base production image (shared by web + worker) ---
-FROM python:latest-slim AS base
+FROM python:slim AS base
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends ffmpeg curl && \
