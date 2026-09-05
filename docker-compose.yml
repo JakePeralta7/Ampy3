@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:latest-alpine
+    image: postgres:latest
     environment:
       - POSTGRES_USER=ampy3
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
@@ -60,7 +60,7 @@ services:
       - ./cookies:/cookies:ro
 
   valkey:
-    image: valkey/valkey:latest-alpine
+    image: valkey/valkey:latest
     command: valkey-server --save 60 1 --appendonly yes --appendfsync everysec --loglevel warning
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
