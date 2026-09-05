@@ -1,5 +1,5 @@
 # --- Frontend builder ---
-FROM node:26-alpine AS web-builder
+FROM node:alpine AS web-builder
 
 RUN npm i -g pnpm@11.16.0
 
@@ -22,7 +22,7 @@ RUN rm -rf node_modules
 
 
 # --- Python dependency builder ---
-FROM python:3.14-slim AS builder
+FROM python:latest-slim AS builder
 
 WORKDIR /app
 
@@ -38,7 +38,7 @@ COPY alembic/ ./alembic/
 
 
 # --- Base production image (shared by web + worker) ---
-FROM python:3.14-slim AS base
+FROM python:latest-slim AS base
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends ffmpeg curl && \
