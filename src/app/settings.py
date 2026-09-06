@@ -18,8 +18,8 @@ class Settings(BaseSettings):
     celery_log_level: str = Field(default="info")
     source_playlist_cache_ttl_seconds: int = Field(default=300, ge=1)
 
-    # yt-dlp
-    yt_dlp_cookies: str = ""
+    # YouTube Music
+    ytmusic_auth: str = ""
     yt_dlp_timeout: int = 300
 
     # Auth (Plex SSO)

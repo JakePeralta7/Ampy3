@@ -24,7 +24,7 @@ from src.app.core.explore.base import ExploreProvider
 class YTMusicExploreProvider(ExploreProvider):
     provider_id = "youtube_music"
     display_name = "YouTube Music"
-    anonymous = False  # requires cookies / OAuth
+    anonymous = False  # requires auth via Settings → Sources
     ...
 ```
 

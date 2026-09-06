@@ -23,12 +23,12 @@ USER_CONFIG_KEYS = [
     "jellyfin_server_url",
     "jellyfin_api_key",
     "jellyfin_user_id",
-    "yt_dlp_cookies",
+    "ytmusic_auth",
     "yt_dlp_timeout",
 ]
 
 # Keys whose values must never be sent to the frontend.
-_SENSITIVE_KEYS = {"plex_token", "jellyfin_api_key"}
+_SENSITIVE_KEYS = {"plex_token", "jellyfin_api_key", "ytmusic_auth"}
 
 
 def _build_settings_out(overrides: dict[str, str]) -> SettingsOut:
@@ -38,7 +38,7 @@ def _build_settings_out(overrides: dict[str, str]) -> SettingsOut:
         jellyfin_server_url=overrides.get("jellyfin_server_url", ""),
         jellyfin_api_key_set=bool(overrides.get("jellyfin_api_key", "")),
         jellyfin_user_id=overrides.get("jellyfin_user_id", ""),
-        yt_dlp_cookies=overrides.get("yt_dlp_cookies", settings.yt_dlp_cookies),
+        ytmusic_auth_set=bool(overrides.get("ytmusic_auth", settings.ytmusic_auth)),
         yt_dlp_timeout=int(overrides.get("yt_dlp_timeout", str(settings.yt_dlp_timeout))),
     )
 

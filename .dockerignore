@@ -52,9 +52,6 @@ test_*.py
 .DS_Store
 Thumbs.db
 
-# Runtime mounted volumes
-cookies
-
 # Docker files (if multi-stage build)
 Dockerfile
 docker-compose.yml

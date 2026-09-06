@@ -6,6 +6,8 @@ name: ampy3-dev
 # Adds hot reload for the backend (uvicorn --reload) and runs the Vite dev
 # server on http://localhost:5173, proxying /api to the web service.
 services:
+  postgres:
+    image: postgres:18-alpine
   web:
     build:
       context: .
@@ -19,7 +21,6 @@ services:
       - ./src:/app/src
       - ./alembic:/app/alembic
       - ./migrate.py:/app/migrate.py
-      - ./cookies:/cookies:ro
     # Drop the compiled SPA port mapping; the UI is served by the frontend
     # service below. The API remains reachable on 8000 for /api calls.
     depends_on:

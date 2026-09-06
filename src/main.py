@@ -116,8 +116,12 @@ app = FastAPI(
             "description": "Scheduled sync CRUD and manual trigger actions",
         },
         {"name": "match-rules", "description": "Music matching rule configuration and testing"},
-        {"name": "settings", "description": "Runtime configuration (Plex, yt-dlp)"},
+        {
+            "name": "settings",
+            "description": "Runtime configuration (Plex, Jellyfin, YouTube Music)",
+        },
         {"name": "targets", "description": "Available sync target platforms"},
+        {"name": "sources", "description": "Available sync source platforms and auth testing"},
         {"name": "audit", "description": "Audit log querying"},
     ],
 )

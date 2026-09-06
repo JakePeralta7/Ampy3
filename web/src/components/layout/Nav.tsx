@@ -26,7 +26,7 @@ const links = [
     label: "Settings",
     icon: Cog,
     sub: [
-      { path: "/settings/config", label: "Config" },
+      { path: "/settings/sources", label: "Sources" },
       { path: "/settings/targets", label: "Targets" },
       { path: "/settings/matching", label: "Match Rules" },
     ],

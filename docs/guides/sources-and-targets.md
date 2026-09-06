@@ -24,7 +24,7 @@ class YouTubeMusicSource(IPlatformSource):
 
 | ID | Module | Notes |
 |----|--------|-------|
-| `youtube_music` | [`app.core.sources.ytmusic`][app.core.sources.ytmusic] | Uses `ytmusicapi` + cookies for authenticated playlists. |
+| `youtube_music` | [`app.core.sources.ytmusic`][app.core.sources.ytmusic] | Uses `ytmusicapi`; optional auth via Settings → Sources. |
 | `deezer` | [`app.core.sources.deezer`][app.core.sources.deezer] | Public playlists; no auth. |
 
 Look up registered sources at runtime:

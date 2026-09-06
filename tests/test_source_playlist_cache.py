@@ -131,13 +131,13 @@ def test_ytmusic_parser_keeps_source_metadata_mapping():
         {
             "title": "Playlist",
             "description": "Description",
-            "entries": [
+            "tracks": [
                 {
-                    "id": "video-1",
+                    "videoId": "video-1",
                     "title": "Song",
-                    "creator": "Artist",
-                    "album": "Album",
-                    "duration": 123.4,
+                    "artists": [{"name": "Artist"}],
+                    "album": {"name": "Album"},
+                    "duration_seconds": 123,
                     "musicbrainz_id": "mbid-1",
                 }
             ],
@@ -152,7 +152,7 @@ def test_ytmusic_parser_keeps_source_metadata_mapping():
             title="Song",
             artist_name="Artist",
             album_name="Album",
-            duration_ms=123400,
+            duration_ms=123000,
             source_id="video-1",
         )
     ]

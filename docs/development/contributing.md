@@ -43,7 +43,7 @@ These are baked into the existing code — please follow them.
 
 - Plex tokens (`plex_token`, `owner_plex_token`)
 - `SECRET_KEY` values
-- `cookies/cookies.txt` (the directory *must* exist but must not contain a real cookie file in git)
+- YouTube Music auth JSON (`ytmusic_auth` in the `config` table)
 - Database passwords, even for dev
 
 If you accidentally commit one, rotate it immediately and use `git filter-repo` or BFG to scrub history — don't just amend.

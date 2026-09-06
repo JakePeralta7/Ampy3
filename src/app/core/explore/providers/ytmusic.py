@@ -11,8 +11,8 @@ erroring out.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
-import os
 
 from ytmusicapi import YTMusic
 
@@ -26,7 +26,7 @@ from src.app.core.explore.models import (
     MoodCategory,
 )
 from src.app.core.explore.registry import register_explore_provider
-from src.app.settings import settings
+from src.app.services.ytauth import get_ytmusic_auth
 
 logger = logging.getLogger(__name__)
 
@@ -100,19 +100,22 @@ class YTMusicExploreProvider(ExploreProvider):
 
     def __init__(self) -> None:
         self._client: YTMusic | None = None
+        self._client_auth_key: str | None = None
 
     # ── client initialisation ───────────────────────────────────────
 
     def _get_client(self) -> YTMusic:
-        if self._client is not None:
+        auth = get_ytmusic_auth()
+        key = json.dumps(auth, sort_keys=True) if auth else None
+        if self._client is not None and self._client_auth_key == key:
             return self._client
-        auth_path = settings.yt_dlp_cookies
-        if auth_path and os.path.isfile(auth_path):
-            logger.debug("Initialising YTMusic with auth from %s", auth_path)
-            self._client = YTMusic(auth=auth_path)
+        if auth:
+            logger.debug("Initialising YTMusic with stored credentials")
+            self._client = YTMusic(auth=auth)
         else:
             logger.debug("Initialising YTMusic without authentication")
             self._client = YTMusic()
+        self._client_auth_key = key
         return self._client
 
     async def _run(

@@ -39,10 +39,8 @@ Every service has a healthcheck:
 |--------|---------|---------|
 | `postgres_data` | `postgres` | Postgres data dir — **back this up** |
 | `valkey_data` | `valkey` | Valkey persistence (RDB snapshots every 60s + AOF everysec) |
-| `./cookies` (bind mount) | `web`, `worker` | Read-only mount of `cookies/cookies.txt` for `yt-dlp` |
 
-!!! danger "The `cookies/` directory must exist"
-    Docker refuses to mount a non-existent directory as a volume. Recreate it (even empty) before `docker compose up`, or the stack fails to start with a cryptic error.
+There is **no cookie volume mount** — YouTube Music authentication is pasted in via Settings → Sources and persisted in the Postgres `config` table.
 
 ## Common commands
 
@@ -98,7 +96,7 @@ The `web` and `worker` containers reach each other over the default Compose netw
 
 ## Resource limits
 
-None are set by default — if you run into OOMs, add `deploy.resources.limits.memory` to each service in `docker-compose.yml`. The worker is the most likely candidate (MusicBrainz + yt-dlp can spike on large playlists).
+None are set by default — if you run into OOMs, add `deploy.resources.limits.memory` to each service in `docker-compose.yml`. The worker is the most likely candidate (MusicBrainz matching can spike on large playlists).
 
 ## Where to look next
 

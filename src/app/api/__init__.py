@@ -12,6 +12,7 @@ from src.app.api.match_rules import router as match_rules_router
 from src.app.api.playlists import router as playlists_router
 from src.app.api.schedules import router as schedules_router
 from src.app.api.settings import router as settings_router
+from src.app.api.sources import router as sources_router
 from src.app.api.syncs import router as syncs_router
 from src.app.api.targets import router as targets_router
 from src.app.auth.router import router as auth_router
@@ -26,6 +27,7 @@ def register_routers(app: FastAPI) -> None:
     app.include_router(playlists_router)
     app.include_router(schedules_router)
     app.include_router(settings_router)
+    app.include_router(sources_router)
     app.include_router(syncs_router)
     app.include_router(targets_router)
 
@@ -38,6 +40,7 @@ __all__ = [
     "playlists_router",
     "schedules_router",
     "settings_router",
+    "sources_router",
     "syncs_router",
     "targets_router",
 ]

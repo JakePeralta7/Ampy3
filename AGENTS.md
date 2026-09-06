@@ -109,7 +109,7 @@ Alembic migrations run automatically at API startup via `src/app/db.py:init_db()
 
 ## Gotchas
 
-- The `cookies/` directory is mounted read-only into containers for `yt-dlp` cookie auth. It must exist or the volume mount fails. On Linux hosts, the container runs as the non-root `appuser` (uid 999), so the directory needs read/traverse permission for that uid (`chmod 755 cookies/`) or yt-dlp gets unusable cookies.
+- YouTube Music authentication is configured entirely through the **Sources** settings page. The pasted ytmusicapi browser/auth JSON is stored in the `config` table under the `ytmusic_auth` key (never returned to the UI — only `ytmusic_auth_set` is). No `cookies/` mount or `YT_DLP_COOKIES` env is used anymore; the YouTube Music source and Explore provider both consume it via `src/app/services/ytauth.py`.
 - **`POSTGRES_PASSWORD` charset**: `docker compose` requires `POSTGRES_PASSWORD` (set via env or `.env`). It becomes part of the database DSN verbatim (the DSN is always derived — never configure it directly). Keep it to letters, digits, `-`, `_` — URL-reserved characters (`/`, `?`, `@`) silently break the connection. The postgres port is no longer published to the host.
 - **Auth is fail-closed**: `REQUIRE_AUTH=true` without a `SECRET_KEY` (≥32 chars) makes the app refuse to start — never fall back to disabling auth. `SECRET_KEY` under 32 characters is rejected in `settings.py`.
 - **`docker compose` requires `POSTGRES_PASSWORD`** (set via env or `.env`); the postgres port is no longer published to the host.

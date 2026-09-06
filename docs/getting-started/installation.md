@@ -6,7 +6,7 @@ Ampy3 ships as a Docker Compose stack with five services: `web`, `worker`, `post
 
 - **Docker** 24+ and **Docker Compose** v2 (`docker compose ...`)
 - A **Plex** or **Jellyfin** server reachable from the Ampy3 host
-- (Optional) **YouTube Music** cookies if your source playlists require an authenticated session — see [Cookies](#youtube-music-cookies) below
+- (Optional) A **YouTube Music** session if you want authenticated playlists — configure it later from the UI (Settings → Sources)
 
 ## Docker Compose (recommended)
 
@@ -60,20 +60,11 @@ pnpm run dev      # http://localhost:5173 — Vite proxies /api to :8000
 
 For a production bundle, build with `pnpm run build` and let the API serve `web/dist/` (see [SPA serving](../development/architecture.md#spa-serving)).
 
-## YouTube Music cookies
+## YouTube Music authentication (optional)
 
-`yt-dlp` reads `cookies.txt` (Netscape format) when fetching authenticated YouTube Music content. The Compose stack mounts the repo-local `cookies/` directory read-only into both the `web` and `worker` containers.
+YouTube Music playlists can be fetched anonymously, but playlists that require an authenticated session (or personalised Explore content) need auth. There is **no cookie file to mount** — instead, open **Settings → Sources** in the web UI and paste the ytmusicapi browser/auth JSON from your YouTube Music session. It is stored in the app database and used by both the sync source and the Explore provider.
 
-```bash
-mkdir -p cookies
-# Export cookies.txt from your browser via a "Get cookies.txt LOCALLY" extension
-cp /path/to/cookies.txt cookies/cookies.txt
-```
-
-!!! danger "The `cookies/` directory must exist"
-    Docker refuses to mount a non-existent directory as a volume. If you delete it, recreate it (even empty) before `docker compose up`, or the stack will fail to start.
-
-You can also point Ampy3 at cookies elsewhere via the `YT_DLP_COOKIES` env var (see [Configuration](configuration.md)).
+For a how-to on producing that JSON, see the [ytmusicapi setup guide](https://ytmusicapi.readthedocs.io/en/latest/setup/browser.html).
 
 ## Verifying the install
 

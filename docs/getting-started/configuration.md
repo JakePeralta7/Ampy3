@@ -1,6 +1,6 @@
 # Configuration
 
-All Ampy3 configuration is read from **environment variables**. There are no `.env` template files — env vars are the single source of truth, consumed by the Pydantic `Settings` singleton in `src/app/settings.py`.
+Most Ampy3 configuration is read from **environment variables** via the Pydantic `Settings` singleton in `src/app/settings.py`. The exception is **runtime configuration** (target credentials and YouTube Music auth), which is managed through the web UI and persisted in the database — see the **Settings → Sources / Targets** pages.
 
 ## Quick reference
 
@@ -12,8 +12,7 @@ All Ampy3 configuration is read from **environment variables**. There are no `.e
 | `CELERY_WORKER_CONCURRENCY` | `1` | Worker prefork count. ≥1. |
 | `CELERY_LOG_LEVEL` | `info` | Celery log level. |
 | `SOURCE_PLAYLIST_CACHE_TTL_SECONDS` | `300` | TTL for cached source playlist fetches. ≥1. |
-| `YT_DLP_COOKIES` | _(empty)_ | Path to a Netscape-format `cookies.txt`. Defaults to `/app/cookies/cookies.txt` inside the container. |
-| `YT_DLP_TIMEOUT` | `300` | Per-request `yt-dlp` timeout in seconds. |
+| `YT_DLP_TIMEOUT` | `300` | Per-request YouTube Music fetch timeout in seconds. |
 | `REQUIRE_AUTH` | `false` | When `true`, only `APP_URL` is allowed by CORS and Plex SSO is enforced. |
 | `PLEX_CLIENT_ID` | _(empty)_ | OAuth client identifier for Plex SSO (only used when `REQUIRE_AUTH=true`). |
 | `APP_URL` | `http://localhost:8000` | Public URL used for OAuth redirects and CORS. |
@@ -46,16 +45,15 @@ CELERY_LOG_LEVEL=info                # debug for verbose task logs
 SOURCE_PLAYLIST_CACHE_TTL_SECONDS=900
 ```
 
-## Section: yt-dlp
+## Section: YouTube Music
 
-`yt-dlp` is the workhorse for fetching YouTube Music (and other) playlists.
+YouTube Music playlists are fetched with the `ytmusicapi` library. Authentication (optional) is configured through the **Settings → Sources** page in the web UI: paste the ytmusicapi browser/auth JSON there and it is stored in the app database — no file mounts or cookie env vars.
+
+`YT_DLP_TIMEOUT` sets the per-request fetch timeout:
 
 ```bash
-YT_DLP_COOKIES=/etc/ampy3/cookies.txt
 YT_DLP_TIMEOUT=600
 ```
-
-If `YT_DLP_COOKIES` is unset, the API and worker default to `/app/cookies/cookies.txt` — the path mounted from the host's `cookies/` directory (see [Installation → YouTube Music cookies](installation.md#youtube-music-cookies)).
 
 ## Section: Auth (Plex SSO)
 

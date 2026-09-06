@@ -1,13 +1,13 @@
 services:
   postgres:
-    image: postgres:latest
+    image: postgres:18-alpine
     environment:
       - POSTGRES_USER=ampy3
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
       - POSTGRES_DB=ampy3
-      - POSTGRES_INITDB_ARGS=-c max_connections=200
+      - POSTGRES_INITDB_ARGS=-c max_connections=200 -c password_encryption=scram-sha-256
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ampy3"]
       interval: 10s
@@ -31,14 +31,11 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      - YT_DLP_COOKIES=/cookies/cookies.txt
       - DATABASE_URL=postgresql://ampy3:${POSTGRES_PASSWORD}@postgres:5432/ampy3
       - REQUIRE_AUTH=${REQUIRE_AUTH:-false}
       - APP_URL=${APP_URL:-http://localhost:8000}
       - SECRET_KEY=${SECRET_KEY:-}
       - SESSION_TTL_HOURS=${SESSION_TTL_HOURS:-168}
-    volumes:
-      - ./cookies:/cookies:ro
 
   worker:
     image: ghcr.io/jakeperalta7/ampy3-worker:latest
@@ -52,12 +49,9 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      - YT_DLP_COOKIES=/cookies/cookies.txt
       - DATABASE_URL=postgresql://ampy3:${POSTGRES_PASSWORD}@postgres:5432/ampy3
       - CELERY_WORKER_CONCURRENCY=${CELERY_WORKER_CONCURRENCY:-1}
       - CELERY_LOG_LEVEL=${CELERY_LOG_LEVEL:-info}
-    volumes:
-      - ./cookies:/cookies:ro
 
   valkey:
     image: valkey/valkey:latest

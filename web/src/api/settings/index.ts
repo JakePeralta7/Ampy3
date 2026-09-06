@@ -10,14 +10,22 @@ export interface AppSettings {
   jellyfin_server_url: string;
   jellyfin_api_key_set: boolean;
   jellyfin_user_id: string;
-  yt_dlp_cookies: string;
+  ytmusic_auth_set: boolean;
   yt_dlp_timeout: number;
 }
 
 export type SettingsUpdate = Partial<AppSettings> & {
   plex_token?: string;
   jellyfin_api_key?: string;
+  ytmusic_auth?: string;
 };
+
+export interface SourceInfo {
+  id: string;
+  name: string;
+  auth_required: boolean;
+  auth_set: boolean | null;
+}
 
 export interface TargetTestResult {
   ok: boolean;
@@ -59,6 +67,11 @@ export const settingsAPI = {
 
   setupPlexTarget: (serverUrl: string, token: string) =>
     apiPost("/auth/plex/setup", { server_url: serverUrl, token }),
+
+  listSources: () => apiGet<SourceInfo[]>("/v1/sources/"),
+
+  testSource: (sourceId: string, auth: string) =>
+    apiPost<TargetTestResult>("/v1/sources/test", { source_id: sourceId, auth }),
 };
 
 // Legacy named exports for backward compatibility during migration
@@ -68,3 +81,5 @@ export const getConfiguredTargets = settingsAPI.getConfiguredTargets;
 export const testTarget = settingsAPI.testTarget;
 export const getPlexResources = settingsAPI.getPlexResources;
 export const setupPlexTarget = settingsAPI.setupPlexTarget;
+export const listSources = settingsAPI.listSources;
+export const testSource = settingsAPI.testSource;

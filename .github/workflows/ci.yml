@@ -109,7 +109,6 @@ jobs:
 
       - name: Smoke test — verify images build and web container starts
         run: |
-          mkdir -p cookies
           docker compose up -d postgres valkey
           docker compose up -d web
           sleep 10

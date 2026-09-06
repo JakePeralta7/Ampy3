@@ -6,9 +6,10 @@ interface FormFieldProps {
   label: string;
   value: string;
   onChange: (v: string) => void;
-  type?: "text" | "password" | "number";
+  type?: "text" | "password" | "number" | "textarea";
   placeholder?: string;
   secretSet?: boolean;
+  rows?: number;
 }
 
 export function FormField({
@@ -19,25 +20,34 @@ export function FormField({
   type = "text",
   placeholder,
   secretSet,
+  rows = 3,
 }: FormFieldProps) {
   const [focused, setFocused] = useState(false);
   const masked = secretSet && !value && !focused;
+
+  const inputProps = {
+    id,
+    value: masked ? "••••••••••••••••••••" : value,
+    onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+      onChange(e.target.value),
+    onFocus: () => setFocused(true),
+    onBlur: () => setFocused(false),
+    placeholder,
+    className: `${INPUT_STYLES} ${type === "textarea" ? "font-mono resize-y" : ""} ${
+      masked ? "text-fg-subtle" : ""
+    }`,
+  };
 
   return (
     <div className="space-y-1.5">
       <label htmlFor={id} className="block text-sm font-medium text-fg-muted">
         {label}
       </label>
-      <input
-        id={id}
-        type={type === "password" ? (masked ? "text" : "password") : type}
-        value={masked ? "••••••••••••••••••••" : value}
-        onChange={(e) => onChange(e.target.value)}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
-        placeholder={placeholder}
-        className={`${INPUT_STYLES} ${masked ? "text-fg-subtle" : ""}`}
-      />
+      {type === "textarea" ? (
+        <textarea {...inputProps} rows={rows} />
+      ) : (
+        <input type={type === "password" ? (masked ? "text" : "password") : type} {...inputProps} />
+      )}
     </div>
   );
 }

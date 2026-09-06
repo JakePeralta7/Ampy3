@@ -1,6 +1,6 @@
 # Backup & restore
 
-Three things to protect: the **Postgres database** (the source of truth for sync state, match rules, audit log, sessions), the **`cookies/` directory** (so the worker can re-authenticate to YouTube Music), and any **custom match rules or schedules** you have (those live in the DB but are worth naming explicitly).
+Two things to protect: the **Postgres database** (the source of truth for sync state, match rules, audit log, sessions, **and YouTube Music auth**), and any **custom match rules or schedules** you have (those live in the DB but are worth naming explicitly).
 
 ## Postgres backup
 
@@ -50,9 +50,9 @@ docker compose exec valkey redis-cli BGSAVE
 docker compose exec valkey ls -la /data
 ```
 
-## Cookies
+## YouTube Music auth
 
-The `cookies/` directory is a bind mount — **back it up alongside the database**. Cookies expire (typically a few weeks to months); refresh them periodically and rerun any sync that fails with an auth error.
+YouTube Music authentication is stored in the Postgres `config` table (key `ytmusic_auth`) — it is automatically covered by the database backups above. No separate cookie file to protect.
 
 ## Migration workflow
 
@@ -82,17 +82,16 @@ python migrate.py autogen
 Total loss (new VM, empty disks):
 
 1. `git clone https://github.com/JakePeralta7/Ampy3 && cd Ampy3`
-2. Recreate `cookies/` with your `cookies.txt`
-3. Restore Postgres: `docker compose up -d postgres && docker compose exec -T postgres pg_restore ...`
-4. `docker compose up --build -d`
-5. Verify: `curl http://localhost:8000/health`
+2. Restore Postgres: `docker compose up -d postgres && docker compose exec -T postgres pg_restore ...` (this restores your YouTube Music auth too)
+3. `docker compose up --build -d`
+4. Verify: `curl http://localhost:8000/health`
 
 ## What to back up
 
 | Data | Where | Backup method |
 |------|-------|---------------|
 | Sync state, match rules, schedules, audit log, sessions, owner token | Postgres | `pg_dump` (above) |
-| YouTube Music auth | `cookies/cookies.txt` | Copy the file |
+| YouTube Music auth | Postgres `Config` table (`ytmusic_auth`) | Covered by `pg_dump` |
 | Plex SSO owner token | Postgres `Config` table | Covered by `pg_dump` — *but rotating your Plex password invalidates it* |
 | Custom node handlers / source adapters | Source code in this repo | Git, not Postgres |
 | Custom match-rule canvases | Postgres | Covered by `pg_dump` |

@@ -1,22 +1,24 @@
-"""YouTube Music adapter using yt-dlp for playlist extraction."""
+"""YouTube Music adapter using ytmusicapi for playlist extraction."""
 
 from __future__ import annotations
 
-import json
+import asyncio
 import re
-from pathlib import Path
 from typing import Any
 from urllib import parse as urlparse
+
+from ytmusicapi import YTMusic
 
 from src.app.constants import SOURCE_YOUTUBE_MUSIC, SOURCE_YOUTUBE_MUSIC_DISPLAY
 from src.app.core.models import IPlatformSource, PlaylistMetadata, TrackMetadata
 from src.app.core.sources.registry import register_source
+from src.app.services.ytauth import get_ytmusic_auth
 from src.app.settings import settings
 
 
 @register_source(SOURCE_YOUTUBE_MUSIC)
 class YouTubeMusicSource(IPlatformSource):
-    """Extract playlists from YouTube Music via yt-dlp."""
+    """Extract playlists from YouTube Music via ytmusicapi."""
 
     source_id = SOURCE_YOUTUBE_MUSIC
     display_name = SOURCE_YOUTUBE_MUSIC_DISPLAY
@@ -66,60 +68,49 @@ class YouTubeMusicSource(IPlatformSource):
             raise ValueError(f"Could not parse playlist ID from: {playlist_url}")
         return playlist_id
 
+    def _client(self) -> YTMusic:
+        return YTMusic(auth=get_ytmusic_auth())
+
     async def _fetch_playlist(self, playlist_url: str) -> PlaylistMetadata:
+        from ytmusicapi.exceptions import YTMusicError
+
         playlist_id = self.get_playlist_cache_identifier(playlist_url)
-        cmd = [
-            "yt-dlp",
-            "--dump-single-json",
-            "--no-download",
-            "--no-warnings",
-            "--ignore-errors",
-        ]
-        if settings.yt_dlp_cookies and Path(settings.yt_dlp_cookies).exists():
-            cmd.extend(["--cookies", settings.yt_dlp_cookies])
-        cmd.extend(["--", playlist_url])
-
-        import subprocess
-
+        client = self._client()
         try:
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
+            data = await asyncio.wait_for(
+                asyncio.to_thread(client.get_playlist, playlist_id, limit=None),
                 timeout=settings.yt_dlp_timeout,
             )
-        except FileNotFoundError:
-            raise RuntimeError(
-                "yt-dlp is not installed. Install it via pip or ensure PATH contains yt-dlp."
-            ) from None
-        except subprocess.TimeoutExpired:
+        except TimeoutError:
             raise RuntimeError(
                 f"Playlist extraction timed out ({settings.yt_dlp_timeout}s)."
             ) from None
+        except YTMusicError as exc:
+            raise RuntimeError(f"YouTube Music request failed: {exc}") from exc
 
-        if result.returncode != 0 and not result.stdout.strip():
-            raise RuntimeError(f"yt-dlp failed: {result.stderr.strip()}")
-
-        return self._parse_playlist_data(playlist_id, playlist_url, json.loads(result.stdout))
+        return self._parse_playlist_data(playlist_id, playlist_url, data)
 
     @staticmethod
     def _parse_playlist_data(
         playlist_id: str, playlist_url: str, data: dict[str, Any]
     ) -> PlaylistMetadata:
-        tracks_raw = data.get("entries", [])
-        title = data.get("title", "Unknown Playlist")
-        description = data.get("description", "")
+        tracks_raw = data.get("tracks", [])
+        title = data.get("title", "") or "Unknown Playlist"
+        description = data.get("description", "") or ""
 
         tracks: list[TrackMetadata] = []
         for entry in tracks_raw:
-            if entry is None:
+            if not isinstance(entry, dict):
                 continue
 
             title_value = entry.get("title", "") or ""
             if not title_value:
                 continue
 
-            artist = entry.get("creator", "") or entry.get("uploader", "") or ""
+            artists = entry.get("artists") or []
+            artist = ", ".join(
+                a.get("name", "") for a in artists if isinstance(a, dict) and a.get("name")
+            )
             album_value = entry.get("album")
             album = (
                 album_value.get("name", "") if isinstance(album_value, dict) else album_value or ""
@@ -130,7 +121,7 @@ class YouTubeMusicSource(IPlatformSource):
                 and (album.lower() == title.lower() or album.lower() in title.lower())
             ):
                 album = ""
-            duration = entry.get("duration") or None
+            duration = entry.get("duration_seconds")
 
             tracks.append(
                 TrackMetadata(
@@ -139,7 +130,7 @@ class YouTubeMusicSource(IPlatformSource):
                     artist_name=artist or None,
                     album_name=album or None,
                     duration_ms=int(duration * 1000) if duration else None,
-                    source_id=entry.get("id") or None,
+                    source_id=entry.get("videoId") or None,
                 )
             )
 

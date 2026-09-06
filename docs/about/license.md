@@ -37,6 +37,5 @@ Ampy3 is built on the shoulders of many open-source projects. Notable dependenci
 - [SQLAlchemy](https://www.sqlalchemy.org/) — ORM
 - [PlexAPI](https://github.com/pkkid/python-plexapi) — Plex client
 - [ytmusicapi](https://github.com/sigma67/ytmusicapi) — YouTube Music client
-- [yt-dlp](https://github.com/yt-dlp/yt-dlp) — generic media downloader
 - [APScheduler](https://apscheduler.readthedocs.io/) — in-process scheduler
 - [mkdocstrings](https://mkdocstrings.github.io/) + [Material for MkDocs](https://squidfunk.github.io/mkdocs-material/) — this documentation site

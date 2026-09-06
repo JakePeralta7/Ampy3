@@ -9,7 +9,7 @@ import { LoginPage } from "./pages/Login";
 import { MatchRulesPage } from "./pages/MatchRules";
 import { PlexSetupPage } from "./pages/PlexSetup";
 import { RuleProgramPage } from "./pages/RuleProgram";
-import { ConfigPage } from "./pages/Settings";
+import { SourcesPage } from "./pages/Sources";
 import { SyncsPage } from "./pages/Syncs";
 import { TargetsPage } from "./pages/Targets";
 
@@ -74,8 +74,8 @@ export const routes: RouteObject[] = [
       </ProtectedRoute>
     ),
     children: [
-      { index: true, element: <Navigate to="config" replace /> },
-      { path: "config", element: <ConfigPage /> },
+      { index: true, element: <Navigate to="sources" replace /> },
+      { path: "sources", element: <SourcesPage /> },
       { path: "targets", element: <TargetsPage /> },
       { path: "matching", element: <MatchRulesPage /> },
       { path: "matching/:ruleId", element: <RuleProgramPage /> },
