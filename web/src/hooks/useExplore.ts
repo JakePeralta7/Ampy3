@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   type ChartsBundleOut,
   type ExploreHomeOut,
@@ -23,6 +23,10 @@ interface ExploreState {
   error: string | null;
 }
 
+interface UseExploreOptions {
+  initialProvider?: string;
+}
+
 const initialState: ExploreState = {
   providers: [],
   activeProvider: "youtube_music",
@@ -37,10 +41,16 @@ const initialState: ExploreState = {
   error: null,
 };
 
-export function useExplore() {
-  const [state, setState] = useState<ExploreState>(initialState);
+export function useExplore(options: UseExploreOptions = {}) {
+  const [state, setState] = useState<ExploreState>(() => {
+    const provider = options.initialProvider || "youtube_music";
+    return { ...initialState, activeProvider: provider };
+  });
+
+  const activeProviderRef = useRef(state.activeProvider);
 
   const fetchProviderContent = useCallback(async (provider: string) => {
+    activeProviderRef.current = provider;
     setState((s) => ({
       ...initialState,
       activeProvider: provider,
@@ -53,6 +63,8 @@ export function useExplore() {
       exploreAPI.getHome(provider),
       exploreAPI.getCharts(provider),
     ]);
+
+    if (activeProviderRef.current !== provider) return;
 
     setState((s) => {
       const errors: string[] = [];

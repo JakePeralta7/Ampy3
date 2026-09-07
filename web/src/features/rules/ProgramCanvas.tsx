@@ -15,7 +15,7 @@ import {
   useNodesState,
   useReactFlow,
 } from "@xyflow/react";
-import { AlignLeft, Copy, LayoutGrid } from "lucide-react";
+import { AlignLeft, ChevronLeft, ChevronRight, Copy, LayoutGrid } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "@xyflow/react/dist/style.css";
 
@@ -196,6 +196,8 @@ export function ProgramCanvasInner({
   const [selectedEdge, setSelectedEdge] = useState<Edge | null>(null);
   const [nodeName, setNodeName] = useState("");
   const [hasBreakpoint, setHasBreakpoint] = useState(false);
+  const [showNodePalette, setShowNodePalette] = useState(true);
+  const [showInspector, setShowInspector] = useState(true);
 
   const nodeTypes = useMemo(() => NODE_COMPONENTS as unknown as NodeTypes, []);
 
@@ -227,6 +229,29 @@ export function ProgramCanvasInner({
       clearTimeout(timer1);
       clearTimeout(timer2);
     };
+  }, []);
+
+  // Keyboard shortcuts for toggling panels (Ctrl+Alt+L for left, Ctrl+Alt+R for right)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        e.target instanceof HTMLSelectElement
+      )
+        return;
+      if ((e.ctrlKey || e.metaKey) && e.altKey) {
+        if (e.key === "l" || e.key === "L") {
+          e.preventDefault();
+          setShowNodePalette((prev) => !prev);
+        } else if (e.key === "r" || e.key === "R") {
+          e.preventDefault();
+          setShowInspector((prev) => !prev);
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
   const onConnect = useCallback(
@@ -454,6 +479,21 @@ export function ProgramCanvasInner({
         >
           Tidy Up
         </Button>
+        {/* Toggle panels */}
+        <Button
+          variant="ghost"
+          size="xs"
+          icon={<ChevronLeft size={14} />}
+          onClick={() => setShowNodePalette((prev) => !prev)}
+          title="Toggle node palette (Ctrl+Alt+L)"
+        />
+        <Button
+          variant="ghost"
+          size="xs"
+          icon={<ChevronRight size={14} />}
+          onClick={() => setShowInspector((prev) => !prev)}
+          title="Toggle inspector (Ctrl+Alt+R)"
+        />
         {isDefault ? (
           <Button variant="secondary" size="sm" icon={<Copy size={14} />} onClick={onClone}>
             Clone to Edit
@@ -482,12 +522,12 @@ export function ProgramCanvasInner({
       {/* Body */}
       <div className="flex flex-1 overflow-hidden">
         {/* Left: Node Palette */}
-        <NodePalette onAddNode={isDefault ? () => {} : handleAddNode} />
+        {showNodePalette && <NodePalette onAddNode={isDefault ? () => {} : handleAddNode} />}
 
         {/* Center: Canvas */}
         <div
           ref={reactFlowWrapper}
-          className="flex-1 relative"
+          className="flex-1 relative min-h-0"
           onDrop={onDrop}
           onDragOver={onDragOver}
         >
@@ -529,35 +569,36 @@ export function ProgramCanvasInner({
         </div>
 
         {/* Right: Inspector */}
-        {selectedEdge && !isDefault ? (
-          <div className="w-72 bg-bg-muted border-l border-border p-4 flex-shrink-0">
-            <div className="text-xs text-fg-subtle uppercase tracking-wider mb-3">Connection</div>
-            <div className="text-xs text-fg-muted mb-4 space-y-1">
-              <p>
-                <span className="text-fg-subtle">From:</span> {selectedEdge.source}
-              </p>
-              <p>
-                <span className="text-fg-subtle">To:</span> {selectedEdge.target}
-              </p>
+        {showInspector &&
+          (selectedEdge && !isDefault ? (
+            <div className="w-72 bg-bg-muted border-l border-border p-4 flex-shrink-0">
+              <div className="text-xs text-fg-subtle uppercase tracking-wider mb-3">Connection</div>
+              <div className="text-xs text-fg-muted mb-4 space-y-1">
+                <p>
+                  <span className="text-fg-subtle">From:</span> {selectedEdge.source}
+                </p>
+                <p>
+                  <span className="text-fg-subtle">To:</span> {selectedEdge.target}
+                </p>
+              </div>
+              <Button variant="danger" size="sm" onClick={handleDeleteEdge}>
+                Disconnect
+              </Button>
             </div>
-            <Button variant="danger" size="sm" onClick={handleDeleteEdge}>
-              Disconnect
-            </Button>
-          </div>
-        ) : (
-          <NodeInspector
-            nodeId={selectedNode}
-            nodeType={selectedNodeType}
-            nodeName={nodeName}
-            config={selectedNodeConfig}
-            onNameChange={isDefault ? () => {} : handleNodeNameChange}
-            onConfigChange={isDefault ? () => {} : handleConfigChange}
-            onDelete={isDefault ? () => {} : handleDeleteNode}
-            onBreakpointToggle={isDefault ? () => {} : handleBreakpointToggle}
-            hasBreakpoint={hasBreakpoint}
-            readOnly={isDefault}
-          />
-        )}
+          ) : (
+            <NodeInspector
+              nodeId={selectedNode}
+              nodeType={selectedNodeType}
+              nodeName={nodeName}
+              config={selectedNodeConfig}
+              onNameChange={isDefault ? () => {} : handleNodeNameChange}
+              onConfigChange={isDefault ? () => {} : handleConfigChange}
+              onDelete={isDefault ? () => {} : handleDeleteNode}
+              onBreakpointToggle={isDefault ? () => {} : handleBreakpointToggle}
+              hasBreakpoint={hasBreakpoint}
+              readOnly={isDefault}
+            />
+          ))}
       </div>
 
       {/* Bottom: Test Panel */}

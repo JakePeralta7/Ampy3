@@ -1,9 +1,11 @@
 import { Navigate, type RouteObject, useRoutes } from "react-router-dom";
 import { ProtectedRoute } from "./components/auth/ProtectedRoute";
 import { RequireServer } from "./components/auth/RequireServer";
+import { ExploreLayout } from "./components/Explore/ExploreLayout";
 import { SettingsLayout } from "./components/Settings/SettingsLayout";
 import { AuditLogPage } from "./pages/AuditLog";
-import { ExplorePage } from "./pages/Explore";
+import { ExploreDeezerPage } from "./pages/ExploreDeezerPage";
+import { ExploreYTMusicPage } from "./pages/ExploreYTMusicPage";
 import { HomePage } from "./pages/Home";
 import { LoginPage } from "./pages/Login";
 import { MatchRulesPage } from "./pages/MatchRules";
@@ -12,6 +14,12 @@ import { RuleProgramPage } from "./pages/RuleProgram";
 import { SourcesPage } from "./pages/Sources";
 import { SyncsPage } from "./pages/Syncs";
 import { TargetsPage } from "./pages/Targets";
+
+const protectedServer = (element: React.ReactNode) => (
+  <ProtectedRoute>
+    <RequireServer>{element}</RequireServer>
+  </ProtectedRoute>
+);
 
 export const routes: RouteObject[] = [
   {
@@ -28,43 +36,24 @@ export const routes: RouteObject[] = [
   },
   {
     path: "/",
-    element: (
-      <ProtectedRoute>
-        <RequireServer>
-          <HomePage />
-        </RequireServer>
-      </ProtectedRoute>
-    ),
+    element: protectedServer(<HomePage />),
   },
   {
     path: "/syncs",
-    element: (
-      <ProtectedRoute>
-        <RequireServer>
-          <SyncsPage />
-        </RequireServer>
-      </ProtectedRoute>
-    ),
+    element: protectedServer(<SyncsPage />),
   },
   {
     path: "/explore",
-    element: (
-      <ProtectedRoute>
-        <RequireServer>
-          <ExplorePage />
-        </RequireServer>
-      </ProtectedRoute>
-    ),
+    element: protectedServer(<ExploreLayout />),
+    children: [
+      { index: true, element: <Navigate to="ytmusic" replace /> },
+      { path: "ytmusic", element: <ExploreYTMusicPage /> },
+      { path: "deezer", element: <ExploreDeezerPage /> },
+    ],
   },
   {
     path: "/audit",
-    element: (
-      <ProtectedRoute>
-        <RequireServer>
-          <AuditLogPage />
-        </RequireServer>
-      </ProtectedRoute>
-    ),
+    element: protectedServer(<AuditLogPage />),
   },
   {
     path: "/settings",

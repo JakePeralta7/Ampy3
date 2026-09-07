@@ -1,8 +1,9 @@
-import { Beaker, Plus } from "lucide-react";
+import { Beaker, Plus, SlidersHorizontal } from "lucide-react";
 import { useCallback, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import type { MatchRule } from "../api/rules";
+import { PageLayout } from "../components/layout/PageLayout";
 import { Button } from "../components/ui/Button";
 import { ConfirmDialog } from "../components/ui/ConfirmDialog";
 import { RuleList } from "../features/rules/RuleList";
@@ -10,7 +11,9 @@ import { TestPanel } from "../features/rules/TestPanel";
 import { useMatchRules } from "../hooks/useMatchRules";
 
 /** Minimal starter YAML for a brand-new rule. */
-const STARTER_YAML = `nodes:
+const STARTER_YAML = `name: "New Rule"
+description: "Basic search and compare matching"
+nodes:
   source:
     type: track_source
 
@@ -109,15 +112,12 @@ export function MatchRulesPage() {
   );
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-bg-surface">
-        <div className="flex items-center gap-3">
-          <h1 className="text-sm font-semibold text-fg">Match Rules</h1>
-          <span className="text-xs text-fg-subtle">
-            {rules.length} rule{rules.length !== 1 ? "s" : ""}
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
+    <PageLayout
+      title="Match Rules"
+      icon={<SlidersHorizontal size={28} className="text-fg-muted" />}
+      subtitle={`Configure matching rules • ${rules.length} rule${rules.length !== 1 ? "s" : ""}`}
+      actions={
+        <>
           <Button
             variant="secondary"
             size="xs"
@@ -129,20 +129,18 @@ export function MatchRulesPage() {
           <Button variant="primary" size="xs" icon={<Plus size={12} />} onClick={handleAddRule}>
             Add Rule
           </Button>
-        </div>
-      </div>
-
-      <div className="flex-1 overflow-auto">
-        <RuleList
-          rules={rules}
-          onRuleClick={handleRuleClick}
-          onRulesReorder={handleReorder}
-          onDeleteRule={handleDeleteRule}
-          onToggleActive={handleToggleActive}
-          onCloneRule={handleCloneRule}
-          loading={loading}
-        />
-      </div>
+        </>
+      }
+    >
+      <RuleList
+        rules={rules}
+        onRuleClick={handleRuleClick}
+        onRulesReorder={handleReorder}
+        onDeleteRule={handleDeleteRule}
+        onToggleActive={handleToggleActive}
+        onCloneRule={handleCloneRule}
+        loading={loading}
+      />
 
       {showTest && <TestPanel ruleId={null} />}
 
@@ -155,6 +153,6 @@ export function MatchRulesPage() {
         onConfirm={confirmDeleteRule}
         onCancel={() => setDeleteConfirmRuleId(null)}
       />
-    </div>
+    </PageLayout>
   );
 }

@@ -73,6 +73,16 @@ pnpm run dev         # Vite dev server on :5173 (proxies /api to :8000)
 docker compose up --build    # Full stack: api, worker, web, valkey, postgres
 ```
 
+### Version bump
+
+```bash
+python bump_version.py 0.2.0     # Set an explicit version (X.Y.Z)
+python bump_version.py minor     # Increment major | minor | patch
+python bump_version.py check     # Verify all locations agree; edit nothing
+```
+
+The app version is defined in exactly three places (`pyproject.toml`, `src/app/__init__.py`, `web/package.json`) and must stay in sync. `pyproject.toml` is the source of truth; always use this script instead of editing them by hand. The MusicBrainz user-agent derives from `src.app.__version__` — do not hardcode it anywhere.
+
 ### Database migrations
 
 ```bash

@@ -9,6 +9,7 @@ from typing import Any
 
 import httpx
 
+from src.app import __version__
 from src.app.core.matching import normalize
 
 logger = logging.getLogger(__name__)
@@ -19,8 +20,8 @@ class MusicBrainzResolver:
 
     BASE_URL = "https://musicbrainz.org/ws/2"
 
-    def __init__(self, user_agent: str = "ampy3/0.1.0"):
-        self.headers = {"User-Agent": user_agent}
+    def __init__(self, user_agent: str | None = None):
+        self.headers = {"User-Agent": user_agent or f"ampy3/{__version__}"}
 
     def _get(self, endpoint: str, params: dict[str, Any]) -> dict[str, Any]:
         url = f"{self.BASE_URL}/{endpoint}"

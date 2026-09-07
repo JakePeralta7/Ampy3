@@ -129,7 +129,7 @@ export function TestPanel({ ruleId }: TestPanelProps) {
   const hasResults = result !== null;
 
   return (
-    <div className="border-t border-border bg-bg-muted">
+    <div className="border-t border-border bg-bg-muted flex-shrink-0 overflow-y-auto max-h-96">
       <div className="p-3">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">

@@ -1,9 +1,8 @@
-import { RefreshCw } from "lucide-react";
+import { ScrollText } from "lucide-react";
 import { useMemo } from "react";
 import type { AuditLogEntry } from "../api/audit";
 import { PageLayout } from "../components/layout/PageLayout";
 import { Badge } from "../components/ui/Badge";
-import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { type Column, DataTable } from "../components/ui/DataTable";
 import { useAuditLogs } from "../hooks/useAuditLogs";
@@ -46,7 +45,7 @@ interface AuditLogPageProps {
 }
 
 export function AuditLogPage({ limit = 100 }: AuditLogPageProps) {
-  const { logs, loading, total, refresh } = useAuditLogs(limit);
+  const { logs, loading, total } = useAuditLogs(limit);
 
   const columns: Column<AuditLogEntry>[] = useMemo(
     () => [
@@ -85,15 +84,7 @@ export function AuditLogPage({ limit = 100 }: AuditLogPageProps) {
   );
 
   return (
-    <PageLayout
-      title="Audit Log"
-      subtitle="Track of all important operations in the system"
-      actions={
-        <Button onClick={refresh} icon={<RefreshCw size={14} />} variant="secondary" size="sm">
-          Refresh
-        </Button>
-      }
-    >
+    <PageLayout title="Audit Log" icon={<ScrollText size={28} className="text-fg-muted" />}>
       <Card padding="none">
         <div className="p-4 pb-0">
           <DataTable columns={columns} data={logs} keyExtractor={(r) => r.id} loading={loading} />

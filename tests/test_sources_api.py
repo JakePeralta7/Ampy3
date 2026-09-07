@@ -86,6 +86,33 @@ async def test_test_source_ytmusic_failure(monkeypatch) -> None:
     assert result.error and "do not authenticate" in result.error
 
 
+async def test_test_source_ytmusic_uses_stored_auth_when_empty_body(monkeypatch) -> None:
+    captured = {}
+
+    def _validate(raw):
+        captured["raw"] = raw
+
+    monkeypatch.setattr("src.app.api.sources.validate_ytmusic_auth", _validate)
+    monkeypatch.setattr(
+        "src.app.api.sources.get_ytmusic_auth",
+        lambda: {"Authorization": "SAPISIDHASH stored", "Cookie": "stored"},
+    )
+    result = await sources_api.test_source(
+        SourceTestRequest(source_id="youtube_music"), _user={"id": "user"}
+    )
+    assert result.ok is True
+    assert captured["raw"] == '{"Authorization": "SAPISIDHASH stored", "Cookie": "stored"}'
+
+
+async def test_test_source_ytmusic_fails_when_no_stored_auth(monkeypatch) -> None:
+    monkeypatch.setattr("src.app.api.sources.get_ytmusic_auth", lambda: None)
+    result = await sources_api.test_source(
+        SourceTestRequest(source_id="youtube_music"), _user={"id": "user"}
+    )
+    assert result.ok is False
+    assert result.error and "No authentication payload provided" in result.error
+
+
 def test_get_ytmusic_auth_returns_none_when_unset(monkeypatch) -> None:
     monkeypatch.setattr("src.app.services.ytauth._stored_ytmusic_auth", lambda: "")
     monkeypatch.setattr("src.app.settings.settings.ytmusic_auth", "")

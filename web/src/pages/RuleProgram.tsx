@@ -1,7 +1,9 @@
+import { SlidersHorizontal } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { type MatchRule, type MatchRuleCanvas, matchRulesAPI } from "../api/rules";
+import { PageLayout } from "../components/layout/PageLayout";
 import { LoadingSpinner } from "../components/ui/LoadingSpinner";
 import { ProgramCanvas } from "../features/rules/ProgramCanvas";
 import { getErrorMessage } from "../lib/utils";
@@ -39,10 +41,7 @@ export function RuleProgramPage() {
       if (!rule || !numericId) return;
       setSaving(true);
       try {
-        // Build a minimal YAML from the canvas node/edge structure.
-        // The backend's yaml_content field is required, so we construct
-        // a YAML string client-side from the canvas and send it.
-        const yamlContent = canvasToYaml(rule.name, canvas);
+        const yamlContent = canvasToYaml(rule.name, canvas, rule.description ?? null);
         const updated = await matchRulesAPI.update(numericId, {
           name: rule.name,
           yaml_content: yamlContent,
@@ -78,20 +77,26 @@ export function RuleProgramPage() {
   }
 
   return (
-    <div className="flex flex-col h-full">
-      <ProgramCanvas
-        ruleId={numericId}
-        ruleName={rule.name}
-        isDefault={rule.is_default}
-        canvas={rule.canvas || { nodes: [], edges: [] }}
-        onCanvasChange={handleCanvasChange}
-        onNameChange={handleNameChange}
-        onBack={handleBack}
-        onSave={handleSave}
-        onClone={handleClone}
-        saving={saving}
-      />
-    </div>
+    <PageLayout
+      title={rule.name}
+      icon={<SlidersHorizontal size={28} className="text-fg-muted" />}
+      subtitle="Rule program canvas"
+    >
+      <div className="h-[calc(100dvh-16rem)]">
+        <ProgramCanvas
+          ruleId={numericId}
+          ruleName={rule.name}
+          isDefault={rule.is_default}
+          canvas={rule.canvas || { nodes: [], edges: [] }}
+          onCanvasChange={handleCanvasChange}
+          onNameChange={handleNameChange}
+          onBack={handleBack}
+          onSave={handleSave}
+          onClone={handleClone}
+          saving={saving}
+        />
+      </div>
+    </PageLayout>
   );
 }
 
@@ -99,9 +104,16 @@ export function RuleProgramPage() {
  * Minimal client-side canvas → YAML serialiser.
  * Mirrors the Python backend's canvas_to_yaml().
  */
-function canvasToYaml(ruleName: string, canvas: MatchRuleCanvas): string {
+function canvasToYaml(
+  ruleName: string,
+  canvas: MatchRuleCanvas,
+  description?: string | null,
+): string {
   const lines: string[] = [];
   lines.push(`name: ${JSON.stringify(ruleName)}`);
+  if (description) {
+    lines.push(`description: ${JSON.stringify(description)}`);
+  }
   lines.push("nodes:");
 
   for (const node of canvas.nodes) {

@@ -2,6 +2,7 @@ import {
   AlertTriangle,
   CalendarClock,
   Clock,
+  LayoutDashboard,
   ListMusic,
   Pause,
   Play,
@@ -54,10 +55,7 @@ export function HomePage() {
   }, [syncs]);
 
   return (
-    <PageLayout
-      title="Dashboard"
-      subtitle="Keep your target playlists synced with YouTube Music and other sources"
-    >
+    <PageLayout title="Dashboard" icon={<LayoutDashboard size={28} className="text-fg-muted" />}>
       {loading && syncs.length === 0 ? (
         <div className="text-fg-muted py-12 text-center">Loading...</div>
       ) : (

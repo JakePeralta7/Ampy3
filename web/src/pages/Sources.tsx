@@ -1,23 +1,12 @@
-import { CheckCircle, Info, Plug, Save, XCircle } from "lucide-react";
-import deezerSvg from "../assets/deezer.svg";
-import ytmusicSvg from "../assets/ytmusic.svg";
+import { CheckCircle, Info, Plug, Radio, Save, XCircle } from "lucide-react";
 import { PageLayout } from "../components/layout/PageLayout";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { FormField } from "../components/ui/FormField";
 import { Skeleton } from "../components/ui/Skeleton";
+import { DeezerIcon, YouTubeMusicIcon } from "../components/ui/SourceIcon";
 import { useSources } from "../hooks/useSources";
 import { SOURCE_YOUTUBE_MUSIC } from "../lib/constants";
-
-function YouTubeMusicIcon({ size = 20 }: { size?: number }) {
-  return (
-    <img src={ytmusicSvg} alt="YouTube Music" width={size} height={size} className="shrink-0" />
-  );
-}
-
-function DeezerIcon({ size = 20 }: { size?: number }) {
-  return <img src={deezerSvg} alt="Deezer" width={size} height={size} className="shrink-0" />;
-}
 
 function StatusBadge({ authenticated }: { authenticated: boolean }) {
   return authenticated ? (
@@ -57,7 +46,7 @@ function YouTubeMusicSection({
     <Card className="p-6 space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-lg font-semibold text-fg">
-          <YouTubeMusicIcon />
+          <YouTubeMusicIcon size={20} />
           YouTube Music
         </div>
         <StatusBadge authenticated={authSet} />
@@ -127,7 +116,7 @@ function DeezerSection() {
     <Card className="p-6 space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-lg font-semibold text-fg">
-          <DeezerIcon />
+          <DeezerIcon size={20} />
           Deezer
         </div>
         <span className="inline-flex items-center gap-1 text-xs font-medium text-fg-subtle bg-bg-muted rounded-full px-2 py-0.5">
@@ -166,7 +155,12 @@ export function SourcesPage() {
   }
 
   return (
-    <PageLayout title="" maxWidth="md">
+    <PageLayout
+      title="Sources"
+      subtitle="Configure music sources"
+      icon={<Radio size={28} className="text-fg-muted" />}
+      maxWidth="md"
+    >
       <div className="space-y-8">
         <YouTubeMusicSection
           authSet={authSet}

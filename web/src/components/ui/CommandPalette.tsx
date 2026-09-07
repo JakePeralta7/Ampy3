@@ -2,7 +2,7 @@ import { type LucideIcon, Search } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-interface PaletteItem {
+export interface PaletteItem {
   to: string;
   label: string;
   icon: LucideIcon;

@@ -1,3 +1,4 @@
+import { Music2, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -226,35 +227,34 @@ export function SyncsPage() {
   return (
     <PageLayout
       title="Syncs"
-      subtitle="Manage your scheduled playlist syncs"
+      icon={<Music2 size={28} className="text-fg-muted" />}
       actions={
         <Button
+          variant="primary"
+          icon={<Plus size={14} />}
           onClick={() => {
             setEditingSync(null);
             setIsFormModalOpen(true);
           }}
-          icon={<span>+</span>}
         >
           Add Schedule
         </Button>
       }
     >
-      <div>
-        <SchedulesList
-          syncs={syncs}
-          loading={loading}
-          error={error}
-          refreshing={refreshing}
-          onEdit={handleEdit}
-          onDelete={handleDelete}
-          onToggleActive={handleToggleActive}
-          onSyncNow={handleSyncNow}
-          onViewDetails={handleViewDetails}
-          onBulkSyncNow={handleBulkSyncNow}
-          onBulkToggleActive={handleBulkToggleActive}
-          onBulkDelete={handleBulkDelete}
-        />
-      </div>
+      <SchedulesList
+        syncs={syncs}
+        loading={loading}
+        error={error}
+        refreshing={refreshing}
+        onEdit={handleEdit}
+        onDelete={handleDelete}
+        onToggleActive={handleToggleActive}
+        onSyncNow={handleSyncNow}
+        onViewDetails={handleViewDetails}
+        onBulkSyncNow={handleBulkSyncNow}
+        onBulkToggleActive={handleBulkToggleActive}
+        onBulkDelete={handleBulkDelete}
+      />
 
       <ScheduleFormModal
         isOpen={isFormModalOpen}

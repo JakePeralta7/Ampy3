@@ -24,6 +24,7 @@ export interface MatchRuleCanvas {
 export interface MatchRule {
   id: number;
   name: string;
+  description?: string | null;
   priority: number;
   is_active: boolean;
   is_default: boolean;

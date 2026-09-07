@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from src.app import __version__
 from src.app.core.musicbrainz import MusicBrainzResolver
 from src.app.core.providers.base import BaseMetadataProvider
 
@@ -14,8 +15,8 @@ class MusicBrainzProvider(BaseMetadataProvider):
     provider_id = "musicbrainz"
     display_name = "MusicBrainz"
 
-    def __init__(self, user_agent: str = "ampy3/0.1.0") -> None:
-        self._resolver = MusicBrainzResolver(user_agent=user_agent)
+    def __init__(self, user_agent: str | None = None) -> None:
+        self._resolver = MusicBrainzResolver(user_agent=user_agent or f"ampy3/{__version__}")
 
     def search_recording(
         self,

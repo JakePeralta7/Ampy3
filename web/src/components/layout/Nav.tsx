@@ -13,13 +13,35 @@ import {
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
+import { DeezerIcon, YouTubeMusicIcon } from "../ui/SourceIcon";
 
 const COLLAPSE_KEY = "ampy3:sidebar-collapsed";
 
-const links = [
+type SubLink = {
+  path: string;
+  label: string;
+  icon?: (props: { size?: number }) => ReturnType<typeof YouTubeMusicIcon>;
+};
+
+type NavLink = {
+  path: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  sub?: SubLink[];
+};
+
+export const links: NavLink[] = [
   { path: "/", label: "Dashboard", icon: LayoutDashboard },
   { path: "/syncs", label: "Syncs", icon: Music2 },
-  { path: "/explore", label: "Explore", icon: Compass },
+  {
+    path: "/explore",
+    label: "Explore",
+    icon: Compass,
+    sub: [
+      { path: "/explore/ytmusic", label: "YouTube Music", icon: YouTubeMusicIcon },
+      { path: "/explore/deezer", label: "Deezer", icon: DeezerIcon },
+    ],
+  },
   { path: "/audit", label: "Audit Log", icon: ScrollText },
   {
     path: "/settings",
@@ -54,7 +76,8 @@ export function Nav() {
   }, [collapsed]);
 
   const isActive = (path: string) =>
-    path === "/settings" && location.pathname.startsWith("/settings")
+    (path === "/settings" && location.pathname.startsWith("/settings")) ||
+    (path === "/explore" && location.pathname.startsWith("/explore"))
       ? true
       : location.pathname === path;
 
@@ -108,6 +131,7 @@ export function Nav() {
                             : "text-fg-subtle hover:bg-bg-muted hover:text-fg"
                         }`}
                       >
+                        {sub.icon && <sub.icon size={16} />}
                         {sub.label}
                       </Link>
                     );

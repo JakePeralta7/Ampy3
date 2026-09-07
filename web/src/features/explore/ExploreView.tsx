@@ -1,20 +1,27 @@
 import { RefreshCw, Search, X } from "lucide-react";
 import { useState } from "react";
-import type { ExploreItemOut } from "../api/explore";
-import { PageLayout } from "../components/layout/PageLayout";
-import { Button } from "../components/ui/Button";
-import { Card } from "../components/ui/Card";
-import { LoadingSpinner } from "../components/ui/LoadingSpinner";
-import { ExploreSection } from "../features/explore/ExploreSection";
-import { MoodGrid } from "../features/explore/MoodGrid";
-import { SourcePlaylistModal } from "../features/explore/SourcePlaylistModal";
-import { useExplore } from "../hooks/useExplore";
-import { INPUT_STYLES } from "../lib/styles";
+import type { ExploreItemOut } from "../../api/explore";
+import { PageLayout } from "../../components/layout/PageLayout";
+import { Button } from "../../components/ui/Button";
+import { Card } from "../../components/ui/Card";
+import { LoadingSpinner } from "../../components/ui/LoadingSpinner";
+import { DeezerIcon, YouTubeMusicIcon } from "../../components/ui/SourceIcon";
+import { useExplore } from "../../hooks/useExplore";
+import { INPUT_STYLES } from "../../lib/styles";
+import { ExploreSection } from "./ExploreSection";
+import { MoodGrid } from "./MoodGrid";
+import { SourcePlaylistModal } from "./SourcePlaylistModal";
 
-export function ExplorePage() {
+export function ExploreView({
+  provider,
+  title,
+  subtitle,
+}: {
+  provider: string;
+  title: string;
+  subtitle: string;
+}) {
   const {
-    providers,
-    activeProvider,
     moods,
     moodPlaylists,
     selectedMoodId,
@@ -25,11 +32,10 @@ export function ExplorePage() {
     loading,
     error,
     selectMood,
-    setProvider,
     runSearch,
     clearSearch,
     refresh,
-  } = useExplore();
+  } = useExplore({ initialProvider: provider });
 
   const [query, setQuery] = useState("");
   const [selectedItem, setSelectedItem] = useState<ExploreItemOut | null>(null);
@@ -52,8 +58,9 @@ export function ExplorePage() {
 
   return (
     <PageLayout
-      title="Explore"
-      subtitle="Discover new music from your connected sources"
+      title={title}
+      subtitle={subtitle}
+      icon={provider === "deezer" ? <DeezerIcon size={28} /> : <YouTubeMusicIcon size={28} />}
       actions={
         <Button
           onClick={refresh}
@@ -66,24 +73,6 @@ export function ExplorePage() {
         </Button>
       }
     >
-      {providers.length > 0 && (
-        <div className="mb-6 flex gap-1 border-b border-border pb-3">
-          {providers.map((p) => (
-            <button
-              key={p.provider_id}
-              onClick={() => setProvider(p.provider_id)}
-              className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors duration-fast focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none ${
-                p.provider_id === activeProvider
-                  ? "bg-accent-500 text-accent-fg"
-                  : "text-fg-muted hover:bg-bg-muted hover:text-fg"
-              }`}
-            >
-              {p.display_name}
-            </button>
-          ))}
-        </div>
-      )}
-
       <Card variant="bordered" padding="md" className="mb-6">
         <form onSubmit={handleSubmit} className="flex gap-2">
           <div className="relative flex-1">
@@ -121,14 +110,14 @@ export function ExplorePage() {
         searchResults.length > 0 ? (
           <Card variant="bordered" padding="md" className="mb-6">
             <ExploreSection
-              title={`Results for “${searchQuery}”`}
+              title={`Results for "${searchQuery}"`}
               items={searchResults}
               onSelect={setSelectedItem}
             />
           </Card>
         ) : (
           <Card variant="bordered" padding="md" className="mb-6">
-            <p className="text-sm text-fg-muted">No playlists found for “{searchQuery}”.</p>
+            <p className="text-sm text-fg-muted">No playlists found for "{searchQuery}".</p>
           </Card>
         )
       ) : (

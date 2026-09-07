@@ -12,6 +12,7 @@ class MatchRuleOut(BaseModel):
 
     id: int
     name: str
+    description: str | None = None
     priority: int
     is_active: bool
     is_default: bool
@@ -127,16 +128,19 @@ def _model_to_out(rule: Any) -> MatchRuleOut:
 
     # Compute canvas from YAML; fall back to empty canvas on error
     canvas: dict[str, Any] = {"nodes": [], "edges": []}
+    description: str | None = None
     if rule.yaml_content:
         try:
             rule_def = validate_rule_yaml(rule.yaml_content)
             canvas = yaml_to_canvas(rule_def)
+            description = rule_def.description
         except Exception:
             pass  # Malformed rule — canvas stays empty
 
     return MatchRuleOut(
         id=rule.id,
         name=rule.name,
+        description=description,
         priority=rule.priority,
         is_active=rule.is_active,
         is_default=rule.is_default,

@@ -1,21 +1,41 @@
-import { Cog, Compass, GitBranch, LayoutDashboard, Music2, ScrollText } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { Toaster } from "sonner";
-import { AppRoutes } from "../../router";
-import { CommandPalette } from "../ui/CommandPalette";
-import { ErrorBoundary } from "../ui/ErrorBoundary";
-import { Nav } from "./Nav";
 
-const paletteItems = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/syncs", label: "Syncs", icon: Music2 },
-  { to: "/explore", label: "Explore", icon: Compass },
-  { to: "/audit", label: "Audit Log", icon: ScrollText },
-  { to: "/settings/config", label: "Settings", icon: Cog },
-  { to: "/settings/config", label: "Config", icon: Cog, parentLabel: "Settings" },
-  { to: "/settings/matching", label: "Match Rules", icon: GitBranch, parentLabel: "Settings" },
-];
+import { AppRoutes } from "../../router";
+import { CommandPalette, type PaletteItem } from "../ui/CommandPalette";
+import { ErrorBoundary } from "../ui/ErrorBoundary";
+import { links, Nav } from "./Nav";
+
+function linksToPaletteItems(navLinks: typeof links): PaletteItem[] {
+  const items: PaletteItem[] = [];
+  const subIcon = ChevronRight; // default icon for sub-items
+
+  for (const link of navLinks) {
+    if (link.sub) {
+      // Sub-menu items (e.g., Settings > Sources/Targets/Match Rules)
+      for (const sub of link.sub) {
+        items.push({
+          to: sub.path,
+          label: sub.label,
+          icon: subIcon,
+          parentLabel: link.label,
+        });
+      }
+    } else {
+      // Top-level item (no sub-menu)
+      items.push({
+        to: link.path,
+        label: link.label,
+        icon: link.icon,
+      });
+    }
+  }
+  return items;
+}
+
+const PALETTE_ITEMS = linksToPaletteItems(links);
 
 export function AppLayout() {
   const location = useLocation();
@@ -59,7 +79,7 @@ export function AppLayout() {
           <AppRoutes />
         </ErrorBoundary>
       </main>
-      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} items={paletteItems} />
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} items={PALETTE_ITEMS} />
       <Toaster
         theme={theme}
         position="bottom-right"

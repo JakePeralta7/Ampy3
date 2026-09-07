@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { getConfiguredTargets } from "../../api/settings";
 import { LoadingSpinner } from "../ui/LoadingSpinner";
@@ -8,10 +8,6 @@ interface ServerContextValue {
 }
 
 const ServerContext = createContext<ServerContextValue>({ configured: null });
-
-export function useServerConfigured() {
-  return useContext(ServerContext).configured;
-}
 
 export function RequireServer({ children }: { children: React.ReactNode }) {
   const [configured, setConfigured] = useState<boolean | null>(null);

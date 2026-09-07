@@ -1,6 +1,7 @@
 """Source discovery and connection test endpoints."""
 
 import asyncio
+import json
 import logging
 from typing import Any
 
@@ -54,7 +55,15 @@ async def test_source(
     """
     if body.source_id == SOURCE_YOUTUBE_MUSIC:
         try:
-            await asyncio.to_thread(validate_ytmusic_auth, body.auth or "")
+            raw_auth = (body.auth or "").strip()
+            if not raw_auth:
+                stored = get_ytmusic_auth()
+                if stored is None:
+                    raise ValueError(
+                        "No authentication payload provided. Paste credentials or save them first."
+                    )
+                raw_auth = json.dumps(stored)
+            await asyncio.to_thread(validate_ytmusic_auth, raw_auth)
             return SourceTestResponse(ok=True)
         except Exception as exc:
             logger.warning("Source test failed for %s: %s", body.source_id, exc)

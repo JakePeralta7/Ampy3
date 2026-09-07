@@ -1,4 +1,4 @@
-import { CheckCircle, Plug, Save, XCircle } from "lucide-react";
+import { CheckCircle, Plug, Save, Server, XCircle } from "lucide-react";
 import jellyfinSvg from "../assets/jellyfin.svg";
 import plexSvg from "../assets/plex.svg";
 import { PageLayout } from "../components/layout/PageLayout";
@@ -142,7 +142,12 @@ export function TargetsPage() {
   }
 
   return (
-    <PageLayout title="" maxWidth="md">
+    <PageLayout
+      title="Targets"
+      subtitle="Configure media servers"
+      icon={<Server size={28} className="text-fg-muted" />}
+      maxWidth="md"
+    >
       <div className="space-y-8">
         <TargetSection
           title="Plex Media Server"
