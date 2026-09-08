@@ -153,9 +153,9 @@ export function ExploreView({
         ) : (
           <>
             {moods && moods.length > 0 && (
-              <MoodGrid 
-                moods={moods} 
-                selectedMoodId={selectedMoodId} 
+              <MoodGrid
+                moods={moods}
+                selectedMoodId={selectedMoodId}
                 onSelect={selectMood}
                 isCompact={!!selectedMoodId}
               />
