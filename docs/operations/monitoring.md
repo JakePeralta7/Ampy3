@@ -112,7 +112,7 @@ docker compose exec worker celery -A app.worker.app control revoke <task_id> --t
 
 ## Valkey cache
 
-Source playlist fetches are cached for `SOURCE_PLAYLIST_CACHE_TTL_SECONDS` (default 300s) — see [`get_valkey_client`][app.services.get_valkey_client]. Clear if you've changed a playlist on the source and want a fresh fetch *now*:
+Upstream platform data is cached inside the shared clients in `app.core.clients` (used by both syncs and Explore): playlist fetches for `SOURCE_PLAYLIST_CACHE_TTL_SECONDS` (default 300s) and Explore content for `EXPLORE_CACHE_TTL_SECONDS` (default 900s). Keys look like `youtube_music:get_playlist:PL…`, `youtube_music:get_home:session:…`, `deezer:get_moods`. Clear if you've changed a playlist on the source and want a fresh fetch *now*:
 
 ```bash
 docker compose exec valkey redis-cli FLUSHDB

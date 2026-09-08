@@ -12,7 +12,7 @@ src/                  # Python backend (FastAPI + Celery)
   app/
     api/              # FastAPI route handlers (registered via register_routers)
     auth/             # Plex SSO authentication (tokens, session middleware)
-    core/             # Domain logic: targets/, sources/, providers/, matching, explore/
+    core/             # Domain logic: clients/, targets/, sources/, providers/, matching, explore/
     match_rules/      # YAML-based match rule schema, parser, loader, defaults/
     models.py         # ORM models (SQLAlchemy 2.0 mapped_column style)
     schemas/          # Pydantic request/response schemas
@@ -101,6 +101,7 @@ Alembic migrations run automatically at API startup via `src/app/db.py:init_db()
 - **Service container**: `src/app/services/__init__.py` provides lazy singletons via `get_celery_app()`, `get_valkey_client()`, `get_sync_target()`, etc. Use these instead of creating clients directly.
 - **Target registry**: Sync targets (Plex, Jellyfin) register via `@register_target` in `src/app/core/targets/`. Use `get_sync_target("Plex")` to obtain an instance.
 - **Source registry**: Music sources (YouTube Music, Deezer) register in `src/app/core/sources/`.
+- **Shared source clients**: `src/app/core/clients/` holds one cached client per platform (`YouTubeMusicClient`, `DeezerClient`) used by **both** the sync sources and the Explore providers. Obtain them via `get_ytmusic_client()` / `get_deezer_client()`. Caching lives inside the client — Valkey keys `{source}:{method}:{...}`; playlist fetches use `SOURCE_PLAYLIST_CACHE_TTL_SECONDS`, Explore content `EXPLORE_CACHE_TTL_SECONDS`. YT home keys are annotated with a session fingerprint, so a re-auth never serves the previous session's personalised feed.
 - **Settings**: All config is in `src/app/settings.py` as a Pydantic `BaseSettings` singleton. No `.env` template files — env vars are the source of truth. See `.env.example` for reference.
 - **CORS**: When `REQUIRE_AUTH=true`, only `APP_URL` is allowed. Otherwise `*`.
 - **Docs site**: MkDocs + Material + mkdocstrings under `docs/` (built to `site/`, wired via `.readthedocs.yaml`). `dev` building needs the `docs` extra (`pip install -e ".[docs]"` then `mkdocs serve`). `docs/development/architecture.md` has deeper backend context than this file.

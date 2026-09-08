@@ -10,7 +10,7 @@ src/                       # Python backend (FastAPI + Celery)
   app/
     api/                   # Route handlers, registered via register_routers
     services/              # Service layer with lazy singletons
-    core/                  # Domain code: matching, sources, targets, nodes, explore
+    core/                  # Domain code: clients, sources, targets, matching, nodes, explore
     auth/                  # Plex SSO + session middleware
     worker/                # Celery tasks, SyncPipeline, phases
     db.py                  # SQLAlchemy engines (async + sync)
@@ -46,6 +46,16 @@ target     = await get_sync_target()  # TargetService — async because construc
 ```
 
 Each service subclasses [`ServiceBase`][app.services.base.ServiceBase] and exposes `get_instance()` / `reset()`. `reset()` is used in tests to drop state between cases.
+
+## Shared source clients (`core/clients/`)
+
+The sync sources and the Explore providers hit the **same** upstream platforms (YouTube Music, Deezer). To avoid duplicating network calls, `src/app/core/clients/` holds one client class per platform:
+
+- [`YouTubeMusicClient`][app.core.clients.ytmusic.YouTubeMusicClient] — wraps the synchronous `ytmusicapi` SDK behind an async interface. Calls are serialised through one `asyncio.to_thread` under a lock (the SDK is not thread-safe); the lock rebinds to the current running loop because Celery workers use `asyncio.run()` — a fresh event loop per task.
+- [`DeezerClient`][app.core.clients.deezer.DeezerClient] — wraps `httpx` against `api.deezer.com`.
+- [`MusicSourceClient`][app.core.clients.base.MusicSourceClient] — base class with the Valkey cache machinery (`_cached` / `_cache_get` / `_cache_set`).
+
+Both sync sources and Explore providers obtain these via `get_ytmusic_client()` / `get_deezer_client()` (from `app.core.clients` or the service container), so they share the same cache entries. Playlist fetches cache under `SOURCE_PLAYLIST_CACHE_TTL_SECONDS`, Explore under `EXPLORE_CACHE_TTL_SECONDS`. `get_home()` keys are annotated with the current auth-session fingerprint so a re-auth never serves the previous session's personalized feed.
 
 ## Lifespan
 

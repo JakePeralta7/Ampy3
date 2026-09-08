@@ -1,14 +1,18 @@
-import { RefreshCw, Search, X } from "lucide-react";
-import { useState } from "react";
+import { Loader2, RefreshCw, Search, X } from "lucide-react";
+import { useEffect, useState } from "react";
 import type { ExploreItemOut } from "../../api/explore";
+import { settingsAPI } from "../../api/settings";
 import { PageLayout } from "../../components/layout/PageLayout";
+import { Alert } from "../../components/ui/Alert";
 import { Button } from "../../components/ui/Button";
-import { Card } from "../../components/ui/Card";
-import { LoadingSpinner } from "../../components/ui/LoadingSpinner";
 import { DeezerIcon, YouTubeMusicIcon } from "../../components/ui/SourceIcon";
 import { useExplore } from "../../hooks/useExplore";
+import { SOURCE_YOUTUBE_MUSIC } from "../../lib/constants";
 import { INPUT_STYLES } from "../../lib/styles";
+import { AuthNotice } from "./AuthNotice";
+import { ExploreHero } from "./ExploreHero";
 import { ExploreSection } from "./ExploreSection";
+import { ExploreSkeleton } from "./ExploreSkeleton";
 import { MoodGrid } from "./MoodGrid";
 import { SourcePlaylistModal } from "./SourcePlaylistModal";
 
@@ -27,6 +31,7 @@ export function ExploreView({
     selectedMoodId,
     home,
     charts,
+    providers,
     searchResults,
     searchQuery,
     loading,
@@ -39,11 +44,31 @@ export function ExploreView({
 
   const [query, setQuery] = useState("");
   const [selectedItem, setSelectedItem] = useState<ExploreItemOut | null>(null);
+  const [ytmusicAuthSet, setYtmusicAuthSet] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    settingsAPI
+      .getSettings()
+      .then((settings) => {
+        if (!cancelled) setYtmusicAuthSet(settings.ytmusic_auth_set);
+      })
+      .catch(() => {
+        if (!cancelled) setYtmusicAuthSet(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     runSearch(query);
   };
+
+  const currentProvider = providers.find((p) => p.provider_id === provider);
+  const showAuthNotice =
+    provider === SOURCE_YOUTUBE_MUSIC && Boolean(currentProvider?.auth_required) && !ytmusicAuthSet;
 
   const chartSections: { title: string; items: ExploreItemOut[] }[] = [];
   if (charts?.top_songs.length) {
@@ -55,6 +80,10 @@ export function ExploreView({
   if (charts?.top_videos.length) {
     chartSections.push({ title: "Top Videos", items: charts.top_videos });
   }
+
+  const heroItem = charts?.top_songs[0] ?? home?.sections[0]?.items[0];
+
+  const initialLoading = loading && !moods && !home && !charts && searchResults === null;
 
   return (
     <PageLayout
@@ -73,8 +102,11 @@ export function ExploreView({
         </Button>
       }
     >
-      <Card variant="bordered" padding="md" className="mb-6">
-        <form onSubmit={handleSubmit} className="flex gap-2">
+      <div className="flex flex-col gap-10">
+        <form
+          onSubmit={handleSubmit}
+          className="flex gap-2 rounded-xl border border-border bg-bg-surface p-3 shadow-sm"
+        >
           <div className="relative flex-1">
             <Search
               size={16}
@@ -96,79 +128,93 @@ export function ExploreView({
             </Button>
           )}
         </form>
-      </Card>
 
-      {loading && !moods && !home && !charts && <LoadingSpinner fullPage />}
+        {error && (
+          <Alert variant="error" className="mb-2">
+            {error}
+          </Alert>
+        )}
 
-      {error && (
-        <Card variant="bordered" padding="md" className="mb-6">
-          <p className="text-sm text-danger-500">{error}</p>
-        </Card>
-      )}
+        {showAuthNotice && <AuthNotice />}
 
-      {searchResults !== null ? (
-        searchResults.length > 0 ? (
-          <Card variant="bordered" padding="md" className="mb-6">
+        {initialLoading ? (
+          <ExploreSkeleton />
+        ) : searchResults !== null ? (
+          searchResults.length > 0 ? (
             <ExploreSection
               title={`Results for "${searchQuery}"`}
               items={searchResults}
               onSelect={setSelectedItem}
+              isSearchResults
             />
-          </Card>
-        ) : (
-          <Card variant="bordered" padding="md" className="mb-6">
+          ) : (
             <p className="text-sm text-fg-muted">No playlists found for "{searchQuery}".</p>
-          </Card>
-        )
-      ) : (
-        <>
-          {chartSections.length > 0 && (
-            <Card variant="bordered" padding="md" className="mb-6">
-              <div className="space-y-6">
-                {chartSections.map((s) => (
-                  <ExploreSection
-                    key={s.title}
-                    title={s.title}
-                    items={s.items}
-                    onSelect={setSelectedItem}
-                  />
-                ))}
+          )
+        ) : (
+          <>
+            {moods && moods.length > 0 && (
+              <MoodGrid 
+                moods={moods} 
+                selectedMoodId={selectedMoodId} 
+                onSelect={selectMood}
+                isCompact={!!selectedMoodId}
+              />
+            )}
+
+            {selectedMoodId && loading && moodPlaylists === null && (
+              <div className="flex items-center gap-2 text-sm text-fg-muted">
+                <Loader2 size={16} className="animate-spin" />
+                Loading playlists…
               </div>
-            </Card>
-          )}
+            )}
 
-          {moods && (
-            <Card variant="bordered" padding="md" className="mb-6">
-              <MoodGrid moods={moods} selectedMoodId={selectedMoodId} onSelect={selectMood} />
-            </Card>
-          )}
-
-          {loading && moodPlaylists === null && selectedMoodId && (
-            <Card variant="bordered" padding="md" className="mb-6">
-              <LoadingSpinner />
-            </Card>
-          )}
-
-          {moodPlaylists && selectedMoodId && (
-            <Card variant="bordered" padding="md" className="mb-6">
-              <ExploreSection title="Playlists" items={moodPlaylists} onSelect={setSelectedItem} />
-            </Card>
-          )}
-
-          {home && home.sections.length > 0 && (
-            <div className="space-y-6">
-              {home.sections.map((s) => (
+            {selectedMoodId &&
+              moodPlaylists &&
+              (moodPlaylists.length > 0 ? (
                 <ExploreSection
-                  key={s.title}
-                  title={s.title}
-                  items={s.items}
+                  title="Playlists"
+                  items={moodPlaylists}
                   onSelect={setSelectedItem}
                 />
+              ) : (
+                <p className="text-sm text-fg-muted">No playlists found for this mood/genre.</p>
               ))}
-            </div>
-          )}
-        </>
-      )}
+
+            {!selectedMoodId && (
+              <>
+                {heroItem && <ExploreHero item={heroItem} onSelect={setSelectedItem} />}
+
+                {chartSections.length > 0 && (
+                  <div className="flex flex-col gap-10">
+                    {chartSections.map((s) => (
+                      <ExploreSection
+                        key={s.title}
+                        title={s.title}
+                        items={s.items}
+                        onSelect={setSelectedItem}
+                      />
+                    ))}
+                  </div>
+                )}
+
+                {home && home.sections.length > 0 && (
+                  <div className="flex flex-col gap-10">
+                    {home.sections.map((s) => (
+                      <ExploreSection
+                        key={s.title}
+                        title={s.title}
+                        items={s.items}
+                        onSelect={setSelectedItem}
+                        seeAllLink={s.see_all_link}
+                      />
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </>
+        )}
+      </div>
 
       <SourcePlaylistModal
         item={selectedItem}

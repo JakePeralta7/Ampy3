@@ -49,7 +49,7 @@ export function useExplore(options: UseExploreOptions = {}) {
 
   const activeProviderRef = useRef(state.activeProvider);
 
-  const fetchProviderContent = useCallback(async (provider: string) => {
+  const fetchProviderContent = useCallback(async (provider: string, refresh = false) => {
     activeProviderRef.current = provider;
     setState((s) => ({
       ...initialState,
@@ -59,9 +59,9 @@ export function useExplore(options: UseExploreOptions = {}) {
     }));
 
     const [moodsRes, homeRes, chartsRes] = await Promise.allSettled([
-      exploreAPI.getMoods(provider),
-      exploreAPI.getHome(provider),
-      exploreAPI.getCharts(provider),
+      exploreAPI.getMoods(provider, refresh),
+      exploreAPI.getHome(provider, refresh),
+      exploreAPI.getCharts(provider, refresh),
     ]);
 
     if (activeProviderRef.current !== provider) return;
@@ -95,12 +95,11 @@ export function useExplore(options: UseExploreOptions = {}) {
       setState((s) => ({ ...s, selectedMoodId: null, moodPlaylists: null }));
       return;
     }
-    setState((s) => ({ ...s, loading: true }));
+    setState((s) => ({ ...s, selectedMoodId: moodId, moodPlaylists: null, loading: true }));
     try {
-      const playlists = await exploreAPI.getMoodPlaylists(moodId);
+      const playlists = await exploreAPI.getMoodPlaylists(moodId, activeProviderRef.current);
       setState((s) => ({
         ...s,
-        selectedMoodId: moodId,
         moodPlaylists: playlists,
         loading: false,
       }));
@@ -166,6 +165,6 @@ export function useExplore(options: UseExploreOptions = {}) {
     setProvider,
     runSearch,
     clearSearch: () => setState((s) => ({ ...s, searchResults: null, searchQuery: "" })),
-    refresh: () => fetchProviderContent(state.activeProvider),
+    refresh: () => fetchProviderContent(state.activeProvider, true),
   };
 }

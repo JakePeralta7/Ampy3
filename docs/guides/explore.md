@@ -32,7 +32,7 @@ class YTMusicExploreProvider(ExploreProvider):
 
 | ID | Module | Auth |
 |----|--------|------|
-| `youtube_music` | [`app.core.explore.providers.ytmusic`][app.core.explore.providers.ytmusic] | Required |
+| `youtube_music` | [`app.core.explore.providers.ytmusic`][app.core.explore.providers.ytmusic] | Anonymous (auth unlocks the personalised home feed) |
 | `deezer` | [`app.core.explore.providers.deezer`][app.core.explore.providers.deezer] | Anonymous |
 
 ### `anonymous` providers
@@ -52,6 +52,16 @@ Every provider implements **five** async methods returning typed models from [`a
 | `search_playlists(query)` | `list[`[`ExploreItem`][app.core.explore.models.ExploreItem]`]` — search results. |
 
 Each section is a stream of [`ExploreItem`][app.core.explore.models.ExploreItem]s that the UI renders as a card grid. The "Sync to Plex" button on each card turns it into a regular [sync pipeline](sync-pipeline.md) run.
+
+## Caching
+
+Both bundled providers fetch raw content through the **shared platform clients** in [`app.core.clients`][app.core.clients] — the same clients the sync sources use. This means a playlist you Explore and then a playlist you Sync share one Valkey cache entry per upstream request.
+
+- Every client method caches its raw response in Valkey under a `{source}:{method}:{...}` key. Playlist fetches use `SOURCE_PLAYLIST_CACHE_TTL_SECONDS` (default 300s); Explore content uses `EXPLORE_CACHE_TTL_SECONDS` (default 900s).
+- Caching is **fail-open**: if Valkey is unreachable the client just fetches upstream. Failed upstream fetches are never cached, so a broken API doesn't poison the cache.
+- YouTube Music's personalized home feed is cached under a **session fingerprint** (`youtube_music:get_home:session:{hash}` when authenticated, `youtube_music:get_home:anon` when not). Re-authing via Settings → Sources changes the fingerprint, so the old session's feed is never served and simply expires at its TTL.
+- The **Refresh** button / `?refresh=1` query parameter bypasses the cache for that one request (the response is still written back).
+- To clear cached content manually, see [Operations → Monitoring → Valkey cache](../operations/monitoring.md#valkey-cache).
 
 ## Explore DAG nodes?
 

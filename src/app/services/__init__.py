@@ -16,9 +16,12 @@ logger = logging.getLogger(__name__)
 
 def reset_services() -> None:
     """Reset all service instances (useful for testing)."""
+    from src.app.core.clients import reset_clients
+
     TargetService.reset()
     CeleryService.reset()
     ValkeyService.reset()
+    reset_clients()
     logger.info("All services reset")
 
 
@@ -30,6 +33,20 @@ def get_celery_app() -> Any:
 def get_valkey_client() -> Any:
     """Dependency injection: Get Valkey client instance (lazy singleton)."""
     return ValkeyService.get_instance()
+
+
+def get_ytmusic_client() -> Any:
+    """Dependency injection: Get shared YouTube Music client (lazy singleton)."""
+    from src.app.core.clients import get_ytmusic_client as _get
+
+    return _get()
+
+
+def get_deezer_client() -> Any:
+    """Dependency injection: Get shared Deezer client (lazy singleton)."""
+    from src.app.core.clients import get_deezer_client as _get
+
+    return _get()
 
 
 async def get_sync_target(target_id: str = "Plex") -> Any:
@@ -54,6 +71,8 @@ __all__ = [
     "reset_services",
     "get_celery_app",
     "get_valkey_client",
+    "get_ytmusic_client",
+    "get_deezer_client",
     "get_sync_target",
     "list_sync_targets",
 ]

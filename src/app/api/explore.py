@@ -64,6 +64,7 @@ async def list_providers(
             provider_id=str(p["provider_id"]),
             display_name=str(p["display_name"]),
             anonymous=bool(p["anonymous"]),
+            auth_required=bool(p["auth_required"]),
         )
         for p in ExploreRegistry.list_providers()
     ]
@@ -75,12 +76,13 @@ async def list_providers(
 @router.get("/home", response_model=ExploreHomeOut)
 async def get_home(
     provider: str = Query("youtube_music", description="Provider ID"),
+    refresh: bool = Query(False, description="Bypass the shared client cache"),
     _user: dict[str, Any] = Depends(get_current_user),  # noqa: B008
 ):
     """Return the main Explore page (sections of mixed content)."""
     prov = _provider_instance(provider)
     try:
-        home: ExploreHome = await prov.get_home()
+        home: ExploreHome = await prov.get_home(force=refresh)
     except Exception as exc:
         logger.error("Explore home failed for '%s': %s", provider, exc, exc_info=True)
         raise HTTPException(status_code=502, detail=str(exc)) from exc
@@ -103,12 +105,13 @@ async def get_home(
 @router.get("/charts", response_model=ChartsBundleOut)
 async def get_charts(
     provider: str = Query("youtube_music", description="Provider ID"),
+    refresh: bool = Query(False, description="Bypass the shared client cache"),
     _user: dict[str, Any] = Depends(get_current_user),  # noqa: B008
 ):
     """Return top songs, artists, and videos."""
     prov = _provider_instance(provider)
     try:
-        charts: ChartsBundle = await prov.get_charts()
+        charts: ChartsBundle = await prov.get_charts(force=refresh)
     except Exception as exc:
         logger.error("Explore charts failed for '%s': %s", provider, exc, exc_info=True)
         raise HTTPException(status_code=502, detail=str(exc)) from exc
@@ -126,12 +129,13 @@ async def get_charts(
 @router.get("/moods", response_model=list[MoodCategoryOut])
 async def get_moods(
     provider: str = Query("youtube_music", description="Provider ID"),
+    refresh: bool = Query(False, description="Bypass the shared client cache"),
     _user: dict[str, Any] = Depends(get_current_user),  # noqa: B008
 ):
     """Return available mood / genre categories."""
     prov = _provider_instance(provider)
     try:
-        moods: list[MoodCategory] = await prov.get_moods()
+        moods: list[MoodCategory] = await prov.get_moods(force=refresh)
     except Exception as exc:
         logger.error("Explore moods failed for '%s': %s", provider, exc, exc_info=True)
         raise HTTPException(status_code=502, detail=str(exc)) from exc
@@ -154,12 +158,13 @@ async def get_moods(
 async def get_mood_playlists(
     mood_id: str,
     provider: str = Query("youtube_music", description="Provider ID"),
+    refresh: bool = Query(False, description="Bypass the shared client cache"),
     _user: dict[str, Any] = Depends(get_current_user),  # noqa: B008
 ):
     """Return playlists for a given mood or genre category."""
     prov = _provider_instance(provider)
     try:
-        playlists: list[ExploreItem] = await prov.get_mood_playlists(mood_id)
+        playlists: list[ExploreItem] = await prov.get_mood_playlists(mood_id, force=refresh)
     except Exception as exc:
         logger.error(
             "Explore mood playlists failed for '%s'/%s: %s", provider, mood_id, exc, exc_info=True
@@ -176,12 +181,13 @@ async def get_mood_playlists(
 async def search_playlists(
     q: str = Query(..., min_length=1, description="Search query"),
     provider: str = Query("youtube_music", description="Provider ID"),
+    refresh: bool = Query(False, description="Bypass the shared client cache"),
     _user: dict[str, Any] = Depends(get_current_user),  # noqa: B008
 ):
     """Search a provider for playlists matching *q*."""
     prov = _provider_instance(provider)
     try:
-        results: list[ExploreItem] = await prov.search_playlists(q)
+        results: list[ExploreItem] = await prov.search_playlists(q, force=refresh)
     except Exception as exc:
         logger.error("Explore search failed for '%s': %s", provider, exc, exc_info=True)
         raise HTTPException(status_code=502, detail=str(exc)) from exc

@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     celery_worker_concurrency: int = Field(default=1, ge=1)
     celery_log_level: str = Field(default="info")
     source_playlist_cache_ttl_seconds: int = Field(default=300, ge=1)
+    explore_cache_ttl_seconds: int = Field(default=900, ge=1)
 
     # YouTube Music
     ytmusic_auth: str = ""

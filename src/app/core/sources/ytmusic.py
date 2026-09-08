@@ -2,17 +2,14 @@
 
 from __future__ import annotations
 
-import asyncio
 import re
 from typing import Any
 from urllib import parse as urlparse
 
-from ytmusicapi import YTMusic
-
 from src.app.constants import SOURCE_YOUTUBE_MUSIC, SOURCE_YOUTUBE_MUSIC_DISPLAY
+from src.app.core.clients import get_ytmusic_client
 from src.app.core.models import IPlatformSource, PlaylistMetadata, TrackMetadata
 from src.app.core.sources.registry import register_source
-from src.app.services.ytauth import get_ytmusic_auth
 from src.app.settings import settings
 
 
@@ -68,19 +65,12 @@ class YouTubeMusicSource(IPlatformSource):
             raise ValueError(f"Could not parse playlist ID from: {playlist_url}")
         return playlist_id
 
-    def _client(self) -> YTMusic:
-        return YTMusic(auth=get_ytmusic_auth())
-
     async def _fetch_playlist(self, playlist_url: str) -> PlaylistMetadata:
         from ytmusicapi.exceptions import YTMusicError
 
         playlist_id = self.get_playlist_cache_identifier(playlist_url)
-        client = self._client()
         try:
-            data = await asyncio.wait_for(
-                asyncio.to_thread(client.get_playlist, playlist_id, limit=None),
-                timeout=settings.yt_dlp_timeout,
-            )
+            data = await get_ytmusic_client().get_playlist(playlist_id, limit=None)
         except TimeoutError:
             raise RuntimeError(
                 f"Playlist extraction timed out ({settings.yt_dlp_timeout}s)."

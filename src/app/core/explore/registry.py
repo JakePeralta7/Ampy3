@@ -54,6 +54,7 @@ class ExploreRegistry:
                 "provider_id": provider_class.provider_id,
                 "display_name": provider_class.display_name,
                 "anonymous": provider_class.anonymous,
+                "auth_required": provider_class.auth_required,
             }
             for provider_class in cls._providers.values()
         ]

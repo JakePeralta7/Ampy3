@@ -1,21 +1,17 @@
 """YouTube Music Explore provider.
 
-Wraps the ``ytmusicapi`` library (synchronous) via ``asyncio.to_thread``
-so it integrates cleanly with the async FastAPI stack.
-
-Works fully anonymously.  Endpoints that require an authenticated account
-(such as the personalised home feed) degrade gracefully instead of
-erroring out.
+Fetches raw content through the shared :class:`YouTubeMusicClient` (which
+caches responses in Valkey, shared with the sync source) and maps it to
+Explore models. Works fully anonymously; endpoints that require an
+authenticated account (such as the personalised home feed) degrade
+gracefully instead of erroring out.
 """
 
 from __future__ import annotations
 
-import asyncio
-import json
 import logging
 
-from ytmusicapi import YTMusic
-
+from src.app.core.clients import get_ytmusic_client
 from src.app.core.explore.base import ExploreProvider
 from src.app.core.explore.models import (
     ChartsBundle,
@@ -26,7 +22,6 @@ from src.app.core.explore.models import (
     MoodCategory,
 )
 from src.app.core.explore.registry import register_explore_provider
-from src.app.services.ytauth import get_ytmusic_auth
 
 logger = logging.getLogger(__name__)
 
@@ -97,51 +92,16 @@ class YTMusicExploreProvider(ExploreProvider):
     provider_id = "youtube_music"
     display_name = "YouTube Music"
     anonymous = True
+    auth_required = True
 
-    def __init__(self) -> None:
-        self._client: YTMusic | None = None
-        self._client_auth_key: str | None = None
-
-    # ── client initialisation ───────────────────────────────────────
-
-    def _get_client(self) -> YTMusic:
-        auth = get_ytmusic_auth()
-        key = json.dumps(auth, sort_keys=True) if auth else None
-        if self._client is not None and self._client_auth_key == key:
-            return self._client
-        if auth:
-            logger.debug("Initialising YTMusic with stored credentials")
-            self._client = YTMusic(auth=auth)
-        else:
-            logger.debug("Initialising YTMusic without authentication")
-            self._client = YTMusic()
-        self._client_auth_key = key
-        return self._client
-
-    async def _run(
-        self,
-        method_name: str,
-        *args,
-        fallback=None,
-        **kwargs,
-    ):
-        """Call a ytmusicapi method in a thread; degrade on auth-required errors."""
-        client = self._get_client()
-        method = getattr(client, method_name)
+    async def get_home(self, force: bool = False) -> ExploreHome:
         try:
-            return await asyncio.to_thread(method, *args, **kwargs)
-        except Exception as exc:  # noqa: BLE001 - ytmusicapi raises generic Exception
-            if _AUTH_REQUIRED_HINT in str(exc).lower():
-                logger.warning(
-                    "%s requires an authenticated YouTube Music account; skipping.", method_name
-                )
-                return fallback
-            raise
-
-    # ── interface ───────────────────────────────────────────────────
-
-    async def get_home(self) -> ExploreHome:
-        raw = await self._run("get_home", fallback={})
+            raw = await get_ytmusic_client().get_home(force=force)
+        except Exception as exc:  # noqa: BLE001 - degrade on auth-required errors only
+            if _AUTH_REQUIRED_HINT not in str(exc).lower():
+                raise
+            logger.warning("get_home requires an authenticated YouTube Music account; skipping.")
+            raw = {}
         if not isinstance(raw, dict):
             return ExploreHome(sections=[])
         sections: list[ExploreSection] = []
@@ -170,8 +130,14 @@ class YTMusicExploreProvider(ExploreProvider):
             item_type = ExploreItemType.PLAYLIST
         return _make_item(raw, item_type, "youtube_music")
 
-    async def get_charts(self) -> ChartsBundle:
-        raw = await self._run("get_charts", fallback={})
+    async def get_charts(self, force: bool = False) -> ChartsBundle:
+        try:
+            raw = await get_ytmusic_client().get_charts(force=force)
+        except Exception as exc:  # noqa: BLE001 - degrade on auth-required errors only
+            if _AUTH_REQUIRED_HINT not in str(exc).lower():
+                raise
+            logger.warning("get_charts requires an authenticated YouTube Music account; skipping.")
+            raw = {}
         chart = raw.get(DEFAULT_COUNTRY) if isinstance(raw, dict) else None
         if not isinstance(chart, dict):
             return ChartsBundle()
@@ -190,38 +156,46 @@ class YTMusicExploreProvider(ExploreProvider):
             ],
         )
 
-    async def get_moods(self) -> list[MoodCategory]:
-        client = self._get_client()
-        raw: dict = await asyncio.to_thread(client.get_mood_categories)
+    async def get_moods(self, force: bool = False) -> list[MoodCategory]:
+        raw = await get_ytmusic_client().get_mood_categories(force=force)
+        if not isinstance(raw, dict):
+            return []
         moods = []
+        seen_ids: set[str] = set()
+        seen_names: set[str] = set()
         for _section_name, section_items in raw.items():
             for raw_cat in section_items:
+                mood_id = raw_cat.get("params", "")
+                name = raw_cat.get("title", "")
+                if mood_id in seen_ids or name.casefold() in seen_names:
+                    continue
+                seen_ids.add(mood_id)
+                seen_names.add(name.casefold())
                 moods.append(
                     MoodCategory(
-                        id=raw_cat.get("params", ""),
-                        name=raw_cat.get("title", ""),
+                        id=mood_id,
+                        name=name,
                         icon=None,
                         playlist_count=raw_cat.get("playlistCount"),
                     )
                 )
         return moods
 
-    async def get_mood_playlists(self, mood_id: str) -> list[ExploreItem]:
-        client = self._get_client()
+    async def get_mood_playlists(self, mood_id: str, force: bool = False) -> list[ExploreItem]:
         try:
-            raw_playlists: list[dict] = await asyncio.to_thread(client.get_mood_playlists, mood_id)
+            raw_playlists = await get_ytmusic_client().get_mood_playlists(mood_id, force=force)
         except (KeyError, TypeError, IndexError) as exc:
             logger.warning("Could not fetch playlists for mood %s: %s", mood_id, exc)
             return []
         return [
             _make_item(raw_pl, ExploreItemType.PLAYLIST, "youtube_music")
             for raw_pl in raw_playlists
+            if isinstance(raw_pl, dict)
         ]
 
-    async def search_playlists(self, query: str) -> list[ExploreItem]:
-        client = self._get_client()
+    async def search_playlists(self, query: str, force: bool = False) -> list[ExploreItem]:
         try:
-            results: list[dict] = await asyncio.to_thread(client.search, query, filter="playlists")
+            results = await get_ytmusic_client().search_playlists(query, force=force)
         except (KeyError, TypeError, IndexError) as exc:
             logger.warning("Could not search playlists for %r: %s", query, exc)
             return []

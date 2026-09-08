@@ -11,7 +11,8 @@ Most Ampy3 configuration is read from **environment variables** via the Pydantic
 | `CELERY_RESULT_BACKEND` | `redis://valkey:6379/1` | Celery result backend. |
 | `CELERY_WORKER_CONCURRENCY` | `1` | Worker prefork count. ≥1. |
 | `CELERY_LOG_LEVEL` | `info` | Celery log level. |
-| `SOURCE_PLAYLIST_CACHE_TTL_SECONDS` | `300` | TTL for cached source playlist fetches. ≥1. |
+| `SOURCE_PLAYLIST_CACHE_TTL_SECONDS` | `300` | TTL for cached source playlist fetches (syncs). ≥1. |
+| `EXPLORE_CACHE_TTL_SECONDS` | `900` | TTL for cached Explore content (home, moods, search). ≥1. |
 | `YT_DLP_TIMEOUT` | `300` | Per-request YouTube Music fetch timeout in seconds. |
 | `REQUIRE_AUTH` | `false` | When `true`, only `APP_URL` is allowed by CORS and Plex SSO is enforced. |
 | `PLEX_CLIENT_ID` | _(empty)_ | OAuth client identifier for Plex SSO (only used when `REQUIRE_AUTH=true`). |
@@ -43,6 +44,7 @@ CELERY_RESULT_BACKEND=redis://valkey.internal:6379/1
 CELERY_WORKER_CONCURRENCY=2          # tune based on CPU + Plex/Jellyfin rate limits
 CELERY_LOG_LEVEL=info                # debug for verbose task logs
 SOURCE_PLAYLIST_CACHE_TTL_SECONDS=900
+EXPLORE_CACHE_TTL_SECONDS=1800
 ```
 
 ## Section: YouTube Music

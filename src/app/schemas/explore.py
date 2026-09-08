@@ -40,3 +40,4 @@ class ExploreProviderOut(BaseModel):
     provider_id: str
     display_name: str
     anonymous: bool = True
+    auth_required: bool = False

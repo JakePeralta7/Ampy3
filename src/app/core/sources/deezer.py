@@ -2,19 +2,14 @@
 
 from __future__ import annotations
 
-import logging
 import re
 
 import httpx
 
 from src.app.constants import SOURCE_DEEZER, SOURCE_DEEZER_DISPLAY
+from src.app.core.clients import get_deezer_client
 from src.app.core.models import IPlatformSource, PlaylistMetadata, TrackMetadata
 from src.app.core.sources.registry import register_source
-
-logger = logging.getLogger(__name__)
-
-BASE_URL = "https://api.deezer.com"
-REQUEST_TIMEOUT = 15
 
 DEEZER_URL_PATTERN = re.compile(
     r"https?://(?:www\.)?deezer\.com/playlist/(\d+)",
@@ -47,12 +42,7 @@ class DeezerSource(IPlatformSource):
     async def _fetch_playlist(self, playlist_url: str) -> PlaylistMetadata:
         playlist_id = self._parse_playlist_id(playlist_url)
         try:
-            resp = httpx.get(
-                f"{BASE_URL}/playlist/{playlist_id}",
-                timeout=REQUEST_TIMEOUT,
-            )
-            resp.raise_for_status()
-            data = resp.json()
+            data = await get_deezer_client().get_playlist(playlist_id)
         except httpx.HTTPError as exc:
             raise RuntimeError(f"Deezer API request failed: {exc}") from exc
 

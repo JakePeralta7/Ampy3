@@ -38,12 +38,14 @@ SourceRegistry.list_sources()
 ### Adding a new source
 
 1. Subclass [`IPlatformSource`][app.core.models.IPlatformSource] (defined in `app.core.models`).
-2. Implement `get_playlist(playlist_url) -> PlaylistMetadata` and `supports_url(url)` (classmethod). Override `get_playlist_cache_identifier` if you want a non-default cache key.
+2. Implement `_fetch_playlist(playlist_url) -> PlaylistMetadata` and `supports_url(url)` (classmethod).
 3. Set class attributes `source_id` and `display_name`.
 4. Decorate with `@register_source("your_id")`.
 5. Import the module from somewhere that gets loaded at startup (see how `app.core.sources.deezer` is imported in `app.api.playlists`).
 
 The new source automatically appears in the **Add sync** dropdown.
+
+Fetching is **cached inside the platform's shared client** (`src/app/core/clients/`) — the same Valkey entries used by the Explore provider. Do the upstream call in `_fetch_playlist` through the shared client (e.g. `get_ytmusic_client().get_playlist(...)`), so syncs and Explore reuse one cache.
 
 ## Target registry
 

@@ -1,16 +1,19 @@
 """Deezer Explore provider.
 
-Uses Deezer's public REST API (``api.deezer.com``), which serves public
-content — charts, editorial playlists, and playlist search — with **no
-authentication** required.
+Uses the shared :class:`DeezerClient` against Deezer's public REST API
+(``api.deezer.com``), which serves public content — editorial playlists and
+playlist search — with **no authentication** required. Client responses are
+cached in Valkey, shared with the sync source.
 """
 
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 import httpx
 
+from src.app.core.clients import get_deezer_client
 from src.app.core.explore.base import ExploreProvider
 from src.app.core.explore.models import (
     ChartsBundle,
@@ -24,8 +27,6 @@ from src.app.core.explore.registry import register_explore_provider
 
 logger = logging.getLogger(__name__)
 
-BASE_URL = "https://api.deezer.com"
-REQUEST_TIMEOUT = 15
 SOURCE_ID = "deezer"
 
 
@@ -86,45 +87,19 @@ def _artist_item(raw: dict) -> ExploreItem:
     )
 
 
-def _album_item(raw: dict) -> ExploreItem:
-    artist = raw.get("artist", {})
-    artist_name = artist.get("name", "") if isinstance(artist, dict) else ""
-    subtitle_parts = [artist_name] if artist_name else []
-    release_date = raw.get("release_date")
-    if release_date:
-        subtitle_parts.append(release_date[:4])
-    return ExploreItem(
-        id=str(raw.get("id", "")),
-        title=raw.get("title", ""),
-        subtitle=" · ".join(subtitle_parts),
-        item_type=ExploreItemType.ALBUM,
-        thumbnail_url=_first_url(raw),
-        url=f"https://www.deezer.com/album/{raw.get('id', '')}",
-        source_id=SOURCE_ID,
-    )
-
-
 @register_explore_provider("deezer")
 class DeezerExploreProvider(ExploreProvider):
     provider_id = "deezer"
     display_name = "Deezer"
     anonymous = True
 
-    def _get(self, endpoint: str, params: dict | None = None) -> dict | None:
+    async def _list(self, method: str, *args, force: bool = False) -> list[dict]:
+        """Fetch a list-backed endpoint, returning [] on failure."""
         try:
-            resp = httpx.get(
-                f"{BASE_URL}/{endpoint}",
-                params=params,
-                timeout=REQUEST_TIMEOUT,
-            )
-            resp.raise_for_status()
-            return resp.json()
+            payload: Any = await getattr(get_deezer_client(), method)(*args, force=force)
         except (httpx.HTTPError, ValueError) as exc:
-            logger.warning("Deezer API request to %r failed: %s", endpoint, exc)
-            return None
-
-    def _data(self, endpoint: str, params: dict | None = None) -> list[dict]:
-        payload = self._get(endpoint, params)
+            logger.warning("Deezer API request failed: %s", exc)
+            return []
         if not isinstance(payload, dict):
             return []
         data = payload.get("data")
@@ -132,10 +107,10 @@ class DeezerExploreProvider(ExploreProvider):
 
     # ── interface ───────────────────────────────────────────────────
 
-    async def get_home(self) -> ExploreHome:
+    async def get_home(self, force: bool = False) -> ExploreHome:
         sections: list[ExploreSection] = []
 
-        playlists = self._data("chart/0/playlists")
+        playlists = await self._list("get_trending_playlists", force=force)
         if playlists:
             sections.append(
                 ExploreSection(
@@ -144,38 +119,38 @@ class DeezerExploreProvider(ExploreProvider):
                 )
             )
 
-        albums = self._data("album/recent")
-        if albums:
-            sections.append(
-                ExploreSection(
-                    title="New Releases",
-                    items=[_album_item(a) for a in albums[:12]],
-                )
-            )
-
         return ExploreHome(sections=sections)
 
-    async def get_charts(self) -> ChartsBundle:
+    async def get_charts(self, force: bool = False) -> ChartsBundle:
+        tracks = await self._list("get_top_tracks", force=force)
+        artists = await self._list("get_top_artists", force=force)
         return ChartsBundle(
-            top_songs=[_song_item(t) for t in self._data("chart/0/tracks")[:20]],
-            top_artists=[_artist_item(a) for a in self._data("chart/0/artists")[:20]],
+            top_songs=[_song_item(t) for t in tracks[:20]],
+            top_artists=[_artist_item(a) for a in artists[:20]],
         )
 
-    async def get_moods(self) -> list[MoodCategory]:
+    async def get_moods(self, force: bool = False) -> list[MoodCategory]:
+        try:
+            raw = await get_deezer_client().get_moods(force=force)
+        except (httpx.HTTPError, ValueError) as exc:
+            logger.warning("Deezer API request failed: %s", exc)
+            return []
         moods = []
-        for raw in self._data("editorial"):
+        for raw_mood in raw if isinstance(raw, list) else []:
             moods.append(
                 MoodCategory(
-                    id=str(raw.get("id", "")),
-                    name=raw.get("name", ""),
-                    icon=_first_url(raw),
-                    playlist_count=raw.get("nb_playlists"),
+                    id=str(raw_mood.get("id", "")),
+                    name=raw_mood.get("name", ""),
+                    icon=_first_url(raw_mood),
+                    playlist_count=raw_mood.get("nb_playlists"),
                 )
             )
         return moods
 
-    async def get_mood_playlists(self, mood_id: str) -> list[ExploreItem]:
-        return [_playlist_item(p) for p in self._data(f"editorial/{mood_id}/playlists")]
+    async def get_mood_playlists(self, mood_id: str, force: bool = False) -> list[ExploreItem]:
+        playlists = await self._list("get_mood_playlists", mood_id, force=force)
+        return [_playlist_item(p) for p in playlists]
 
-    async def search_playlists(self, query: str) -> list[ExploreItem]:
-        return [_playlist_item(p) for p in self._data("search/playlist", {"q": query})]
+    async def search_playlists(self, query: str, force: bool = False) -> list[ExploreItem]:
+        playlists = await self._list("search_playlists", query, force=force)
+        return [_playlist_item(p) for p in playlists]
