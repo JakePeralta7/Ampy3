@@ -12,8 +12,9 @@ from typing import Any
 
 from sqlalchemy import insert, select
 
-from src.app.models import SyncRun, SyncRunTrack
+from src.app.models import ScheduledPlaylistSync, SyncRun, SyncRunTrack
 from src.app.worker.context import SyncContext
+from src.app.worker.errors import SyncScheduleMissingError
 from src.app.worker.phases import FetchPhase, FinalizePhase, MatchPhase, PhaseResult, SyncPhase
 
 logger = logging.getLogger(__name__)
@@ -92,6 +93,8 @@ class SyncPipeline:
     def _ensure_sync_run(self, track_rows: list[dict[str, Any]]) -> None:
         """Create a new SyncRun with SyncRunTrack history for this target."""
         with self.ctx.session() as db:
+            if db.get(ScheduledPlaylistSync, self.ctx.sync_id) is None:
+                raise SyncScheduleMissingError(self.ctx.sync_id)
             run = SyncRun(
                 sync_id=self.ctx.sync_id,
                 target_id=self.ctx.target_id,

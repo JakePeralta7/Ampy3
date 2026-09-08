@@ -33,6 +33,7 @@ from src.app.schemas.schedules import (
 )
 from src.app.services import list_sync_targets
 from src.app.services.audit import log_event
+from src.app.services.sync_tasks import revoke_schedule_tasks
 
 logger = logging.getLogger(__name__)
 
@@ -291,6 +292,7 @@ async def delete_scheduled_sync(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Scheduled sync with ID {sync_id} not found",
         )
+    await revoke_schedule_tasks(sync_id)
     await db.delete(sync)
     await db.commit()
 
@@ -400,6 +402,7 @@ async def bulk_delete(
 
     names = [s.target_playlist_name for s in syncs]
     for sync in syncs:
+        await revoke_schedule_tasks(sync.id)
         await db.delete(sync)
     await db.commit()
 

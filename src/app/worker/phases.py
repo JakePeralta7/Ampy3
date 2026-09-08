@@ -29,6 +29,7 @@ from src.app.models import (
     SyncRunTrackTarget,
 )
 from src.app.worker.context import MatchResult, SyncContext
+from src.app.worker.errors import SyncScheduleMissingError
 from src.app.worker.session import run_async, session_scope
 
 logger = logging.getLogger(__name__)
@@ -132,7 +133,7 @@ class FetchPhase(SyncPhase):
         target_ids: list[str],
     ) -> int:
         """Save source tracks to DB and return the sync record ID."""
-        if schedule_id:
+        if schedule_id is not None:
             stmt = select(ScheduledPlaylistSync).where(ScheduledPlaylistSync.id == schedule_id)
         else:
             stmt = select(ScheduledPlaylistSync).where(
@@ -142,6 +143,8 @@ class FetchPhase(SyncPhase):
         sync_record = db.execute(stmt).scalars().first()
 
         if not sync_record:
+            if schedule_id is not None:
+                raise SyncScheduleMissingError(schedule_id)
             sync_record = ScheduledPlaylistSync(
                 source=source,
                 source_url=playlist_url,
