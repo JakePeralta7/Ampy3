@@ -40,6 +40,7 @@ class SyncContext:
     playlist_title: str = ""
     source_url: str = ""
     source: str = ""
+    execution_id: str | None = None
 
     _target: BaseTarget | None = field(default=None, repr=False)
 

@@ -232,6 +232,7 @@ class SyncRun(CreatedAtMixin, Base):
     status: Mapped[str] = mapped_column(String(20), default="running", nullable=False)
     matched_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     failed_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    execution_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
 
     sync: Mapped[ScheduledPlaylistSync] = relationship(back_populates="runs")
 

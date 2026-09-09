@@ -6,6 +6,7 @@ foreign-key violation later.
 """
 
 import asyncio
+import json
 import logging
 from typing import Any
 
@@ -15,6 +16,9 @@ logger = logging.getLogger(__name__)
 
 KEY_PREFIX = "ampy3:sync-tasks:"
 KEY_TTL_SECONDS = 24 * 3600
+
+PHASE_KEY_PREFIX = "ampy3:sync-phases:"
+PHASE_TTL_SECONDS = 24 * 3600
 
 
 def _key(sync_id: int) -> str:
@@ -72,3 +76,69 @@ async def revoke_schedule_tasks(sync_id: int | None) -> None:
         await asyncio.to_thread(_revoke_sync, sync_id)
     except Exception as e:
         logger.warning("Failed to revoke tasks for sync %d: %s", sync_id, e)
+
+
+def _phase_key(sync_id: int) -> str:
+    return f"{PHASE_KEY_PREFIX}{sync_id}:fetch"
+
+
+def set_fetch_phase(
+    sync_id: int | None,
+    status: str,
+    started_at: str | None = None,
+    completed_at: str | None = None,
+    execution_id: str | None = None,
+) -> None:
+    """Record the FetchPhase status for a sync execution (best effort).
+
+    Stored under ``ampy3:sync-phases:{sync_id}:fetch`` so the API can report
+    the orchestrator stage's real status (running/completed/failed) instead of
+    deriving it from target runs. Keep the original ``started_at`` when
+    overwriting, and refresh the TTL so an in-flight execution never expires.
+    ``execution_id`` identifies the execution whose fetch this phase belongs to.
+    """
+    if sync_id is None:
+        return
+    try:
+        client = _client()
+        key = _phase_key(sync_id)
+        current = get_fetch_phase(sync_id) or {}
+        payload = {
+            "status": status,
+            "started_at": started_at or current.get("started_at"),
+            "completed_at": (
+                None if status == "running" else completed_at or current.get("completed_at")
+            ),
+            "execution_id": execution_id or current.get("execution_id"),
+        }
+        client.set(key, json.dumps(payload), ex=PHASE_TTL_SECONDS)
+    except Exception as e:
+        logger.warning("Failed to set fetch phase for sync %s: %s", sync_id, e)
+
+
+def get_fetch_phase(sync_id: int | None) -> dict[str, Any] | None:
+    """Read the recorded FetchPhase status for a sync execution, or ``None``."""
+    if sync_id is None:
+        return None
+    try:
+        raw = _client().get(_phase_key(sync_id))
+        if not raw:
+            return None
+        return json.loads(raw)
+    except Exception as e:
+        logger.warning("Failed to read fetch phase for sync %s: %s", sync_id, e)
+        return None
+
+
+async def get_fetch_phase_async(sync_id: int | None) -> dict[str, Any] | None:
+    """Async variant of ``get_fetch_phase`` for FastAPI handlers."""
+    if sync_id is None:
+        return None
+    try:
+        raw = await ValkeyService.get_instance().get(_phase_key(sync_id))
+        if not raw:
+            return None
+        return json.loads(raw)
+    except Exception as e:
+        logger.warning("Failed to read fetch phase for sync %s: %s", sync_id, e)
+        return None

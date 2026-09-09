@@ -1,10 +1,11 @@
 """Sync endpoints — triggering, tracking, and reviewing sync operations."""
 
 import logging
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
 from src.app.auth.dependencies import get_current_user
@@ -33,6 +34,9 @@ from src.app.schemas.playlists import TrackDetail, TrackSource, TrackTarget
 from src.app.schemas.syncs import (
     MatchTrackInput,
     MatchTrackResponse,
+    PipelineStatusResponse,
+    PipelineTargetStatus,
+    PipelineTaskStatus,
     SyncDiffItem,
     SyncDiffResponse,
     SyncRunOut,
@@ -44,6 +48,7 @@ from src.app.schemas.syncs import (
 )
 from src.app.services import get_sync_target
 from src.app.services.audit import log_event
+from src.app.services.sync_tasks import get_fetch_phase_async
 from src.app.worker.tasks import match_track_task, sync_playlists_task
 
 logger = logging.getLogger(__name__)
@@ -148,6 +153,52 @@ def _build_track_response(
         match_rate=match_rate,
         match_percentage=match_percentage,
     )
+
+
+def _newest_run_per_target(runs: list[SyncRun]) -> list[SyncRun]:
+    """Keep only the newest run per target, preserving execution order.
+
+    A retried ``sync_target_task`` creates a fresh SyncRun for every attempt
+    (all sharing the target's ``execution_id``); the newest row is the final
+    attempt's outcome, so it alone should be shown in the pipeline.
+    """
+    newest: dict[str, SyncRun] = {}
+    for run in runs:
+        current = newest.get(run.target_id)
+        if current is None or run.id > current.id:
+            newest[run.target_id] = run
+    return [r for r in runs if newest.get(r.target_id) is r]
+
+
+def _select_execution(runs: list[SyncRun], run_id: int) -> list[SyncRun]:
+    """All runs belonging to the same execution as ``run_id``.
+
+    Executions are grouped exactly by their ``execution_id`` (generated once
+    per sync invocation by the orchestrator). Runs without one predate that
+    identity and are shown alone — no timestamp heuristics. Retried targets
+    collapse to their final attempt.
+    """
+    for run in runs:
+        if run.id == run_id:
+            if not run.execution_id:
+                return [run]
+            matched = [r for r in runs if r.execution_id == run.execution_id]
+            return _newest_run_per_target(matched)
+    return []
+
+
+def _parse_fetch_started(started_iso: str | None) -> datetime | None:
+    """Parse a phase ``started_at`` into an aware UTC datetime, or ``None``."""
+    if not started_iso:
+        return None
+    try:
+        ts = datetime.fromisoformat(started_iso)
+    except ValueError:
+        return None
+    return ts if ts.tzinfo else ts.replace(tzinfo=UTC)
+
+
+_STALE_FETCH_PHASE_SECONDS = 1800
 
 
 # ─── Trigger ─────────────────────────────────────────────────────
@@ -373,6 +424,108 @@ async def get_sync_history(
             )
             for run in runs
         ]
+
+
+@router.get("/{sync_id}/pipeline", response_model=PipelineStatusResponse)
+async def get_sync_pipeline(
+    sync_id: int,
+    run_id: int | None = Query(
+        default=None, description="Sync run ID whose execution pipeline to show"
+    ),
+    _user: dict[str, Any] = Depends(get_current_user),  # noqa: B008
+):
+    """Return the pipeline (fetch \u2192 per-target match/sync) for a sync execution.
+
+    Without ``run_id``, the latest (or in-progress) execution is returned: the
+    runs whose ``execution_id`` matches the recorded FetchPhase's. With
+    ``run_id``, all sibling runs sharing the selected run's ``execution_id``
+    are returned; runs predating ``execution_id`` are shown alone.
+    """
+    async with AsyncSessionLocal() as session:
+        sync_stmt = select(ScheduledPlaylistSync).where(ScheduledPlaylistSync.id == sync_id)
+        sync_result = await session.execute(sync_stmt)
+        sync_record = sync_result.scalar_one_or_none()
+        if not sync_record:
+            raise HTTPException(status_code=404, detail=f"Sync {sync_id} not found")
+
+        runs_stmt = (
+            select(SyncRun).where(SyncRun.sync_id == sync_id).order_by(SyncRun.created_at.asc())
+        )
+        runs_result = await session.execute(runs_stmt)
+        runs = list(runs_result.scalars().all())
+
+        fetch_phase = await get_fetch_phase_async(sync_id)
+        phase_exec_id = fetch_phase.get("execution_id") if fetch_phase else None
+        target_runs: list[SyncRun] = []
+        selected_execution_id: str | None = None
+        if run_id is not None:
+            for run in runs:
+                if run.id == run_id:
+                    selected_execution_id = run.execution_id
+                    break
+            target_runs = _select_execution(runs, run_id)
+            if not target_runs:
+                raise HTTPException(
+                    status_code=404, detail=f"Run {run_id} not found for sync {sync_id}"
+                )
+        elif phase_exec_id:
+            target_runs = [r for r in runs if r.execution_id == phase_exec_id]
+
+        count_stmt = (
+            select(func.count()).select_from(PlaylistTrack).where(PlaylistTrack.sync_id == sync_id)
+        )
+        track_count = (await session.execute(count_stmt)).scalar_one()
+        source_label = _SOURCE_DISPLAY_NAMES.get(sync_record.source, sync_record.source)
+
+        is_live_execution = run_id is None or (
+            selected_execution_id is not None and selected_execution_id == phase_exec_id
+        )
+        phase_running = fetch_phase is not None and fetch_phase.get("status") == "running"
+        phase_started = _parse_fetch_started(fetch_phase.get("started_at")) if fetch_phase else None
+        phase_stale = bool(
+            phase_running
+            and phase_started is not None
+            and (datetime.now(UTC) - phase_started).total_seconds() > _STALE_FETCH_PHASE_SECONDS
+        )
+        if fetch_phase and is_live_execution and not phase_stale:
+            orchestrator_status = fetch_phase.get("status", "pending")
+            orchestrator = PipelineTaskStatus(
+                status=orchestrator_status,
+                label=f"Fetch {source_label}",
+                detail=f"{track_count} track{'s' if track_count != 1 else ''}",
+                started_at=fetch_phase.get("started_at"),
+                completed_at=fetch_phase.get("completed_at"),
+            )
+        else:
+            orchestrator = PipelineTaskStatus(
+                status="completed" if target_runs else "pending",
+                label=f"Fetch {source_label}",
+                detail=f"{track_count} track{'s' if track_count != 1 else ''}",
+                completed_at=(
+                    target_runs[0].created_at.isoformat()
+                    if target_runs and target_runs[0].created_at
+                    else None
+                ),
+            )
+
+        return PipelineStatusResponse(
+            sync_id=sync_id,
+            source=sync_record.source,
+            playlist_title=sync_record.target_playlist_name,
+            track_count=track_count,
+            orchestrator=orchestrator,
+            targets=[
+                PipelineTargetStatus(
+                    run_id=r.id,
+                    target_id=r.target_id,
+                    status=r.status,
+                    matched_count=r.matched_count,
+                    failed_count=r.failed_count,
+                    created_at=r.created_at.isoformat() if r.created_at else None,
+                )
+                for r in target_runs
+            ],
+        )
 
 
 @router.get("/{sync_id}/diff", response_model=SyncDiffResponse)

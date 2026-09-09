@@ -4,14 +4,27 @@ import { Badge } from "../../components/ui/Badge";
 import { LoadingSpinner } from "../../components/ui/LoadingSpinner";
 import { useSyncHistory } from "../../hooks/useSyncHistory";
 import { formatTimestamp } from "../../lib/utils";
+import { SyncPipeline } from "./SyncPipeline";
 
 interface SyncHistoryProps {
   syncId: number;
 }
 
 export function SyncHistory({ syncId }: SyncHistoryProps) {
-  const { runs, loading, error, selectedRunId, diff, diffLoading, selectRun } =
-    useSyncHistory(syncId);
+  const {
+    runs,
+    loading,
+    error,
+    selectedRunId,
+    diff,
+    diffLoading,
+    pipeline,
+    pipelineLoading,
+    pipelineError,
+    livePipeline,
+    pipelineActive,
+    selectRun,
+  } = useSyncHistory(syncId);
 
   if (loading) {
     return <LoadingSpinner text="Loading history..." />;
@@ -22,6 +35,18 @@ export function SyncHistory({ syncId }: SyncHistoryProps) {
   }
 
   if (runs.length === 0) {
+    if (pipelineActive && livePipeline) {
+      return (
+        <div className="space-y-2">
+          <div className="text-xs font-medium text-fg-subtle uppercase tracking-wider">
+            Sync in progress
+          </div>
+          <div className="bg-bg-surface rounded-lg border border-border px-3 py-3">
+            <SyncPipeline pipeline={livePipeline} />
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="text-center py-8">
         <p className="text-sm text-fg-muted">No sync history yet.</p>
@@ -31,6 +56,15 @@ export function SyncHistory({ syncId }: SyncHistoryProps) {
 
   return (
     <div className="space-y-2">
+      {pipelineActive && livePipeline && (
+        <div className="bg-bg-surface rounded-lg border border-border px-3 py-3">
+          <div className="text-xs font-medium text-fg-subtle uppercase tracking-wider mb-2">
+            Sync in progress
+          </div>
+          <SyncPipeline pipeline={livePipeline} />
+        </div>
+      )}
+
       <div className="text-xs font-medium text-fg-subtle uppercase tracking-wider">
         Sync History ({runs.length} run{runs.length !== 1 ? "s" : ""})
       </div>
@@ -47,13 +81,13 @@ export function SyncHistory({ syncId }: SyncHistoryProps) {
                 onClick={() => selectRun(run)}
                 disabled={run.status === "running"}
                 aria-disabled={run.status === "running"}
-                className="w-full flex items-center justify-between px-3 py-2.5 text-left hover:bg-bg-muted transition-colors duration-fast disabled:cursor-default"
+                className="w-full flex items-center justify-between px-3 py-2.5 text-left hover:bg-bg-muted transition-colors duration-fast disabled:cursor-default disabled:hover:bg-transparent"
               >
                 <div className="flex items-center gap-2">
-                  {run.status === "running" ? (
-                    <span className="text-fg-subtle shrink-0">•</span>
-                  ) : isSelected ? (
+                  {isSelected ? (
                     <ChevronDown size={12} className="text-fg-subtle shrink-0" />
+                  ) : run.status === "running" ? (
+                    <span className="text-fg-subtle shrink-0">•</span>
                   ) : (
                     <ChevronRight size={12} className="text-fg-subtle shrink-0" />
                   )}
@@ -80,16 +114,28 @@ export function SyncHistory({ syncId }: SyncHistoryProps) {
                 </div>
               </button>
 
-              {run.status !== "running" && isSelected && (
-                <div className="border-t border-border px-3 py-3">
-                  {diffLoading ? (
-                    <p className="text-xs text-fg-muted">Loading diff...</p>
-                  ) : diff ? (
-                    <DiffView diff={diff} />
-                  ) : (
-                    <p className="text-xs text-fg-muted">
-                      First sync run — no previous run to diff against.
-                    </p>
+              {isSelected && (
+                <div className="border-t border-border px-3 py-3 space-y-3">
+                  {pipelineLoading ? (
+                    <p className="text-xs text-fg-muted">Loading pipeline…</p>
+                  ) : pipelineError ? (
+                    <p className="text-xs text-danger-500">{pipelineError}</p>
+                  ) : pipeline ? (
+                    <SyncPipeline pipeline={pipeline} />
+                  ) : null}
+
+                  {run.status !== "running" && (
+                    <div className="border-t border-border pt-3">
+                      {diffLoading ? (
+                        <p className="text-xs text-fg-muted">Loading diff...</p>
+                      ) : diff ? (
+                        <DiffView diff={diff} />
+                      ) : (
+                        <p className="text-xs text-fg-muted">
+                          First sync run — no previous run to diff against.
+                        </p>
+                      )}
+                    </div>
                   )}
                 </div>
               )}

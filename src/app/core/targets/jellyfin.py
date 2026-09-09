@@ -58,9 +58,8 @@ class JellyfinTarget(BaseTarget):
         self._client = httpx.AsyncClient(base_url=self._base_url, timeout=15.0)
         self._client.headers.update(
             {
-                "X-Emby-Token": self._api_key,
+                "Authorization": f'MediaBrowser Token="{self._api_key}"',
                 "Content-Type": "application/json",
-                "MediaBrowser": "Ampy3, test connection",
             }
         )
         self._client_loop_id = loop_id

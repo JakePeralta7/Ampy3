@@ -40,6 +40,26 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/schedules", tags=["schedules"])
 
 
+async def _replace_schedule_targets(db: AsyncSession, sync_id: int, target_ids: list[str]) -> None:
+    """Sync a schedule's target rows to exactly ``target_ids``.
+
+    Only deselected targets are deleted and only new ones inserted, so a target
+    that stays selected is never deleted and re-inserted in the same flush.
+    SQLAlchemy flushes INSERTs before DELETEs, so that pattern would trip the
+    ``uq_schedule_target`` unique constraint on the re-inserted row.
+    """
+    result = await db.execute(select(ScheduleTarget).where(ScheduleTarget.sync_id == sync_id))
+    existing = {st.target_id: st for st in result.scalars().all()}
+    desired = set(target_ids)
+
+    for target_id, row in existing.items():
+        if target_id not in desired:
+            await db.delete(row)
+    for target_id in desired:
+        if target_id not in existing:
+            db.add(ScheduleTarget(sync_id=sync_id, target_id=target_id))
+
+
 def _sync_to_out(model: ScheduledPlaylistSync) -> ScheduledSyncOut:
     # Check if any run for this sync is currently running
     running_run = next((r for r in model.runs if r.status == "running"), None)
@@ -189,7 +209,10 @@ async def get_scheduled_sync(
     result = await db.execute(
         select(ScheduledPlaylistSync)
         .where(ScheduledPlaylistSync.id == sync_id)
-        .options(selectinload(ScheduledPlaylistSync.schedule_targets)),
+        .options(
+            selectinload(ScheduledPlaylistSync.schedule_targets),
+            selectinload(ScheduledPlaylistSync.runs),
+        ),
     )
     sync = result.scalar_one_or_none()
     if not sync:
@@ -238,14 +261,7 @@ async def update_scheduled_sync(
                     detail=f"Invalid target_id '{tid}'. Must be one of: {sorted(valid_targets)}",
                 )
 
-        # Replace targets in junction table
-        existing_targets = await db.execute(
-            select(ScheduleTarget).where(ScheduleTarget.sync_id == sync_id)
-        )
-        for st in existing_targets.scalars().all():
-            await db.delete(st)
-        for tid in body.target_ids:
-            db.add(ScheduleTarget(sync_id=sync_id, target_id=tid))
+        await _replace_schedule_targets(db, sync_id, body.target_ids)
 
     simple_fields = ["target_playlist_name", "schedule_interval", "is_active"]
     for field in simple_fields:
@@ -261,7 +277,10 @@ async def update_scheduled_sync(
     result = await db.execute(
         select(ScheduledPlaylistSync)
         .where(ScheduledPlaylistSync.id == sync_id)
-        .options(selectinload(ScheduledPlaylistSync.schedule_targets))
+        .options(
+            selectinload(ScheduledPlaylistSync.schedule_targets),
+            selectinload(ScheduledPlaylistSync.runs),
+        )
     )
     sync = result.scalar_one()
 

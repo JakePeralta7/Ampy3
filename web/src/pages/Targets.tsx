@@ -189,7 +189,7 @@ export function TargetsPage() {
               key: "jellyfin_api_key",
               label: "API Key",
               type: "password",
-              placeholder: "Jellyfin API key",
+              placeholder: "API key or access token",
               secretSet: jellyfinConfigured,
             },
             {

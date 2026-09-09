@@ -101,6 +101,7 @@ class SyncPipeline:
                 status="running",
                 matched_count=0,
                 failed_count=0,
+                execution_id=self.ctx.execution_id,
             )
             db.add(run)
             db.flush()

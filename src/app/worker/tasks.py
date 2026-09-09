@@ -1,6 +1,8 @@
 """Celery task definitions for playlist sync operations."""
 
 import logging
+import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 from celery import Celery
@@ -9,7 +11,11 @@ from sqlalchemy import select
 from src.app.constants import DEFAULT_SOURCE, DEFAULT_TARGET
 from src.app.models import SyncRun
 from src.app.services.audit import log_event_sync
-from src.app.services.sync_tasks import register_sync_task, unregister_sync_task
+from src.app.services.sync_tasks import (
+    register_sync_task,
+    set_fetch_phase,
+    unregister_sync_task,
+)
 from src.app.worker.app import celery_app
 from src.app.worker.context import SyncContext
 from src.app.worker.errors import SyncScheduleMissingError
@@ -45,8 +51,20 @@ def sync_playlists_task(
         ),
     )
 
+    sync_id: int | None = None
+    started_at: str | None = None
+    execution_id = uuid.uuid4().hex
+
     try:
         title = target_playlist_name or playlist_url
+        started_at = datetime.now(UTC).isoformat()
+        if schedule_id is not None:
+            set_fetch_phase(
+                schedule_id,
+                "running",
+                started_at=started_at,
+                execution_id=execution_id,
+            )
 
         result = SyncPipeline.fetch_source(
             playlist_url,
@@ -57,6 +75,13 @@ def sync_playlists_task(
         )
         sync_id = result["sync_id"]
         track_items = result["track_items"]
+        set_fetch_phase(
+            sync_id,
+            "completed",
+            started_at=started_at,
+            completed_at=datetime.now(UTC).isoformat(),
+            execution_id=execution_id,
+        )
 
         if not track_items:
             logger.info("No tracks to match for sync %d", sync_id)
@@ -74,6 +99,7 @@ def sync_playlists_task(
                 source=source,
                 playlist_url=playlist_url,
                 resource_id=resource_id,
+                execution_id=execution_id,
             )
             register_sync_task(sync_id, child.id)
 
@@ -83,6 +109,13 @@ def sync_playlists_task(
     except SyncScheduleMissingError as e:
         if schedule_id is not None:
             unregister_sync_task(schedule_id, self.request.id)
+        set_fetch_phase(
+            schedule_id,
+            "failed",
+            started_at=started_at,
+            completed_at=datetime.now(UTC).isoformat(),
+            execution_id=execution_id,
+        )
         logger.warning("Dropping task: %s", e)
         return {"status": "DROPPED", "sync_id": schedule_id}
     except Exception as e:
@@ -93,6 +126,14 @@ def sync_playlists_task(
             summary=f"Sync failed: {e} — {playlist_url}",
             details={"error": str(e), "playlist_url": playlist_url},
         )
+        if self.request.retries >= self.max_retries:
+            set_fetch_phase(
+                sync_id or schedule_id,
+                "failed",
+                started_at=started_at,
+                completed_at=datetime.now(UTC).isoformat(),
+                execution_id=execution_id,
+            )
         if self.request.retries >= self.max_retries and schedule_id is not None:
             unregister_sync_task(schedule_id, self.request.id)
         raise self.retry(exc=e, countdown=60, max_retries=3) from e
@@ -109,6 +150,7 @@ def sync_target_task(
     source: str = DEFAULT_SOURCE,
     playlist_url: str = "",
     resource_id: str | None = None,
+    execution_id: str | None = None,
 ):
     """Match all tracks, then finalize for one target."""
     register_sync_task(sync_id, self.request.id)
@@ -118,6 +160,7 @@ def sync_target_task(
         playlist_title=playlist_title,
         source_url=playlist_url,
         source=source,
+        execution_id=execution_id,
     )
     pipeline = SyncPipeline(ctx)
 

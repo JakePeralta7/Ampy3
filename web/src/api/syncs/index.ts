@@ -108,6 +108,33 @@ export interface TargetOpenUrlResponse {
   url: string | null;
 }
 
+export interface PipelineTaskStatus {
+  task_id: string | null;
+  status: string;
+  label: string;
+  detail: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+}
+
+export interface PipelineTargetStatus {
+  run_id: number;
+  target_id: string;
+  status: string;
+  matched_count: number;
+  failed_count: number;
+  created_at: string | null;
+}
+
+export interface PipelineStatusResponse {
+  sync_id: number;
+  source: string;
+  playlist_title: string | null;
+  track_count: number;
+  orchestrator: PipelineTaskStatus;
+  targets: PipelineTargetStatus[];
+}
+
 export const syncsAPI = {
   getSyncTracks: (syncId: number): Promise<SyncTracksResponse> =>
     apiRequest<SyncTracksResponse>(`/v1/syncs/${syncId}/tracks`, {
@@ -151,4 +178,10 @@ export const syncsAPI = {
     apiRequest<TargetOpenUrlResponse>(`/v1/syncs/${syncId}/open-url?target_id=${targetId}`, {
       method: "GET",
     }),
+
+  getSyncPipeline: (syncId: number, runId?: number): Promise<PipelineStatusResponse> =>
+    apiRequest<PipelineStatusResponse>(
+      `/v1/syncs/${syncId}/pipeline${runId !== undefined ? `?run_id=${runId}` : ""}`,
+      { method: "GET" },
+    ),
 };

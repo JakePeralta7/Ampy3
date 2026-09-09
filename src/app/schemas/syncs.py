@@ -111,3 +111,36 @@ class SyncDiffResponse(BaseModel):
     unchanged: list[SyncDiffItem]
     from_run_id: int
     to_run_id: int
+
+
+class PipelineTaskStatus(BaseModel):
+    """Pipeline phase status for the fetch (orchestrator) stage."""
+
+    task_id: str | None = None
+    status: str
+    label: str
+    detail: str | None = None
+    started_at: str | None = None
+    completed_at: str | None = None
+
+
+class PipelineTargetStatus(BaseModel):
+    """Per-target pipeline status (match + finalize stage)."""
+
+    run_id: int
+    target_id: str
+    status: str
+    matched_count: int = 0
+    failed_count: int = 0
+    created_at: str | None = None
+
+
+class PipelineStatusResponse(BaseModel):
+    """Full pipeline view for a single sync execution."""
+
+    sync_id: int
+    source: str
+    playlist_title: str | None = None
+    track_count: int = 0
+    orchestrator: PipelineTaskStatus
+    targets: list[PipelineTargetStatus]
