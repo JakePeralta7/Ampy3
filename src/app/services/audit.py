@@ -28,7 +28,7 @@ async def log_event(
             session.add(entry)
             await session.commit()
     except Exception as e:
-        logger.error(f"Failed to write audit log: {e}")
+        logger.error("Failed to write audit log: %s", e)
 
 
 def log_event_sync(
@@ -53,4 +53,4 @@ def log_event_sync(
         finally:
             db.close()
     except Exception as e:
-        logger.error(f"Failed to write audit log: {e}")
+        logger.error("Failed to write audit log: %s", e)

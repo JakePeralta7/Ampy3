@@ -4,15 +4,10 @@ import logging
 
 from celery import Celery
 
+from src.app.log_config import setup_logging
 from src.app.settings import settings
 
-logging.basicConfig(
-    level=getattr(logging, settings.celery_log_level.upper(), logging.INFO),
-    format="%(levelname)s: %(message)s",
-)
-
-for _name in ("httpx", "httpcore"):
-    logging.getLogger(_name).setLevel(logging.WARNING)
+setup_logging(level=settings.celery_log_level, log_format=settings.log_format)
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +28,8 @@ celery_app.conf.update(
     task_reject_on_worker_lost=True,
     worker_prefetch_multiplier=1,
     worker_cancel_long_running_tasks_on_connection_loss=True,
+    worker_hijack_root_logger=False,
+    worker_log_color=False,
 )
 
 celery_app.conf.broker_transport_options = {

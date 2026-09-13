@@ -53,6 +53,12 @@ class TrackMatcher:
             match = self._match_with_rules(track)
 
             if not match:
+                logger.info(
+                    "No match for '%s' (sync %d, target %s)",
+                    db_row.source_title,
+                    self.ctx.sync_id,
+                    self.ctx.target_id,
+                )
                 return MatchResult(
                     matched=False,
                     message=f"No match found for '{db_row.source_title}'",
@@ -101,6 +107,14 @@ class TrackMatcher:
                 ),
             )
 
+            logger.info(
+                "Matched '%s' to '%s' (sync %d, target %s)",
+                db_row.source_title,
+                match.get("title", ""),
+                self.ctx.sync_id,
+                self.ctx.target_id,
+            )
+
             return MatchResult(
                 matched=True,
                 message=f"Matched '{db_row.source_title}' to '{match.get('title', '')}'",
@@ -123,6 +137,11 @@ class TrackMatcher:
                 matches = run_async(engine.run(track, rules=rules))
                 if matches:
                     return matches[0]
-        except Exception:
-            logger.warning("MatchEngine failed for track '%s'", track.title)
+        except Exception as e:
+            logger.warning(
+                "MatchEngine failed for track '%s': %s",
+                track.title,
+                e,
+                exc_info=True,
+            )
         return None

@@ -12,8 +12,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 # this is the Alembic Config object
 config = context.config
 
-# Interpret the config file for Python logging.
-if config.config_file_name is not None:
+# Interpret the config file for Python logging — but only when asked to
+# (`python migrate.py` sets ``configure_alembic_logging``). When Alembic runs
+# inside the app via `src/app/db.py:init_db()`, the application's own logging
+# config (`src/app/log_config.py`) is already active; calling `fileConfig`
+# here would reset the root handler and silently disable every app logger.
+if config.attributes.get("configure_alembic_logging") and config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # add your model's MetaData object here

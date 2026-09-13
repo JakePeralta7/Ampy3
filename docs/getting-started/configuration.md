@@ -10,7 +10,8 @@ Most Ampy3 configuration is read from **environment variables** via the Pydantic
 | `CELERY_BROKER_URL` | `redis://valkey:6379/0` | Celery broker (Valkey/Redis). |
 | `CELERY_RESULT_BACKEND` | `redis://valkey:6379/1` | Celery result backend. |
 | `CELERY_WORKER_CONCURRENCY` | `1` | Worker prefork count. ≥1. |
-| `CELERY_LOG_LEVEL` | `info` | Celery log level. |
+| `CELERY_LOG_LEVEL` | `info` | Worker log level (`debug`/`info`/`warning`/`error`/`critical`). |
+| `LOG_FORMAT` | `json` | Log output format, `json` (python-json-logger, one object per line) or `console` (human-readable). Applies to both API and worker. |
 | `SOURCE_PLAYLIST_CACHE_TTL_SECONDS` | `300` | TTL for cached source playlist fetches (syncs). ≥1. |
 | `EXPLORE_CACHE_TTL_SECONDS` | `900` | TTL for cached Explore content (home, moods, search). ≥1. |
 | `YT_DLP_TIMEOUT` | `300` | Per-request YouTube Music fetch timeout in seconds. |
@@ -20,7 +21,7 @@ Most Ampy3 configuration is read from **environment variables** via the Pydantic
 | `SECRET_KEY` | _(empty)_ | Session-signing key. **Required when `REQUIRE_AUTH=true`** — the app refuses to start otherwise (fail-closed). Generate with `openssl rand -hex 32`. |
 | `SESSION_TTL_HOURS` | `168` | Session lifetime in hours (default = 1 week). |
 | `APP_ENV` | `development` | Free-form env label, surfaced in logs. |
-| `DEBUG` | `false` | Enable verbose error pages. |
+| `DEBUG` | `false` | Enable verbose error pages and set the API log level to `debug`. |
 
 ## Section: Database
 

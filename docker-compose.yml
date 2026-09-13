@@ -36,6 +36,9 @@ services:
       - APP_URL=${APP_URL:-http://localhost:8000}
       - SECRET_KEY=${SECRET_KEY:-}
       - SESSION_TTL_HOURS=${SESSION_TTL_HOURS:-168}
+      - APP_ENV=${APP_ENV:-development}
+      - DEBUG=${DEBUG:-false}
+      - LOG_FORMAT=${LOG_FORMAT:-json}
 
   worker:
     image: ghcr.io/jakeperalta7/ampy3-worker:latest
@@ -52,6 +55,7 @@ services:
       - DATABASE_URL=postgresql://ampy3:${POSTGRES_PASSWORD}@postgres:5432/ampy3
       - CELERY_WORKER_CONCURRENCY=${CELERY_WORKER_CONCURRENCY:-1}
       - CELERY_LOG_LEVEL=${CELERY_LOG_LEVEL:-info}
+      - LOG_FORMAT=${LOG_FORMAT:-json}
 
   valkey:
     image: valkey/valkey:latest

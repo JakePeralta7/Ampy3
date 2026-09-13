@@ -13,6 +13,7 @@ import {
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
+import { useVersion } from "../../hooks/useVersion";
 import { DeezerIcon, YouTubeMusicIcon } from "../ui/SourceIcon";
 
 const COLLAPSE_KEY = "ampy3:sidebar-collapsed";
@@ -58,6 +59,7 @@ export const links: NavLink[] = [
 export function Nav() {
   const location = useLocation();
   const { user, logout, requireAuth } = useAuth();
+  const { version } = useVersion();
   const [collapsed, setCollapsed] = useState(() => {
     try {
       return localStorage.getItem(COLLAPSE_KEY) === "1";
@@ -95,9 +97,17 @@ export function Nav() {
 
   const sidebarContent = (
     <>
-      <div className="flex items-center gap-2 p-4">
+      <div
+        className="flex items-center gap-2 p-4"
+        title={collapsed ? `Ampy3 v${version ?? ""}` : undefined}
+      >
         <img src="/ampy3.svg" alt="" className="h-8 w-8 shrink-0" />
-        {!collapsed && <span className="font-bold text-accent-700">Ampy3</span>}
+        {!collapsed && (
+          <div className="flex flex-col leading-tight">
+            <span className="font-bold text-accent-700">Ampy3</span>
+            {version && <span className="text-xs text-fg-subtle">v{version}</span>}
+          </div>
+        )}
       </div>
 
       <nav className="flex flex-col gap-1 px-2" aria-label="Main navigation">

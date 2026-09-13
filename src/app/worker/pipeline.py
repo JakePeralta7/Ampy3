@@ -65,6 +65,12 @@ class SyncPipeline:
         )
         if not result.success:
             raise RuntimeError(f"FetchPhase failed: {result.error}")
+        logger.info(
+            "Fetched %d tracks from %s (%s)",
+            len(result.data["track_items"]),
+            source,
+            source_url,
+        )
         return result.data
 
     def run_target(
@@ -105,6 +111,12 @@ class SyncPipeline:
             )
             db.add(run)
             db.flush()
+            logger.info(
+                "Created SyncRun id=%d for sync %d target %s",
+                run.id,
+                self.ctx.sync_id,
+                self.ctx.target_id,
+            )
 
             if track_rows:
                 run_track_rows = [
@@ -120,3 +132,8 @@ class SyncPipeline:
                     for row_data in track_rows
                 ]
                 db.execute(insert(SyncRunTrack), run_track_rows)
+                logger.info(
+                    "Recorded %d SyncRunTrack rows for run %d",
+                    len(run_track_rows),
+                    run.id,
+                )

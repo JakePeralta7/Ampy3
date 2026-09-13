@@ -40,7 +40,25 @@ Useful log lines to grep for:
 | `Failed to write audit log` | DB-side problem during an event — check disk + Postgres health. |
 | `Owner registered` / `Login rejected` / `Plex target configured` | Auth flow milestones |
 
-Set `CELERY_LOG_LEVEL=debug` for noisier (more diagnostic) Celery output.
+Set `CELERY_LOG_LEVEL=debug` for noisier (more diagnostic) worker output, and `LOG_FORMAT=console` for human-readable logging on a single node.
+
+### Log format
+
+Both services log one JSON object per line (unless `LOG_FORMAT=console`), so they're safe to feed straight into a log aggregator. Every line carries the worker/request context:
+
+```json
+{"time": "2026-09-10T12:00:00Z", "level": "INFO", "logger": "src.app.worker.tasks",
+ "message": "Target sync completed: sync_id=17 target=Plex matched=82 failed=3 (12.41s)",
+ "task_id": "b2f4…", "task_name": "src.app.worker.tasks.sync_target_task",
+ "sync_id": "17", "target_id": "Plex", "exc_info": null}
+```
+
+- `time`, `level`, `logger`, `message`, `exc_info` — standard fields (traceback text is embedded in `exc_info` when present).
+- `task_id` / `task_name` — the Celery task that produced the line.
+- `sync_id` / `target_id` — the sync execution and target platform, set while a sync task runs.
+- Exception handlers log with tracebacks at `WARNING` (retries, expected errors) or `ERROR` (permanent failure).
+
+Use `jq` to filter structured fields, e.g. `docker compose logs -f worker | jq 'select(.level=="ERROR")'`.
 
 ## Audit log
 

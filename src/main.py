@@ -10,15 +10,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from src.app import __version__
 from src.app.api import register_routers
 from src.app.auth.tokens import purge_expired_sessions, verify_session
 from src.app.db import init_db
+from src.app.log_config import setup_logging
 from src.app.services import get_sync_target
 from src.app.services.scheduler import SchedulerService
 from src.app.settings import settings
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+setup_logging(level="debug" if settings.debug else "info", log_format=settings.log_format)
 
 PUBLIC_PATHS = {
     "/api/auth/plex/login",
@@ -99,7 +101,7 @@ app = FastAPI(
         "Sync playlists from YouTube Music (and other sources) to Plex/Jellyfin "
         "using MusicBrainz metadata IDs and AI-powered match rules."
     ),
-    version="1.0.0",
+    version=__version__,
     redirect_slashes=False,
     docs_url=docs_url,
     redoc_url=redoc_url,

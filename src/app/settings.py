@@ -1,6 +1,6 @@
-from typing import Any, Self
+from typing import Any, Literal, Self
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -15,7 +15,8 @@ class Settings(BaseSettings):
     celery_broker_url: str = Field(default="redis://valkey:6379/0")
     celery_result_backend: str = Field(default="redis://valkey:6379/1")
     celery_worker_concurrency: int = Field(default=1, ge=1)
-    celery_log_level: str = Field(default="info")
+    celery_log_level: Literal["debug", "info", "warning", "error", "critical"] = "info"
+    log_format: Literal["json", "console"] = "json"
     source_playlist_cache_ttl_seconds: int = Field(default=300, ge=1)
     explore_cache_ttl_seconds: int = Field(default=900, ge=1)
 
@@ -29,6 +30,13 @@ class Settings(BaseSettings):
     app_url: str = "http://localhost:8000"
     secret_key: str = ""
     session_ttl_hours: int = 168
+
+    @field_validator("celery_log_level", "log_format", mode="before")
+    @classmethod
+    def _lower_on_reading(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            return value.lower()
+        return value
 
     @model_validator(mode="after")
     def _validate_secret_key(self) -> Self:

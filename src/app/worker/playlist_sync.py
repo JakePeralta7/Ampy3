@@ -111,6 +111,7 @@ class PlaylistSync:
                     "Exception checking playlist %s: %s — creating new",
                     existing_playlist_id,
                     e,
+                    exc_info=True,
                 )
 
         items = [{"item_id": iid} for iid in matched_item_ids]

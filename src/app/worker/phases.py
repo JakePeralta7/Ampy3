@@ -75,10 +75,18 @@ class FetchPhase(SyncPhase):
         schedule_id: int | None = input_data.get("schedule_id")
         target_ids: list[str] = input_data.get("target_ids", [ctx.target_id])
 
+        logger.info(
+            "Fetching %s playlist: %s (schedule_id=%s)",
+            source_id,
+            source_url,
+            schedule_id,
+        )
+
         source_cls = SourceRegistry.get(source_id)
         source_adapter = source_cls()
         validate_url = getattr(source_cls, "is_valid_url", source_cls.supports_url)
         if not validate_url(source_url):
+            logger.warning("Invalid %s source URL: %s", source_id, source_url)
             return PhaseResult(
                 success=False,
                 error=f"Invalid {source_id} source URL: {source_url}",
@@ -112,6 +120,13 @@ class FetchPhase(SyncPhase):
                 track_rows,
                 target_ids,
             )
+
+        logger.info(
+            "Persisted %d tracks from %s as sync %d",
+            len(track_rows),
+            source_id,
+            sync_id,
+        )
 
         return PhaseResult(
             data={
@@ -218,6 +233,14 @@ class MatchPhase(SyncPhase):
                 else:
                     failed += 1
 
+        logger.info(
+            "Matched %d/%d tracks for sync %d target %s",
+            matched,
+            matched + failed,
+            ctx.sync_id,
+            ctx.target_id,
+        )
+
         return PhaseResult(data={"matched": matched, "failed": failed})
 
     def _match_track(self, db, ctx: SyncContext, item_id: str) -> MatchResult:  # noqa: ANN001
@@ -300,8 +323,13 @@ class MatchPhase(SyncPhase):
                 matches = run_async(engine.run(track, rules=rules))
                 if matches:
                     return matches[0]
-        except Exception:
-            logger.warning("MatchEngine failed for track '%s'", track.title)
+        except Exception as e:
+            logger.warning(
+                "MatchEngine failed for track '%s': %s",
+                track.title,
+                e,
+                exc_info=True,
+            )
         return None
 
 

@@ -23,7 +23,10 @@ from src.app.settings import settings
 
 
 def _alembic_cfg() -> Config:
-    cfg = Config("alembic/alembic.ini")
+    cfg = Config(
+        "alembic/alembic.ini",
+        attributes={"configure_alembic_logging": True},
+    )
     cfg.set_main_option("sqlalchemy.url", settings.database_url)
     return cfg
 
