@@ -7,9 +7,13 @@ the same Valkey cache entries instead of duplicating fetches.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from src.app.core.clients.base import MusicSourceClient
-from src.app.core.clients.deezer import DeezerClient
-from src.app.core.clients.ytmusic import YouTubeMusicClient
+
+if TYPE_CHECKING:
+    from src.app.core.clients.deezer import DeezerClient
+    from src.app.core.clients.ytmusic import YouTubeMusicClient
 
 _ytmusic_client: YouTubeMusicClient | None = None
 _deezer_client: DeezerClient | None = None
@@ -19,6 +23,8 @@ def get_ytmusic_client() -> YouTubeMusicClient:
     """Return the shared ``YouTubeMusicClient`` instance (lazy singleton)."""
     global _ytmusic_client
     if _ytmusic_client is None:
+        from src.app.core.clients.ytmusic import YouTubeMusicClient
+
         _ytmusic_client = YouTubeMusicClient()
     return _ytmusic_client
 
@@ -27,6 +33,8 @@ def get_deezer_client() -> DeezerClient:
     """Return the shared ``DeezerClient`` instance (lazy singleton)."""
     global _deezer_client
     if _deezer_client is None:
+        from src.app.core.clients.deezer import DeezerClient
+
         _deezer_client = DeezerClient()
     return _deezer_client
 

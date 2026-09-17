@@ -22,6 +22,36 @@ import yaml
 from src.app.match_rules.schema import RuleDefinition
 
 
+class _UniqueKeyLoader(yaml.SafeLoader):
+    """SafeLoader that rejects duplicate mapping keys.
+
+    ``yaml.safe_load`` silently keeps the *last* value for a duplicated key,
+    which can mask config mistakes (e.g. two ``nodes`` blocks). Duplicate keys
+    raise a :class:`yaml.constructor.ConstructorError` instead.
+    """
+
+
+def _construct_unique_mapping(loader, node, deep=False):
+    mapping = {}
+    for key_node, value_node in node.value:
+        key = loader.construct_object(key_node, deep=deep)
+        if key in mapping:
+            raise yaml.constructor.ConstructorError(
+                "while constructing a mapping",
+                node.start_mark,
+                f"found duplicate key {key!r}",
+                key_node.start_mark,
+            )
+        mapping[key] = loader.construct_object(value_node, deep=deep)
+    return mapping
+
+
+_UniqueKeyLoader.add_constructor(
+    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
+    _construct_unique_mapping,
+)
+
+
 class ValidationError(Exception):
     """Raised when a rule YAML fails validation.
 
@@ -43,7 +73,7 @@ def validate_rule_yaml(yaml_content: str) -> RuleDefinition:
 
     # ── 1. Parse YAML ──────────────────────────────────────────────────────
     try:
-        raw = yaml.safe_load(yaml_content)
+        raw = yaml.load(yaml_content, Loader=_UniqueKeyLoader)
     except yaml.YAMLError as exc:
         raise ValidationError([f"YAML parse error: {exc}"]) from exc
 
@@ -56,7 +86,24 @@ def validate_rule_yaml(yaml_content: str) -> RuleDefinition:
     except Exception as exc:
         raise ValidationError([f"Schema error: {exc}"]) from exc
 
+    # ── 2b. Post-parse duplicate detection ──────────────────────────────
+    # Duplicate node IDs
     node_ids = list(rule.nodes.keys())
+    seen_ids: set[str] = set()
+    dupes = [nid for nid in node_ids if nid in seen_ids or seen_ids.add(nid)]
+    if dupes:
+        errors.append(f"Duplicate node ID(s): {dupes}")
+
+    # Duplicate edge from/to combinations
+    edge_keys = [(e.from_node, e.to_node) for e in rule.edges]
+    seen_edges: set[tuple[str, str]] = set()
+    dupes = [k for k in edge_keys if k in seen_edges or seen_edges.add(k)]  # type: ignore[func-returns-value]
+    if dupes:
+        errors.append(f"Duplicate edge(s): {dupes}")
+
+    if errors:
+        raise ValidationError(errors)
+
     node_types = {nid: ndef.type for nid, ndef in rule.nodes.items()}
 
     # ── 3. Structural checks ───────────────────────────────────────────────

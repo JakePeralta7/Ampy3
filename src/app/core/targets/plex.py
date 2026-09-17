@@ -55,36 +55,24 @@ class PlexTarget(BaseTarget):
         self._token = token
         self._base_url = base_url
         self._client: httpx.AsyncClient | None = None
-        self._client_loop_id: int | None = None
         self._machine_identifier: str | None = None
 
     @property
     def client(self) -> httpx.AsyncClient:
-        """Return an httpx.AsyncClient bound to the current event loop.
+        """Return the lazily-created httpx.AsyncClient.
 
-        Celery workers create a fresh event loop per task via ``_run_async``.
-        A client created in a previous loop raises ``Event loop is closed``
-        when reused, so we recreate it whenever the loop identity changes.
+        The client is created once per target instance and reused for its
+        lifetime. Safe because workers run on a single persistent event loop
+        (see ``worker.session.run_async``) and FastAPI is single-loop.
         """
-        import asyncio
-
-        try:
-            loop = asyncio.get_running_loop()
-            loop_id = id(loop)
-        except RuntimeError:
-            loop_id = None
-
-        if self._client is not None and self._client_loop_id == loop_id:
-            return self._client
-
-        self._client = httpx.AsyncClient(base_url=self._base_url, timeout=10.0)
-        self._client.headers.update(
-            {
-                "X-Plex-Token": self._token,
-                "Content-Type": "application/json",
-            }
-        )
-        self._client_loop_id = loop_id
+        if self._client is None:
+            self._client = httpx.AsyncClient(base_url=self._base_url, timeout=10.0)
+            self._client.headers.update(
+                {
+                    "X-Plex-Token": self._token,
+                    "Content-Type": "application/json",
+                }
+            )
         return self._client
 
     async def _ensure_machine_id(self) -> str:
@@ -756,22 +744,26 @@ class PlexTarget(BaseTarget):
         if self._client is not None:
             await self._client.aclose()
             self._client = None
-            self._client_loop_id = None
 
 
 async def _create_plex_target() -> PlexTarget:
     """Factory: build a PlexTarget from DB config."""
+    import asyncio
+
     from sqlalchemy import select
 
     from src.app.db import SessionLocal
     from src.app.models import Config
 
-    db = SessionLocal()
-    try:
-        result = db.execute(select(Config).where(Config.key.in_(["plex_host", "plex_token"])))
-        config = {row.key: row.value for row in result.scalars().all()}
-    finally:
-        db.close()
+    def _read_config() -> dict[str, str]:
+        db = SessionLocal()
+        try:
+            result = db.execute(select(Config).where(Config.key.in_(["plex_host", "plex_token"])))
+            return {row.key: row.value for row in result.scalars().all()}
+        finally:
+            db.close()
+
+    config = await asyncio.to_thread(_read_config)
 
     token = config.get("plex_token", "").strip()
     server_url = config.get("plex_host", "").strip()

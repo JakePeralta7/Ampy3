@@ -1,6 +1,9 @@
 """Celery task definitions for playlist sync operations."""
 
+import dataclasses
+import hashlib
 import logging
+import random
 import time
 import uuid
 from datetime import UTC, datetime
@@ -10,7 +13,7 @@ from celery import Celery
 from sqlalchemy import select
 
 from src.app.constants import DEFAULT_SOURCE, DEFAULT_TARGET
-from src.app.models import SyncRun
+from src.app.models import Config, SyncRun
 from src.app.services.audit import log_event_sync
 from src.app.services.sync_tasks import (
     register_sync_task,
@@ -25,6 +28,29 @@ from src.app.worker.matcher import TrackMatcher
 from src.app.worker.pipeline import SyncPipeline
 
 logger = logging.getLogger(__name__)
+
+
+def _config_fingerprint() -> str:
+    """Hash the config table to detect target-setting changes between sync runs."""
+    from src.app.db import SessionLocal
+
+    with SessionLocal() as db:
+        rows = db.execute(select(Config.key, Config.value).order_by(Config.key)).all()
+    blob = "\n".join(f"{k}={v}" for k, v in rows)
+    return hashlib.sha256(blob.encode()).hexdigest()
+
+
+def _retry_countdown(completed_retries: int) -> int:
+    """Exponential backoff with jitter for task retries.
+
+    Capped at Celery soft_time_limit - 60s buffer to avoid exceeding time limits.
+    """
+    from src.app.worker.app import celery_app
+
+    soft_limit = celery_app.conf.task_soft_time_limit or 3480
+    max_backoff = max(60, soft_limit - 60)
+    base = min(max_backoff, 60 * (2**completed_retries))
+    return base + random.randint(0, 10)
 
 
 @celery_app.task(bind=True)
@@ -117,7 +143,6 @@ def sync_playlists_task(
                     sync_id=sync_id,
                     target_id=tid,
                     playlist_title=result["playlist_title"],
-                    track_rows=result["track_rows"],
                     track_items=track_items,
                     source=source,
                     playlist_url=playlist_url,
@@ -171,18 +196,19 @@ def sync_playlists_task(
                     completed_at=datetime.now(UTC).isoformat(),
                     execution_id=execution_id,
                 )
-            else:
-                logger.warning(
-                    "Sync failed (attempt %d/%d), retrying in 60s: %s — %s",
-                    attempt,
-                    self.max_retries,
-                    e,
-                    playlist_url,
-                    exc_info=True,
-                )
-            if self.request.retries >= self.max_retries and schedule_id is not None:
-                unregister_sync_task(schedule_id, self.request.id)
-            raise self.retry(exc=e, countdown=60) from e
+                if schedule_id is not None:
+                    unregister_sync_task(schedule_id, self.request.id)
+                raise
+            logger.warning(
+                "Sync failed (attempt %d/%d), retrying in ~%ds: %s — %s",
+                attempt,
+                self.max_retries,
+                _retry_countdown(self.request.retries),
+                e,
+                playlist_url,
+                exc_info=True,
+            )
+            raise self.retry(exc=e, countdown=_retry_countdown(self.request.retries)) from e
 
 
 @celery_app.task(bind=True)
@@ -191,7 +217,6 @@ def sync_target_task(
     sync_id: int,
     target_id: str = DEFAULT_TARGET,
     playlist_title: str = "",
-    track_rows: list[dict[str, Any]] | None = None,
     track_items: list[str] | None = None,
     source: str = DEFAULT_SOURCE,
     playlist_url: str = "",
@@ -199,6 +224,19 @@ def sync_target_task(
     execution_id: str | None = None,
 ):
     """Match all tracks, then finalize for one target."""
+    from src.app.services import get_valkey_client
+    from src.app.worker.session import run_async
+
+    fp = _config_fingerprint()
+    valkey = get_valkey_client()
+    last_fp = run_async(valkey.get("config:fingerprint"))
+    if last_fp and last_fp.decode() != fp:
+        from src.app.services.target import TargetService
+
+        TargetService.reset()
+        logger.info("Target config changed — reset cached target instances")
+    run_async(valkey.set("config:fingerprint", fp))
+
     register_sync_task(sync_id, self.request.id)
     ctx = SyncContext(
         sync_id=sync_id,
@@ -224,7 +262,7 @@ def sync_target_task(
             len(track_items or []),
         )
         try:
-            stats = pipeline.run_target(track_rows or [], track_items or [])
+            stats = pipeline.run_target(track_items or [])
 
             log_event_sync(
                 event_type="sync.completed",
@@ -292,9 +330,11 @@ def sync_target_task(
                 )
             else:
                 logger.warning(
-                    "Target sync failed (attempt %d/%d), retrying: sync_id=%d target=%s: %s",
+                    "Target sync failed (attempt %d/%d), retrying in ~%ds: "
+                    "sync_id=%d target=%s: %s",
                     attempt,
                     self.max_retries,
+                    _retry_countdown(self.request.retries),
                     sync_id,
                     target_id,
                     e,
@@ -302,7 +342,8 @@ def sync_target_task(
                 )
             if self.request.retries >= self.max_retries:
                 unregister_sync_task(sync_id, self.request.id)
-            raise self.retry(exc=e, countdown=60) from e
+                raise
+            raise self.retry(exc=e, countdown=_retry_countdown(self.request.retries)) from e
 
 
 @celery_app.task(bind=True)
@@ -340,7 +381,7 @@ def match_track_task(
             )
             raise
         logger.info("Match result: matched=%s item=%s", result.matched, item_id or "")
-        return result
+        return dataclasses.asdict(result)
 
 
 def get_sync_status_task(task_id: str):

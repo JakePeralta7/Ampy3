@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import logging
-import re
-import urllib.parse
+import threading
+import time
 from typing import Any
 
 import httpx
@@ -14,35 +14,73 @@ from src.app.core.matching import normalize
 
 logger = logging.getLogger(__name__)
 
+# MusicBrainz policy limits clients to 1 request/second.
+MIN_REQUEST_INTERVAL = 1.0
+MAX_RETRIES = 3
+RETRYABLE_STATUS = {429, 503}
+
 
 class MusicBrainzResolver:
     """Resolves track names to MusicBrainz recordings/artist/releases via the web service API."""
 
     BASE_URL = "https://musicbrainz.org/ws/2"
+    _last_request: float = 0.0
+    _rate_lock = threading.Lock()
 
     def __init__(self, user_agent: str | None = None):
         self.headers = {"User-Agent": user_agent or f"ampy3/{__version__}"}
 
+    def _throttle(self) -> None:
+        """Enforce the MusicBrainz rate limit (1 request/second)."""
+        with self._rate_lock:
+            elapsed = time.monotonic() - self._last_request
+            if elapsed < MIN_REQUEST_INTERVAL:
+                time.sleep(MIN_REQUEST_INTERVAL - elapsed)
+            self._last_request = time.monotonic()
+
     def _get(self, endpoint: str, params: dict[str, Any]) -> dict[str, Any]:
         url = f"{self.BASE_URL}/{endpoint}"
         query = params.get("query", "")
-        logger.debug(f"[MusicBrainz] Searching {endpoint} with query: {query}")
-        resp = httpx.get(url, params=params, headers=self.headers, timeout=15)
-        resp.raise_for_status()
-        result = resp.json()
-        # Log result counts for debugging
-        result_key = f"{endpoint}s" if endpoint != "release" else "releases"
-        result_count = len(result.get(result_key, []))
-        logger.debug(f"[MusicBrainz] Found {result_count} {endpoint} results")
-        return result
+        logger.debug("[MusicBrainz] Searching %s with query: %s", endpoint, query)
+
+        last_exc: httpx.HTTPError | None = None
+        for attempt in range(MAX_RETRIES):
+            self._throttle()
+            try:
+                resp = httpx.get(url, params=params, headers=self.headers, timeout=15)
+            except httpx.HTTPError as exc:
+                last_exc = exc
+                logger.warning("[MusicBrainz] Request error on attempt %d: %s", attempt + 1, exc)
+                time.sleep(1 * (attempt + 1))
+                continue
+
+            if resp.status_code in RETRYABLE_STATUS:
+                retry_after = resp.headers.get("Retry-After", "")
+                delay = max(1, int(retry_after)) if retry_after.isdigit() else 2**attempt
+                logger.warning(
+                    "[MusicBrainz] HTTP %d on attempt %d for %s; retrying in %ds",
+                    resp.status_code,
+                    attempt + 1,
+                    endpoint,
+                    delay,
+                )
+                time.sleep(delay)
+                continue
+
+            resp.raise_for_status()
+            result = resp.json()
+            result_key = f"{endpoint}s" if endpoint != "release" else "releases"
+            result_count = len(result.get(result_key, []))
+            logger.debug("[MusicBrainz] Found %d %s results", result_count, endpoint)
+            return result
+
+        raise httpx.HTTPError(
+            f"MusicBrainz request failed after {MAX_RETRIES} attempts: {endpoint}"
+        ) from last_exc
 
     def search_recording(
         self, title: str, artist: str | None = None, duration_ms: int | None = None
     ) -> dict[str, Any] | None:
-        rec_params = {"recording": title, "fmt": "json", "limit": 5}
-        if artist:
-            rec_params["arid"] = artist  # placeholder - will use discogs approach
-
         search_params = {"query": f"rec:{title} {artist or ''}", "fmt": "json"}
         result = self._get("recording", search_params)
         recordings = result.get("recordings", [])
@@ -226,19 +264,17 @@ class MusicBrainzResolver:
             limit: Maximum number of results (max 50)
 
         Returns:
-            List of release dicts with id, title, date, track_count
+            List of release dicts with id, title, date, track_count, status, type
         """
         result = self._get(
-            "artist",
+            f"artist/{artist_mbid}",
             {
-                "id": artist_mbid,
                 "fmt": "json",
-                "includes": "releases",
-                "limit": min(limit, 50),
+                "inc": "releases",
             },
         )
         releases = []
-        for r in result.get("releases", []):
+        for r in result.get("releases", [])[:limit]:
             releases.append(
                 {
                     "id": r.get("id"),
@@ -267,11 +303,10 @@ class MusicBrainzResolver:
             List of track dicts with id, title, artist, duration_ms, track_number
         """
         result = self._get(
-            "release",
+            f"release/{release_mbid}",
             {
-                "id": release_mbid,
                 "fmt": "json",
-                "includes": "recordings",
+                "inc": "recordings",
             },
         )
         tracks = []
@@ -294,8 +329,8 @@ class MusicBrainzResolver:
     def lookup_release(self, mbid: str) -> dict[str, Any] | None:
         try:
             return self._get(
-                "release",
-                {"id": mbid, "fmt": "json", "includes": ["recordings", "artists"]},
+                f"release/{mbid}",
+                {"fmt": "json", "inc": "recordings+artists"},
             )
         except httpx.HTTPError as exc:
             logger.warning("Failed to lookup release %s: %s", mbid, exc)
@@ -352,4 +387,4 @@ class MusicBrainzResolver:
         scored.sort(key=lambda x: x[0], reverse=True)
         if scored and scored[0][0] > 0:
             return scored[0][1]
-        return recordings[0] if recordings else None
+        return None

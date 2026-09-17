@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
+from typing import Any
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
@@ -149,9 +150,13 @@ class SchedulerService(ServiceBase):
         )
 
     @classmethod
-    async def trigger_sync_now(cls, sync: ScheduledPlaylistSync) -> None:
-        """Immediately dispatch a sync for the given schedule with all targets."""
-        sync_playlists_task.delay(
+    async def trigger_sync_now(cls, sync: ScheduledPlaylistSync) -> Any:
+        """Immediately dispatch a sync for the given schedule with all targets.
+
+        Returns the Celery :class:`AsyncResult` so callers can surface the
+        real task id (usable with the status endpoint).
+        """
+        return sync_playlists_task.delay(
             playlist_url=sync.source_url,
             source=sync.source,
             target_ids=sync.target_ids,

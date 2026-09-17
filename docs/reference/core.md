@@ -168,24 +168,6 @@ The match-rule graph executor pulls handlers from here.
     options:
       show_source: true
 
-## Providers (metadata)
-
-::: app.core.providers
-    options:
-      show_source: true
-
-::: app.core.providers.base
-    options:
-      show_source: true
-
-::: app.core.providers.musicbrainz
-    options:
-      show_source: true
-
-::: app.core.providers.registry
-    options:
-      show_source: true
-
 ## Where to look next
 
 - [Metadata matching](../guides/metadata-matching.md)

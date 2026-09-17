@@ -150,6 +150,8 @@ def _best_match(
     candidates: list[dict[str, Any]],
     threshold: float = 0.75,
     search_artist: str | None = None,
+    title_weight: float = 0.6,
+    artist_weight: float = 0.4,
 ) -> dict[str, Any] | None:
     """Find the best matching track from a list of candidates.
 
@@ -161,6 +163,8 @@ def _best_match(
         candidates: List of track dicts with 'title' field
         threshold: Minimum similarity score to consider a match
         search_artist: Optional source artist name for artist-aware matching
+        title_weight: Weight for title score when combining (default 0.6)
+        artist_weight: Weight for artist score when combining (default 0.4)
 
     Returns:
         Best matching track dict if score >= threshold, None otherwise
@@ -179,7 +183,7 @@ def _best_match(
         if search_artist:
             candidate_artist = candidate.get("artist_name", "")
             artist_score = _artist_similarity(search_artist, candidate_artist)
-            score = 0.6 * title_score + 0.4 * artist_score
+            score = title_weight * title_score + artist_weight * artist_score
         else:
             score = title_score
         if score > best_score:

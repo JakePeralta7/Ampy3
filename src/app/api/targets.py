@@ -63,18 +63,14 @@ async def _create_target_from_config(target_id: str, config: dict[str, str]):
     """Create a target instance from the given config dict, falling back to DB for empty values."""
     from sqlalchemy import select
 
-    from src.app.db import SessionLocal
-    from src.app.models import Config
+    from src.app.db import AsyncSessionLocal
 
     expected_keys = _TARGET_CONFIG_KEYS.get(target_id, [])
 
     # Fetch existing values from DB for fallback
-    db = SessionLocal()
-    try:
-        result = db.execute(select(Config).where(Config.key.in_(expected_keys)))
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(select(Config).where(Config.key.in_(expected_keys)))
         rows = {row.key: row.value for row in result.scalars().all()}
-    finally:
-        db.close()
 
     # Merge: provided values take precedence, empty strings fall back to DB
     merged = {k: (config.get(k, "") or rows.get(k, "")) for k in expected_keys}
@@ -109,11 +105,14 @@ async def test_target(
 
     config = {k: body.config.get(k, "") for k in expected_keys}
 
+    target = None
     try:
         target = await _create_target_from_config(body.target_id, config)
         await target.test_connection()
-        await target.close()
         return TargetTestResponse(ok=True)
     except Exception as exc:
         logger.warning("Target test failed for %s: %s", body.target_id, exc)
         return TargetTestResponse(ok=False, error=str(exc))
+    finally:
+        if target is not None:
+            await target.close()

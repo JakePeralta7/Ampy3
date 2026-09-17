@@ -7,6 +7,7 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -61,6 +62,8 @@ class MatchRule(TimestampMixin, Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     yaml_content: Mapped[str] = mapped_column(Text, nullable=False, default="")
+
+    __table_args__ = (Index("ix_match_rules_active_priority", "is_active", "priority"),)
 
     def __repr__(self) -> str:
         return f"<MatchRule(id={self.id}, name={self.name}, priority={self.priority})>"
@@ -138,7 +141,7 @@ class ScheduleTarget(Base):
         nullable=False,
         index=True,
     )
-    target_id: Mapped[str] = mapped_column(String(50), nullable=False)
+    target_id: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     playlist_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     sync: Mapped[ScheduledPlaylistSync] = relationship(back_populates="schedule_targets")

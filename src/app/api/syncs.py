@@ -1,5 +1,6 @@
 """Sync endpoints — triggering, tracking, and reviewing sync operations."""
 
+import asyncio
 import logging
 from datetime import UTC, datetime
 from typing import Any
@@ -263,7 +264,7 @@ async def get_sync_status(
     """Poll the Celery backend for sync job status and result."""
     from src.app.worker.tasks import get_sync_status_task
 
-    return get_sync_status_task(task_id)
+    return await asyncio.to_thread(get_sync_status_task, task_id)
 
 
 # ─── Tracks ──────────────────────────────────────────────────────

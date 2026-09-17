@@ -12,6 +12,38 @@ from src.app.core.nodes.registry import register_node
 
 logger = logging.getLogger(__name__)
 
+# ─── Album comparison strategies ────────────────────────────────
+
+
+def _album_exact(ref: str, cand: str) -> float:
+    """Exact normalized string equality: 1.0 or 0.0."""
+    return 1.0 if ref == cand else 0.0
+
+
+def _album_contains(ref: str, cand: str) -> float:
+    """Substring containment scoring: 0.9 for containment, 0.0 otherwise."""
+    if ref == cand:
+        return 1.0
+    if ref in cand or cand in ref:
+        return 0.9
+    return 0.0
+
+
+def _album_fuzzy(ref: str, cand: str) -> float:
+    """Token Jaccard similarity for album names."""
+    ref_tokens = set(ref.split())
+    cand_tokens = set(cand.split())
+    if not ref_tokens or not cand_tokens:
+        return 0.0
+    return len(ref_tokens & cand_tokens) / len(ref_tokens | cand_tokens)
+
+
+_ALBUM_COMPARATORS = {
+    "exact": _album_exact,
+    "contains": _album_contains,
+    "fuzzy": _album_fuzzy,
+}
+
 
 @register_node("mbid_compare")
 class MBIDCompareNode(NodeHandlerBase):
@@ -49,9 +81,19 @@ class MBIDCompareNode(NodeHandlerBase):
 
 @register_node("pick_best")
 class PickBestNode(NodeHandlerBase):
+    """Pick the best matching candidate using combined title + artist similarity.
+
+    Config:
+    - title_threshold: minimum combined score to accept a match. Default: 0.75
+    - title_weight: weight for title score when combining. Default: 0.6
+    - artist_weight: weight for artist score when combining. Default: 0.4
+    """
+
     async def execute(self, track: TrackMetadata, inputs: NodeInputs) -> NodeOutputs:
         candidates = inputs.get("candidates", inputs.get("in", []))
         threshold = self._config.get("title_threshold", 0.75)
+        title_weight = self._config.get("title_weight", 0.6)
+        artist_weight = self._config.get("artist_weight", 0.4)
 
         search_title: str = ""
         title_input = inputs.get("title")
@@ -75,6 +117,8 @@ class PickBestNode(NodeHandlerBase):
             candidates,
             threshold=threshold,
             search_artist=search_artist or None,
+            title_weight=title_weight,
+            artist_weight=artist_weight,
         )
         return {"out": match}
 
@@ -105,8 +149,9 @@ class CompareNode(NodeHandlerBase):
 
     Config:
     - fields_to_match: list of field names (title, artist_name, album_name)
-    - threshold: minimum similarity score (0.0-1.0)
+    - threshold: minimum similarity score (0.0-1.0). Default: 0.75
     - weights: dict of field weights {title: 50, artist_name: 25, album_name: 25}
+    - album_comparison: album matching strategy - "exact" | "contains" | "fuzzy". Default: exact
     """
 
     async def execute(self, track: TrackMetadata, inputs: NodeInputs) -> NodeOutputs:
@@ -146,6 +191,9 @@ class CompareNode(NodeHandlerBase):
         ref_title = ref.get("title", track.title or "")
         ref_artist = ref.get("artist_name", track.artist_name or "")
         ref_album = ref.get("album_name", track.album_name or "")
+
+        album_comparison = self._config.get("album_comparison", "exact")
+        album_comparator = _ALBUM_COMPARATORS.get(album_comparison, _album_exact)
         logger.debug(
             "[COMPARE] Reference: title=%s, artist=%s, album=%s",
             ref_title,
@@ -210,7 +258,7 @@ class CompareNode(NodeHandlerBase):
                 ref_norm = _normalize_album(ref_album).lower().strip()
                 cand_norm = _normalize_album(cand_album).lower().strip()
                 if ref_norm and cand_norm:
-                    field_scores["album_name"] = 1.0 if ref_norm == cand_norm else 0.0
+                    field_scores["album_name"] = album_comparator(ref_norm, cand_norm)
                 else:
                     field_scores["album_name"] = 0.0
 

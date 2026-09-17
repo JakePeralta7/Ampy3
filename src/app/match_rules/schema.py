@@ -57,10 +57,10 @@ class NodeDef(BaseModel):
 class EdgeDef(BaseModel):
     """A directed edge connecting two nodes."""
 
-    from_node: str = Field(alias="from")
-    to_node: str = Field(alias="to")
-    source_handle: str = "out"
-    target_handle: str = "in"
+    from_node: str = Field(alias="from", min_length=1)
+    to_node: str = Field(alias="to", min_length=1)
+    source_handle: str = Field(default="out", min_length=1)
+    target_handle: str = Field(default="in", min_length=1)
 
     model_config = {"populate_by_name": True}
 

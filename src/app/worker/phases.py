@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, text
 from sqlalchemy.orm import selectinload
 
 from src.app.constants import INTERVAL_DELTAS
@@ -21,6 +21,7 @@ from src.app.core.models import TrackMetadata
 from src.app.core.services.matcher import MatchEngine, get_active_rules_sync
 from src.app.core.sources.registry import SourceRegistry
 from src.app.models import (
+    MatchRule,
     PlaylistTrack,
     PlaylistTrackTarget,
     ScheduledPlaylistSync,
@@ -149,17 +150,19 @@ class FetchPhase(SyncPhase):
     ) -> int:
         """Save source tracks to DB and return the sync record ID."""
         if schedule_id is not None:
-            stmt = select(ScheduledPlaylistSync).where(ScheduledPlaylistSync.id == schedule_id)
-        else:
-            stmt = select(ScheduledPlaylistSync).where(
-                ScheduledPlaylistSync.source_url == playlist_url,
+            sync_record = (
+                db.execute(
+                    select(ScheduledPlaylistSync).where(ScheduledPlaylistSync.id == schedule_id)
+                )
+                .scalars()
+                .first()
             )
-
-        sync_record = db.execute(stmt).scalars().first()
-
-        if not sync_record:
-            if schedule_id is not None:
+            if not sync_record:
                 raise SyncScheduleMissingError(schedule_id)
+        else:
+            # Manual (ad-hoc) runs always get their own record. Never reuse an
+            # existing scheduled row matched by URL — that would clobber the
+            # schedule's stats and shift next_sync_at on every manual run.
             sync_record = ScheduledPlaylistSync(
                 source=source,
                 source_url=playlist_url,
@@ -225,9 +228,17 @@ class MatchPhase(SyncPhase):
         matched = 0
         failed = 0
 
+        # Load rules and engine once per phase instead of per track: calling
+        # get_active_rules_sync() and rebuilding MatchEngine for every source
+        # track is needless DB + object churn on large playlists.
+        rules = get_active_rules_sync()
+        engine = MatchEngine(ctx.target) if rules else None
+        if not rules:
+            logger.warning("No active match rules loaded; all tracks will be marked failed")
+
         with ctx.session() as db:
             for item_id in track_items:
-                result = self._match_track(db, ctx, item_id)
+                result = self._match_track(db, ctx, item_id, engine, rules)
                 if result.matched:
                     matched += 1
                 else:
@@ -243,7 +254,14 @@ class MatchPhase(SyncPhase):
 
         return PhaseResult(data={"matched": matched, "failed": failed})
 
-    def _match_track(self, db, ctx: SyncContext, item_id: str) -> MatchResult:  # noqa: ANN001
+    def _match_track(  # noqa: ANN001
+        self,
+        db,
+        ctx: SyncContext,
+        item_id: str,
+        engine: MatchEngine | None,
+        rules: list[MatchRule] | None,
+    ) -> MatchResult:
         """Match a single track and persist PlaylistTrackTarget on success."""
         stmt = select(PlaylistTrack).where(
             PlaylistTrack.sync_id == ctx.sync_id,
@@ -264,7 +282,7 @@ class MatchPhase(SyncPhase):
             album_mbid=db_row.source_album_mbid,
         )
 
-        match = self._match_with_rules(ctx, track)
+        match = self._match_with_rules(ctx, track, engine, rules)
 
         if not match:
             return MatchResult(matched=False, message=f"No match for '{db_row.source_title}'")
@@ -314,15 +332,20 @@ class MatchPhase(SyncPhase):
             rule_id=match.get("_rule_id"),
         )
 
-    def _match_with_rules(self, ctx: SyncContext, track: TrackMetadata) -> dict[str, Any] | None:
+    def _match_with_rules(
+        self,
+        ctx: SyncContext,
+        track: TrackMetadata,
+        engine: MatchEngine | None,
+        rules: list[MatchRule] | None,
+    ) -> dict[str, Any] | None:
         """Try MatchEngine with active rules."""
+        if engine is None:
+            return None
         try:
-            rules = get_active_rules_sync()
-            if rules:
-                engine = MatchEngine(ctx.target)
-                matches = run_async(engine.run(track, rules=rules))
-                if matches:
-                    return matches[0]
+            matches = run_async(engine.run(track, rules=rules))
+            if matches:
+                return matches[0]
         except Exception as e:
             logger.warning(
                 "MatchEngine failed for track '%s': %s",
@@ -350,7 +373,7 @@ class FinalizePhase(SyncPhase):
         with ctx.session() as db:
             self._finalize_counts(db, ctx, matched_count, failed_count)
             self._snapshot_history(db, ctx)
-            self._update_stats(db, ctx, matched_count, failed_count)
+            self._update_stats(db, ctx)
             matched_item_ids = self._collect_matched_ids(db, ctx)
 
         self._sync_target_playlist(ctx, matched_item_ids)
@@ -429,21 +452,35 @@ class FinalizePhase(SyncPhase):
             db.add_all(new_targets)
             db.flush()
 
-    def _update_stats(
-        self,
-        db,
-        ctx: SyncContext,
-        matched: int,
-        failed: int,  # noqa: ANN001
-    ) -> None:
-        """Update ScheduledPlaylistSync stats and schedule next run."""
+    def _update_stats(self, db, ctx: SyncContext) -> None:  # noqa: ANN001
+        """Update ScheduledPlaylistSync stats and schedule next run.
+
+        Counts are summed from the most-recent SyncRun per target, so a
+        multi-target sync (n concurrent child tasks) never clobbers the
+        schedule-level stats based on which target happened to finish last.
+
+        A per-sync advisory lock serializes concurrent stat writers so
+        two targets finalizing in parallel cannot produce a stale sum.
+        """
+        db.execute(
+            text("SELECT pg_advisory_xact_lock(:k)"),
+            {"k": hash(ctx.sync_id) & 0x7FFFFFFFFFFFFFFF},
+        )
+
         stmt = select(ScheduledPlaylistSync).where(ScheduledPlaylistSync.id == ctx.sync_id)
         sync_record = db.execute(stmt).scalars().first()
         if not sync_record:
             return
 
-        sync_record.matched_count = matched
-        sync_record.failed_count = failed
+        runs = db.execute(select(SyncRun).where(SyncRun.sync_id == ctx.sync_id)).scalars().all()
+        latest_by_target: dict[str, SyncRun] = {}
+        for run in runs:
+            prev = latest_by_target.get(run.target_id)
+            if prev is None or (run.created_at, run.id) > (prev.created_at, prev.id):
+                latest_by_target[run.target_id] = run
+
+        sync_record.matched_count = sum(r.matched_count or 0 for r in latest_by_target.values())
+        sync_record.failed_count = sum(r.failed_count or 0 for r in latest_by_target.values())
         sync_record.last_synced_at = datetime.now(UTC)
         sync_record.error_message = None
 
@@ -456,8 +493,12 @@ class FinalizePhase(SyncPhase):
 
     def _collect_matched_ids(self, db, ctx: SyncContext) -> list[str]:  # noqa: ANN001
         """Collect matched item_ids from PlaylistTrackTarget for this target."""
-        stmt = select(PlaylistTrack).where(PlaylistTrack.sync_id == ctx.sync_id)
-        tracks = db.execute(stmt).scalars().all()
+        stmt = (
+            select(PlaylistTrack)
+            .where(PlaylistTrack.sync_id == ctx.sync_id)
+            .options(selectinload(PlaylistTrack.targets))
+        )
+        tracks = db.execute(stmt).scalars().unique().all()
 
         matched_ids = []
         for track in tracks:

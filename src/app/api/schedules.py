@@ -40,6 +40,16 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/schedules", tags=["schedules"])
 
 
+async def _reload_scheduler() -> None:
+    """Best-effort APScheduler reload; never fails the primary operation."""
+    from src.app.services.scheduler import SchedulerService
+
+    try:
+        await SchedulerService.reload_schedules()
+    except Exception:
+        logger.exception("Failed to reload APScheduler after schedule change")
+
+
 async def _replace_schedule_targets(db: AsyncSession, sync_id: int, target_ids: list[str]) -> None:
     """Sync a schedule's target rows to exactly ``target_ids``.
 
@@ -292,6 +302,8 @@ async def update_scheduled_sync(
         summary=f"Schedule '{sync.target_playlist_name}' updated — changed: {', '.join(changed)}",
     )
 
+    await _reload_scheduler()
+
     return _sync_to_out(sync)
 
 
@@ -321,6 +333,8 @@ async def delete_scheduled_sync(
         resource_id=str(sync_id),
         summary=f"Schedule '{sync.target_playlist_name}' deleted",
     )
+
+    await _reload_scheduler()
 
     return DeleteResponse(id=sync_id)
 
@@ -352,9 +366,8 @@ async def bulk_sync_now(
 
     task_ids = []
     for sync_id in found_ids:
-        task_ids.append(f"schedule_{sync_id}")
-
-    await SchedulerService.reload_schedules()
+        result = await SchedulerService.trigger_sync_now(syncs[sync_id])
+        task_ids.append(result.id)
 
     await log_event(
         event_type="sync.bulk_triggered",
@@ -398,6 +411,8 @@ async def bulk_toggle_active(
         summary=f"Bulk {action} {len(syncs)} schedule(s): {', '.join(names)}",
     )
 
+    await _reload_scheduler()
+
     return BulkResponse(processed=len(syncs))
 
 
@@ -430,6 +445,8 @@ async def bulk_delete(
         resource_type="schedule",
         summary=f"Bulk deleted {len(syncs)} schedule(s): {', '.join(names)}",
     )
+
+    await _reload_scheduler()
 
     return BulkResponse(processed=len(syncs))
 
@@ -467,8 +484,10 @@ async def trigger_sync_now(
         summary=f"Manual sync triggered for '{sync.target_playlist_name}'",
     )
 
+    result = await SchedulerService.trigger_sync_now(sync)
+
     return SyncNowResponse(
-        task_id=f"schedule_{sync_id}",
+        task_id=result.id,
         message=f"Sync triggered for {sync.target_playlist_name}",
     )
 

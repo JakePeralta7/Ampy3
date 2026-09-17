@@ -18,6 +18,20 @@ BASE_URL = "https://api.deezer.com"
 REQUEST_TIMEOUT = 15
 
 
+class DeezerAPIError(RuntimeError):
+    """Raised when the Deezer API returns an error payload.
+
+    Deezer returns HTTP 200 with a body like ``{"error": {"message": ...}}``
+    for many failures, so it must be checked explicitly or the error dict
+    would be cached and served as a successful result.
+    """
+
+    def __init__(self, endpoint: str, message: str) -> None:
+        super().__init__(f"Deezer API error for /{endpoint}: {message}")
+        self.endpoint = endpoint
+        self.message = message
+
+
 class DeezerClient(MusicSourceClient):
     """Cached wrapper around the public Deezer API."""
 
@@ -31,7 +45,12 @@ class DeezerClient(MusicSourceClient):
             timeout=REQUEST_TIMEOUT,
         )
         resp.raise_for_status()
-        return resp.json()
+        data = resp.json()
+        if isinstance(data, dict):
+            error = data.get("error")
+            if isinstance(error, dict) and error.get("message"):
+                raise DeezerAPIError(endpoint, error["message"])
+        return data
 
     async def get_playlist(self, playlist_id: str) -> dict[str, Any]:
         return await self._cached(

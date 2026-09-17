@@ -90,6 +90,13 @@ async def create_rule(
 
     try:
         async with AsyncSessionLocal() as session:
+            existing = await session.execute(select(MatchRule).where(MatchRule.name == body.name))
+            if existing.scalars().first() is not None:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"A rule named '{body.name}' already exists.",
+                )
+
             max_priority = await session.execute(
                 select(func.coalesce(func.max(MatchRule.priority), -1))
             )
@@ -139,7 +146,25 @@ async def clone_rule(
             if not source:
                 raise HTTPException(status_code=404, detail="Rule not found")
 
-            new_name = body.name or f"{source.name} (copy)"
+            if body.name:
+                new_name = body.name
+                existing = await session.execute(
+                    select(MatchRule.name).where(MatchRule.name == new_name)
+                )
+                if existing.scalars().first() is not None:
+                    raise HTTPException(
+                        status_code=409,
+                        detail=f"A rule named '{new_name}' already exists.",
+                    )
+            else:
+                new_name = f"{source.name} (copy)"
+                suffix = 2
+                while (
+                    await session.execute(select(MatchRule.name).where(MatchRule.name == new_name))
+                ).scalars().first() is not None:
+                    new_name = f"{source.name} (copy {suffix})"
+                    suffix += 1
+
             max_priority = await session.execute(
                 select(func.coalesce(func.max(MatchRule.priority), -1))
             )
@@ -230,6 +255,8 @@ async def test_rules(
     _user: dict[str, Any] = Depends(get_current_user),  # noqa: B008
 ):
     """Test match rules against a track to preview matching behavior."""
+    from sqlalchemy import select
+
     try:
         track = TrackMetadata(
             title=body.track.title or "",
@@ -241,6 +268,19 @@ async def test_rules(
             artist_mbid=body.track.artist_mbid,
             album_mbid=body.track.album_mbid,
         )
+
+        if body.rule_ids:
+            async with AsyncSessionLocal() as session:
+                result = await session.execute(
+                    select(MatchRule.id).where(MatchRule.id.in_(body.rule_ids))
+                )
+                found = set(result.scalars().all())
+            missing = [rid for rid in body.rule_ids if rid not in found]
+            if missing:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Rule(s) not found: {missing}",
+                )
 
         target = await get_sync_target(body.target_id or "Plex")
         engine = MatchEngine(target)
@@ -330,7 +370,15 @@ async def update_rule(
             old_name = rule.name
             old_active = rule.is_active
 
-            if body.name is not None:
+            if body.name is not None and body.name != rule.name:
+                conflicting = await session.execute(
+                    select(MatchRule.id).where(MatchRule.name == body.name)
+                )
+                if conflicting.scalars().first() is not None:
+                    raise HTTPException(
+                        status_code=409,
+                        detail=f"A rule named '{body.name}' already exists.",
+                    )
                 rule.name = body.name
             if body.is_active is not None:
                 rule.is_active = body.is_active

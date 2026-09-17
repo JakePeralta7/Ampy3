@@ -1,7 +1,7 @@
 # --- Frontend builder ---
 FROM node:alpine AS web-builder
 
-RUN npm i -g pnpm@11.16.0
+RUN npm i -g pnpm@12.4.2
 
 WORKDIR /app/web
 

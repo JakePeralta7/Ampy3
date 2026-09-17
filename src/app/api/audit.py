@@ -23,7 +23,7 @@ async def list_audit_logs(
     _user: dict[str, Any] = Depends(get_current_user),  # noqa: B008
 ):
     """List audit log entries with optional filtering and pagination."""
-    from sqlalchemy import desc, select
+    from sqlalchemy import desc, func, select
 
     try:
         async with AsyncSessionLocal() as session:
@@ -32,11 +32,11 @@ async def list_audit_logs(
             if event_type:
                 stmt = stmt.where(AuditLog.event_type == event_type)
 
-            count_stmt = select(AuditLog.id).order_by(desc(AuditLog.created_at))
+            count_stmt = select(func.count()).select_from(AuditLog)
             if event_type:
                 count_stmt = count_stmt.where(AuditLog.event_type == event_type)
 
-            total = len((await session.execute(count_stmt)).scalars().all())
+            total = (await session.execute(count_stmt)).scalar_one()
 
             stmt = stmt.offset(offset).limit(limit)
             result = await session.execute(stmt)
@@ -62,5 +62,5 @@ async def list_audit_logs(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error listing audit logs: {e}", exc_info=True)
+        logger.error("Error listing audit logs: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to list audit logs: {str(e)}") from e

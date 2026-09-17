@@ -4,9 +4,11 @@ Wraps the synchronous ``ytmusicapi`` SDK behind an async, self-caching
 interface shared by the sync source and the Explore provider.
 
 The SDK is not thread-safe, so every call is serialised through
-``asyncio.to_thread`` under a lock. The lock rebinds to the current running
-loop: Celery workers use ``asyncio.run()`` — a fresh event loop per task —
-so a lock bound to one loop would poison the next task.
+``asyncio.to_thread`` under a lock. Each call is additionally guarded by
+``yt_dlp_timeout`` so a hung upstream request surfaces as a timeout instead
+of blocking a worker forever. The SDK runs on the caller's event loop: Celery
+workers use a single persistent loop (see ``worker.session.run_async``), so
+the lock only ever needs to be created once per client.
 """
 
 from __future__ import annotations
@@ -14,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 from typing import Any
 
 from ytmusicapi import YTMusic
@@ -21,6 +24,8 @@ from ytmusicapi import YTMusic
 from src.app.core.clients.base import MusicSourceClient
 from src.app.services.ytauth import get_ytmusic_auth
 from src.app.settings import settings
+
+logger = logging.getLogger(__name__)
 
 
 class YouTubeMusicClient(MusicSourceClient):
@@ -69,15 +74,47 @@ class YouTubeMusicClient(MusicSourceClient):
         return f"session:{digest[:16]}"
 
     async def _run(self, method_name: str, *args, **kwargs) -> Any:
-        """Run a ytmusicapi method in a thread, serialised by a lock."""
+        """Run a ytmusicapi method in a thread, serialised by a lock.
+
+        Every call is bounded by ``yt_dlp_timeout``; a hung upstream request
+        raises ``asyncio.TimeoutError`` rather than stalling the pipeline. The
+        worker runs on a persistent event loop, so the lock is created once
+        and reused for the lifetime of the client.
+
+        On timeout the lock is **not** released immediately — it is handed to
+        a done-callback attached to the still-running background thread, so no
+        subsequent call can enter the SDK concurrently.
+        """
         loop = asyncio.get_running_loop()
         if self._lock is None or self._lock_loop is not loop:
             self._lock = asyncio.Lock()
             self._lock_loop = loop
-        async with self._lock:
-            return await asyncio.to_thread(
-                getattr(self._get_client(), method_name), *args, **kwargs
+        await self._lock.acquire()
+        straggler: asyncio.Task | None = None
+        try:
+            task = asyncio.ensure_future(
+                asyncio.to_thread(getattr(self._get_client(), method_name), *args, **kwargs)
             )
+            done, _ = await asyncio.wait({task}, timeout=settings.yt_dlp_timeout)
+            if done:
+                return task.result()
+
+            # Timeout — background SDK call is still running. Hold the lock
+            # until it finishes so no concurrent call enters the SDK.
+            def _release_lock_on_done(t: asyncio.Task) -> None:
+                self._lock.release()
+                if not t.cancelled():
+                    exc = t.exception()
+                    if exc is not None:
+                        logger.warning("ytmusic straggler %s failed: %s", method_name, exc)
+
+            straggler = task
+            task.add_done_callback(_release_lock_on_done)
+            raise TimeoutError(f"ytmusic {method_name} timed out after {settings.yt_dlp_timeout}s")
+        except BaseException:
+            if straggler is None:
+                self._lock.release()
+            raise
 
     # ── cached interface ────────────────────────────────────────────
 
@@ -85,10 +122,7 @@ class YouTubeMusicClient(MusicSourceClient):
         return await self._cached(
             "get_playlist",
             (playlist_id,),
-            lambda: asyncio.wait_for(
-                self._run("get_playlist", playlist_id, limit=limit),
-                timeout=settings.yt_dlp_timeout,
-            ),
+            lambda: self._run("get_playlist", playlist_id, limit=limit),
             self.playlist_cache_ttl,
         )
 

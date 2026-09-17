@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class MatchRuleOut(BaseModel):
@@ -53,7 +53,7 @@ class ReorderInput(BaseModel):
     """Input schema for reordering match rules."""
 
     id: int
-    priority: int
+    priority: int = Field(ge=0)
 
 
 class TrackTestInput(BaseModel):

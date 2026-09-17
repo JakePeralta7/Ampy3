@@ -39,30 +39,23 @@ class JellyfinTarget(BaseTarget):
         self._base_url = base_url.rstrip("/")
         self._user_id = user_id
         self._client: httpx.AsyncClient | None = None
-        self._client_loop_id: int | None = None
 
     @property
     def client(self) -> httpx.AsyncClient:
-        """Return an httpx.AsyncClient bound to the current event loop."""
-        import asyncio
+        """Return the lazily-created httpx.AsyncClient.
 
-        try:
-            loop = asyncio.get_running_loop()
-            loop_id = id(loop)
-        except RuntimeError:
-            loop_id = None
-
-        if self._client is not None and self._client_loop_id == loop_id:
-            return self._client
-
-        self._client = httpx.AsyncClient(base_url=self._base_url, timeout=15.0)
-        self._client.headers.update(
-            {
-                "Authorization": f'MediaBrowser Token="{self._api_key}"',
-                "Content-Type": "application/json",
-            }
-        )
-        self._client_loop_id = loop_id
+        The client is created once per target instance and reused for its
+        lifetime. Safe because workers run on a single persistent event loop
+        (see ``worker.session.run_async``) and FastAPI is single-loop.
+        """
+        if self._client is None:
+            self._client = httpx.AsyncClient(base_url=self._base_url, timeout=15.0)
+            self._client.headers.update(
+                {
+                    "Authorization": f'MediaBrowser Token="{self._api_key}"',
+                    "Content-Type": "application/json",
+                }
+            )
         return self._client
 
     # ── Helpers ──────────────────────────────────────────────────
@@ -96,7 +89,7 @@ class JellyfinTarget(BaseTarget):
             "track_count": int(item.get("ChildCount") or 0),
         }
 
-    def client_url(self, playlist_id: str) -> str:
+    async def client_url(self, playlist_id: str) -> str:
         """Return the Jellyfin web-app URL that opens the given playlist item.
 
         Jellyfin web is a hash-routed SPA served from the server base URL.
@@ -348,26 +341,30 @@ class JellyfinTarget(BaseTarget):
         if self._client is not None:
             await self._client.aclose()
             self._client = None
-            self._client_loop_id = None
 
 
 async def _create_jellyfin_target() -> JellyfinTarget:
     """Factory: build a JellyfinTarget from DB config."""
+    import asyncio
+
     from sqlalchemy import select
 
     from src.app.db import SessionLocal
     from src.app.models import Config
 
-    db = SessionLocal()
-    try:
-        result = db.execute(
-            select(Config).where(
-                Config.key.in_(["jellyfin_server_url", "jellyfin_api_key", "jellyfin_user_id"])
+    def _read_config() -> dict[str, str]:
+        db = SessionLocal()
+        try:
+            result = db.execute(
+                select(Config).where(
+                    Config.key.in_(["jellyfin_server_url", "jellyfin_api_key", "jellyfin_user_id"])
+                )
             )
-        )
-        rows = {row.key: row.value for row in result.scalars().all()}
-    finally:
-        db.close()
+            return {row.key: row.value for row in result.scalars().all()}
+        finally:
+            db.close()
+
+    rows = await asyncio.to_thread(_read_config)
 
     server_url = rows.get("jellyfin_server_url", "").strip()
     api_key = rows.get("jellyfin_api_key", "").strip()

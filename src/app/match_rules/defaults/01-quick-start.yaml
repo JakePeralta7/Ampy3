@@ -34,6 +34,7 @@ nodes:
         title: 50
         artist_name: 25
         album_name: 25
+      album_comparison: exact
 
   output:
     type: match_output

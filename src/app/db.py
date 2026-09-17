@@ -12,9 +12,10 @@ from src.app.settings import settings
 
 # Create async engine for PostgreSQL (used by FastAPI)
 async_engine = create_async_engine(
-    settings.database_url.replace("postgresql://", "postgresql+asyncpg://"),
+    settings.database_url.replace("postgresql://", "postgresql+asyncpg://", 1),
     echo=False,
     future=True,
+    pool_pre_ping=True,
     pool_size=20,
     max_overflow=10,
     pool_recycle=3600,
@@ -24,7 +25,7 @@ async_engine = create_async_engine(
 AsyncSessionLocal = async_sessionmaker(
     async_engine,
     class_=AsyncSession,
-    expire_on_commit=False,
+    expire_on_commit=True,
     future=True,
 )
 
@@ -43,6 +44,7 @@ SessionLocal = sessionmaker(
     bind=sync_engine,
     autocommit=False,
     autoflush=False,
+    expire_on_commit=True,
 )
 
 

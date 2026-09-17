@@ -75,11 +75,10 @@ class SyncPipeline:
 
     def run_target(
         self,
-        track_rows: list[dict[str, Any]],
         track_items: list[str],
     ) -> dict[str, Any]:
         """Run all target phases sequentially (ensure_sync_run → match → finalize)."""
-        self._ensure_sync_run(track_rows)
+        self._ensure_sync_run()
 
         input_data: dict[str, Any] = {"track_items": track_items}
         for phase in self.phases:
@@ -96,7 +95,7 @@ class SyncPipeline:
 
         return input_data
 
-    def _ensure_sync_run(self, track_rows: list[dict[str, Any]]) -> None:
+    def _ensure_sync_run(self) -> None:
         """Create a new SyncRun with SyncRunTrack history for this target."""
         with self.ctx.session() as db:
             if db.get(ScheduledPlaylistSync, self.ctx.sync_id) is None:
@@ -118,18 +117,30 @@ class SyncPipeline:
                 self.ctx.target_id,
             )
 
+            from src.app.models import PlaylistTrack
+
+            track_rows = (
+                db.execute(
+                    select(PlaylistTrack)
+                    .where(PlaylistTrack.sync_id == self.ctx.sync_id)
+                    .order_by(PlaylistTrack.position)
+                )
+                .scalars()
+                .all()
+            )
+
             if track_rows:
                 run_track_rows = [
                     {
                         "run_id": run.id,
-                        "position": row_data.get("position", 0),
-                        "source_title": row_data.get("source_title"),
-                        "source_artist": row_data.get("source_artist"),
-                        "source_album": row_data.get("source_album"),
-                        "source_duration_ms": row_data.get("source_duration_ms"),
-                        "item_id": row_data.get("item_id"),
+                        "position": row.position,
+                        "source_title": row.source_title,
+                        "source_artist": row.source_artist,
+                        "source_album": row.source_album,
+                        "source_duration_ms": row.source_duration_ms,
+                        "item_id": row.item_id,
                     }
-                    for row_data in track_rows
+                    for row in track_rows
                 ]
                 db.execute(insert(SyncRunTrack), run_track_rows)
                 logger.info(

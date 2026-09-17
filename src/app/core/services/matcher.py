@@ -112,6 +112,18 @@ class NodeGraphExecutor:
         outputs: dict[str, NodeOutputs] = {}
         trace: list[dict[str, Any]] | None = [] if collect_trace else None
         match_results: list[dict[str, Any]] = []
+        emitted_keys: set[str] = set()
+
+        def _emit_match(match_data: Any) -> None:
+            if not isinstance(match_data, dict):
+                return
+            # Deduplicate by item_id if present, otherwise by stable serialization
+            item_id = match_data.get("item_id") or match_data.get("id")
+            key = str(item_id) if item_id else str(sorted(match_data.items()))
+            if key in emitted_keys:
+                return
+            emitted_keys.add(key)
+            match_results.append(match_data)
 
         for nid in sorted_ids:
             node = node_map[nid]
@@ -157,9 +169,10 @@ class NodeGraphExecutor:
                 )
 
             if node["type"] in ("compare", "mbid_compare"):
-                match_data = result.get("out")
-                if match_data is not None:
-                    match_results.append(match_data)
+                _emit_match(result.get("out"))
+
+            if node["type"] == "match_output":
+                _emit_match(result.get("out"))
 
             if node.get("config", {}).get("breakpoint"):
                 logger.debug("Breakpoint hit at node %s (%s)", nid, node["type"])

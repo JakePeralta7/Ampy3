@@ -60,10 +60,19 @@ class ThresholdNode(NodeHandlerBase):
 
 @register_node("filter")
 class FilterNode(NodeHandlerBase):
+    """Filter candidates by field similarity against a reference value.
+
+    Config:
+    - field: field name to compare. Default: artist_name
+    - threshold: minimum similarity to keep a candidate (0.0-1.0). Default: 0.6
+    - substring_score: score awarded for substring containment. Default: 0.85
+    """
+
     async def execute(self, track: TrackMetadata, inputs: NodeInputs) -> NodeOutputs:
         candidates = inputs.get("candidates", inputs.get("in", []))
         field = self._config.get("field", "artist_name")
         threshold = self._config.get("threshold", 0.6)
+        substring_score = self._config.get("substring_score", 0.85)
         reference = inputs.get("reference")
 
         if not isinstance(candidates, list):
@@ -93,7 +102,7 @@ class FilterNode(NodeHandlerBase):
             if v_norm == ref_norm:
                 sim = 1.0
             elif v_norm in ref_norm or ref_norm in v_norm:
-                sim = 0.85
+                sim = substring_score
             else:
                 ref_tokens = set(ref_norm.split())
                 val_tokens = set(v_norm.split())

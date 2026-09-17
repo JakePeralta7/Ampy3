@@ -186,11 +186,16 @@ async def plex_callback(
     if not pin_data:
         return RedirectResponse("/login?error=missing_pin")
 
+    def _fail(reason: str) -> RedirectResponse:
+        resp = RedirectResponse(f"/login?error={reason}")
+        resp.delete_cookie("plex_pin_data", path="/")
+        return resp
+
     try:
         pin_id_str, pin_code = pin_data.split(":", 1)
         pin_id = int(pin_id_str)
     except ValueError, TypeError:
-        return RedirectResponse("/login?error=invalid_pin")
+        return _fail("invalid_pin")
 
     # ── 2. Exchange the PIN for the user's access token ───────────────
     client_id = await _get_client_id()
@@ -206,13 +211,23 @@ async def plex_callback(
                 },
             )
             resp.raise_for_status()
-            auth_token = resp.json().get("authToken")
+            pin = resp.json()
+            # The pin must have been issued to *this* app instance. A pin
+            # belonging to a different client identifier is never exchanged.
+            if pin.get("clientIdentifier") != client_id:
+                logger.warning(
+                    "PIN client mismatch (ours=%s, pin=%s)",
+                    client_id,
+                    pin.get("clientIdentifier"),
+                )
+                return _fail("pin_mismatch")
+            auth_token = pin.get("authToken")
     except Exception:
         logger.exception("Failed to exchange Plex PIN")
-        return RedirectResponse("/login?error=token_exchange_failed")
+        return _fail("token_exchange_failed")
 
     if not auth_token:
-        return RedirectResponse("/login?error=auth_failed")
+        return _fail("auth_failed")
 
     # ── 3. Fetch user profile ─────────────────────────────────────────
     try:
@@ -228,7 +243,7 @@ async def plex_callback(
             user_data = resp.json()
     except Exception:
         logger.exception("Failed to fetch Plex user profile")
-        return RedirectResponse("/login?error=profile_fetch_failed")
+        return _fail("profile_fetch_failed")
 
     plex_user_id = str(user_data.get("id", ""))
     username = user_data.get("username", "")
@@ -259,7 +274,7 @@ async def plex_callback(
             resource_type="user",
             resource_id=plex_user_id,
         )
-        return RedirectResponse("/login?error=not_authorized")
+        return _fail("not_authorized")
 
     # ── 5. Create server-side session ─────────────────────────────────
     user_profile = {

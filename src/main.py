@@ -1,7 +1,6 @@
 """Main entry point for the Ampy3 API."""
 
 import logging
-import secrets
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -38,7 +37,7 @@ async def lifespan(app: FastAPI):
     # Fail closed: REQUIRE_AUTH=true without SECRET_KEY is a hard error
     if settings.require_auth and not settings.secret_key:
         raise RuntimeError(
-            "REQUIRE_AUTH=true requires SECRET_KEY to be set. "
+            "REQUIRE_AUTH=true requires SECRET_KEY (at least 32 characters). "
             'Generate one with: python -c "import secrets; print(secrets.token_hex(32))"'
         )
 
@@ -134,13 +133,17 @@ if settings.require_auth:
     if not settings.app_url:
         raise RuntimeError("APP_URL must be set when REQUIRE_AUTH=true")
     cors_origins = [settings.app_url]
+    allow_credentials = True
 else:
+    # When auth disabled: allow all origins but NO credentials
+    # (browsers reject allow_credentials=true with allow_origins=["*"])
     cors_origins = ["*"]
+    allow_credentials = False
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
-    allow_credentials=True,
+    allow_credentials=allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )

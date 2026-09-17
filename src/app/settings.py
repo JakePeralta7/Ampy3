@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     plex_client_id: str = ""
     app_url: str = "http://localhost:8000"
     secret_key: str = ""
-    session_ttl_hours: int = 168
+    session_ttl_hours: int = Field(default=168, ge=1, le=8760)
 
     @field_validator("celery_log_level", "log_format", mode="before")
     @classmethod
@@ -38,11 +38,21 @@ class Settings(BaseSettings):
             return value.lower()
         return value
 
+    @field_validator("app_url")
+    @classmethod
+    def _validate_app_url(cls, value: str) -> str:
+        if not value.startswith(("http://", "https://")):
+            raise ValueError("APP_URL must be an absolute http(s) URL")
+        return value
+
     @model_validator(mode="after")
     def _validate_secret_key(self) -> Self:
+        # A short-but-present key is always rejected. An *empty* key is left
+        # to the startup gate in main.py (REQUIRE_AUTH=false is fine; failing
+        # closed at boot covers REQUIRE_AUTH=true), per the test contract.
         if self.require_auth and self.secret_key and len(self.secret_key) < 32:
             raise ValueError(
-                "SECRET_KEY must be at least 32 characters when REQUIRE_AUTH=true. "
+                "REQUIRE_AUTH=true requires SECRET_KEY to be set to at least 32 characters. "
                 'Generate one with: python -c "import secrets; print(secrets.token_hex(32))"'
             )
         return self
@@ -51,9 +61,16 @@ class Settings(BaseSettings):
     app_env: str = "development"
     debug: bool = False
 
-    model_config = {"env_prefix": ""}
+    model_config = {"env_prefix": "", "validate_assignment": True}
 
     def load_overrides(self, overrides: dict[str, Any]) -> None:
+        """Apply DB-stored overrides, coercing string values to field types.
+
+        Values read back from the ``config`` table are strings; assignment
+        validation (``validate_assignment``) coerces them to the declared
+        field type (e.g. ``"300"`` → ``int``) so downstream code never sees a
+        str where an int/bool is expected.
+        """
         for key, value in overrides.items():
             if key in self.model_fields:
                 setattr(self, key, value)

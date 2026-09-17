@@ -64,7 +64,12 @@ class PlexSearchNode(NodeHandlerBase):
 
 @register_node("search")
 class SearchNode(NodeHandlerBase):
-    """New simplified search node - uses checkbox config."""
+    """Search the target library for candidates matching the input track.
+
+    Config:
+    - fields_to_search: list of fields to include (search_title, search_artist, search_album)
+    - max_results: maximum number of results to return. Default: 50
+    """
 
     async def execute(self, track: TrackMetadata, inputs: NodeInputs) -> NodeOutputs:
         target = get_current_target()
@@ -77,15 +82,10 @@ class SearchNode(NodeHandlerBase):
                 "album_name": track.album_name or "",
             }
 
-        if "fields_to_search" in self._config:
-            fields = self._config.get("fields_to_search", [])
-            search_title = "search_title" in fields
-            search_artist = "search_artist" in fields
-            search_album = "search_album" in fields
-        else:
-            search_title = self._config.get("search_title", True)
-            search_artist = self._config.get("search_artist", True)
-            search_album = self._config.get("search_album", True)
+        fields = self._config.get("fields_to_search", [])
+        search_title = "search_title" in fields
+        search_artist = "search_artist" in fields
+        search_album = "search_album" in fields
 
         max_results = self._config.get("max_results", 50)
 
