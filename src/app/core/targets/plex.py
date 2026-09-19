@@ -752,18 +752,23 @@ async def _create_plex_target() -> PlexTarget:
 
     from sqlalchemy import select
 
-    from src.app.db import SessionLocal
+    from src.app.db import AsyncSessionLocal
     from src.app.models import Config
+    from src.app.services.crypto import decrypt_token
 
-    def _read_config() -> dict[str, str]:
-        db = SessionLocal()
-        try:
-            result = db.execute(select(Config).where(Config.key.in_(["plex_host", "plex_token"])))
-            return {row.key: row.value for row in result.scalars().all()}
-        finally:
-            db.close()
+    async def _read_config() -> dict[str, str]:
+        async with AsyncSessionLocal() as session:
+            stmt = select(Config).where(Config.key.in_(["plex_host", "plex_token"]))
+            result = await session.execute(stmt)
+            config = {}
+            for row in result.scalars().all():
+                if row.key == "plex_token":
+                    config[row.key] = decrypt_token(row.value)
+                else:
+                    config[row.key] = row.value
+            return config
 
-    config = await asyncio.to_thread(_read_config)
+    config = await _read_config()
 
     token = config.get("plex_token", "").strip()
     server_url = config.get("plex_host", "").strip()

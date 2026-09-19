@@ -19,6 +19,7 @@ from src.app.auth.tokens import create_session, destroy_session
 from src.app.db import AsyncSessionLocal
 from src.app.models import Config
 from src.app.services.audit import log_event
+from src.app.services.crypto import decrypt_token, encrypt_token, get_session_signing_key
 from src.app.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -74,7 +75,7 @@ async def get_owner_plex_token() -> str | None:
         row = (
             await session.execute(select(Config).where(Config.key == "owner_plex_token"))
         ).scalar_one_or_none()
-        return row.value if row else None
+        return decrypt_token(row.value) if row else None
 
 
 async def get_plex_server_url() -> str | None:
@@ -257,7 +258,7 @@ async def plex_callback(
         # First user — register as owner and persist their Plex token
         async with AsyncSessionLocal() as session:
             session.add(Config(key="owner_plex_user_id", value=plex_user_id))
-            session.add(Config(key="owner_plex_token", value=auth_token))
+            session.add(Config(key="owner_plex_token", value=encrypt_token(auth_token)))
             await session.commit()
         logger.info("Owner registered: %s (%s)", username, plex_user_id)
         await log_event(
@@ -286,7 +287,7 @@ async def plex_callback(
     cookie_value = await create_session(
         user_data=user_profile,
         plex_token=auth_token,
-        secret=settings.secret_key,
+        secret=get_session_signing_key(),
         ttl_hours=settings.session_ttl_hours,
     )
 
@@ -388,7 +389,7 @@ async def plex_setup(
     async with AsyncSessionLocal() as session:
         from sqlalchemy import select
 
-        for key, value in [("plex_host", server_url), ("plex_token", token)]:
+        for key, value in [("plex_host", server_url), ("plex_token", encrypt_token(token))]:
             stmt = select(Config).where(Config.key == key)
             row = (await session.execute(stmt)).scalar_one_or_none()
             if row:

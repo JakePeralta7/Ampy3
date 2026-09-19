@@ -1,6 +1,7 @@
 """Main entry point for the Ampy3 API."""
 
 import logging
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -15,6 +16,7 @@ from src.app.auth.tokens import purge_expired_sessions, verify_session
 from src.app.db import init_db
 from src.app.log_config import setup_logging
 from src.app.services import get_sync_target
+from src.app.services.crypto import get_session_signing_key
 from src.app.services.scheduler import SchedulerService
 from src.app.settings import settings
 
@@ -34,8 +36,18 @@ SESSION_COOKIE = "ampy3_session"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Fail closed: production requires a SECRET_KEY so token encryption at
+    # rest is never keyed from a fixed, well-known value.
+    if os.environ.get("APP_ENV") == "production" and (
+        not settings.secret_key or len(settings.secret_key) < 32
+    ):
+        raise RuntimeError(
+            "APP_ENV=production requires SECRET_KEY (at least 32 characters). "
+            'Generate one with: python -c "import secrets; print(secrets.token_hex(32))"'
+        )
+
     # Fail closed: REQUIRE_AUTH=true without SECRET_KEY is a hard error
-    if settings.require_auth and not settings.secret_key:
+    if settings.require_auth and (not settings.secret_key or len(settings.secret_key) < 32):
         raise RuntimeError(
             "REQUIRE_AUTH=true requires SECRET_KEY (at least 32 characters). "
             'Generate one with: python -c "import secrets; print(secrets.token_hex(32))"'
@@ -179,7 +191,7 @@ async def session_middleware(request: Request, call_next):
     if not token:
         return JSONResponse(status_code=401, content={"detail": "unauthenticated"})
 
-    user = await verify_session(token, settings.secret_key)
+    user = await verify_session(token, get_session_signing_key())
     if user is None:
         return JSONResponse(status_code=401, content={"detail": "unauthenticated"})
 

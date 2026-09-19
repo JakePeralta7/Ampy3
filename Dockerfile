@@ -24,17 +24,14 @@ RUN rm -rf node_modules
 # --- Python dependency builder ---
 FROM python:slim AS builder
 
+# Install cryptography from binary wheels to avoid requiring Rust toolchain
+# (wheels available for manylinux; only falls back to source on unsupported archs)
 WORKDIR /app
 
-# Install dependencies first (cached until pyproject.toml changes)
+# Install dependencies only (cached until pyproject.toml changes)
+# Extract dependencies from pyproject.toml and install them without the package
 COPY pyproject.toml ./
-# Stub src so pip can resolve the editable package; deleted after install
-RUN mkdir -p src/app && touch src/app/__init__.py
-RUN pip install --no-cache-dir --prefer-binary --prefix=/install . && rm -rf src
-
-# Copy source and alembic after deps so code changes don't invalidate pip layer
-COPY src/ ./src/
-COPY alembic/ ./alembic/
+RUN python -c "import tomllib; data=tomllib.load(open('pyproject.toml','rb')); deps=data['project']['dependencies']; print('\n'.join(deps))" > /tmp/deps.txt && pip install --no-cache-dir --prefer-binary --only-binary=cryptography --prefix=/install -r /tmp/deps.txt && rm /tmp/deps.txt
 
 
 # --- Base production image (shared by web + worker) ---
@@ -49,10 +46,15 @@ RUN groupadd --system app && useradd --system --gid app --home-dir /app appuser
 
 WORKDIR /app
 
+# Copy installed dependencies from builder (without the package source)
 COPY --from=builder /install /usr/local
+# Copy source code and alembic directly from host (avoids builder cache issues)
+COPY src/ ./src
+COPY alembic/ ./alembic
 COPY pyproject.toml ./
-COPY alembic/ ./alembic/
-COPY src/ ./src/
+
+# Install the package in editable mode so code changes are reflected
+RUN pip install --no-cache-dir -e .
 
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app/src

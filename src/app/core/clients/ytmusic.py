@@ -81,39 +81,48 @@ class YouTubeMusicClient(MusicSourceClient):
         worker runs on a persistent event loop, so the lock is created once
         and reused for the lifetime of the client.
 
-        On timeout the lock is **not** released immediately — it is handed to
-        a done-callback attached to the still-running background thread, so no
-        subsequent call can enter the SDK concurrently.
+        On timeout, the lock is held until the background thread completes
+        to prevent concurrent access to the non-thread-safe SDK.
         """
         loop = asyncio.get_running_loop()
         if self._lock is None or self._lock_loop is not loop:
             self._lock = asyncio.Lock()
             self._lock_loop = loop
         await self._lock.acquire()
-        straggler: asyncio.Task | None = None
+        task = asyncio.create_task(
+            asyncio.to_thread(getattr(self._get_client(), method_name), *args, **kwargs)
+        )
         try:
-            task = asyncio.ensure_future(
-                asyncio.to_thread(getattr(self._get_client(), method_name), *args, **kwargs)
-            )
             done, _ = await asyncio.wait({task}, timeout=settings.yt_dlp_timeout)
             if done:
-                return task.result()
+                try:
+                    return task.result()
+                finally:
+                    self._lock.release()
 
-            # Timeout — background SDK call is still running. Hold the lock
-            # until it finishes so no concurrent call enters the SDK.
+            # Timeout: background thread is still running. Hold the lock
+            # until it actually finishes to prevent concurrent SDK access.
+            assert self._lock is not None  # Lock acquired above
+
             def _release_lock_on_done(t: asyncio.Task) -> None:
+                assert self._lock is not None
                 self._lock.release()
                 if not t.cancelled():
                     exc = t.exception()
                     if exc is not None:
                         logger.warning("ytmusic straggler %s failed: %s", method_name, exc)
 
-            straggler = task
             task.add_done_callback(_release_lock_on_done)
-            raise TimeoutError(f"ytmusic {method_name} timed out after {settings.yt_dlp_timeout}s")
-        except BaseException:
-            if straggler is None:
-                self._lock.release()
+            raise TimeoutError(
+                f"ytmusic {method_name} timed out after {settings.yt_dlp_timeout}s"
+            ) from None
+        except asyncio.CancelledError:
+            lock = self._lock
+            if lock is not None:
+                if task.done():
+                    lock.release()
+                else:
+                    task.add_done_callback(lambda t, lock=lock: lock.release())
             raise
 
     # ── cached interface ────────────────────────────────────────────

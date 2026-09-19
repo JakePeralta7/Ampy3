@@ -6,11 +6,12 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 
 from src.app.auth.dependencies import get_current_user
-from src.app.constants import TARGET_JELLYFIN, TARGET_PLEX
+from src.app.constants import SENSITIVE_CONFIG_KEYS, TARGET_JELLYFIN, TARGET_PLEX
 from src.app.db import AsyncSessionLocal
 from src.app.models import Config
 from src.app.schemas.targets import TargetTestRequest, TargetTestResponse
 from src.app.services import list_sync_targets
+from src.app.services.crypto import decrypt_token
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +71,12 @@ async def _create_target_from_config(target_id: str, config: dict[str, str]):
     # Fetch existing values from DB for fallback
     async with AsyncSessionLocal() as db:
         result = await db.execute(select(Config).where(Config.key.in_(expected_keys)))
-        rows = {row.key: row.value for row in result.scalars().all()}
+        rows = {}
+        for row in result.scalars().all():
+            value = row.value
+            if row.key in SENSITIVE_CONFIG_KEYS:
+                value = decrypt_token(value)
+            rows[row.key] = value
 
     # Merge: provided values take precedence, empty strings fall back to DB
     merged = {k: (config.get(k, "") or rows.get(k, "")) for k in expected_keys}

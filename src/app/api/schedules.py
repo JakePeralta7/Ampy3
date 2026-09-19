@@ -150,15 +150,16 @@ async def create_scheduled_sync(
     )
     db.add(db_sync)
     await db.flush()
+    sync_id = db_sync.id
 
     for tid in body.target_ids:
-        db.add(ScheduleTarget(sync_id=db_sync.id, target_id=tid))
+        db.add(ScheduleTarget(sync_id=sync_id, target_id=tid))
 
     await db.commit()
 
     result = await db.execute(
         select(ScheduledPlaylistSync)
-        .where(ScheduledPlaylistSync.id == db_sync.id)
+        .where(ScheduledPlaylistSync.id == sync_id)
         .options(
             selectinload(ScheduledPlaylistSync.schedule_targets),
             selectinload(ScheduledPlaylistSync.runs),
@@ -172,9 +173,7 @@ async def create_scheduled_sync(
         await SchedulerService.reload_schedules()
         await SchedulerService.trigger_sync_now(db_sync)
     except Exception:
-        logger.exception(
-            "Failed to reload/trigger scheduler after creating schedule %s", db_sync.id
-        )
+        logger.exception("Failed to reload/trigger scheduler after creating schedule %s", sync_id)
 
     await log_event(
         event_type="schedule.created",
@@ -323,6 +322,7 @@ async def delete_scheduled_sync(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Scheduled sync with ID {sync_id} not found",
         )
+    playlist_name = sync.target_playlist_name
     await revoke_schedule_tasks(sync_id)
     await db.delete(sync)
     await db.commit()
@@ -331,7 +331,7 @@ async def delete_scheduled_sync(
         event_type="schedule.deleted",
         resource_type="schedule",
         resource_id=str(sync_id),
-        summary=f"Schedule '{sync.target_playlist_name}' deleted",
+        summary=f"Schedule '{playlist_name}' deleted",
     )
 
     await _reload_scheduler()
@@ -399,11 +399,11 @@ async def bulk_toggle_active(
             detail="No matching schedules found for the provided IDs",
         )
 
+    names = [s.target_playlist_name for s in syncs]
     for sync in syncs:
         sync.is_active = body.is_active
     await db.commit()
 
-    names = [s.target_playlist_name for s in syncs]
     action = "resumed" if body.is_active else "paused"
     await log_event(
         event_type="schedule.bulk_updated",

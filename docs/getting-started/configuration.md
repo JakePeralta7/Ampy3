@@ -18,9 +18,9 @@ Most Ampy3 configuration is read from **environment variables** via the Pydantic
 | `REQUIRE_AUTH` | `false` | When `true`, only `APP_URL` is allowed by CORS and Plex SSO is enforced. |
 | `PLEX_CLIENT_ID` | _(empty)_ | OAuth client identifier for Plex SSO (only used when `REQUIRE_AUTH=true`). |
 | `APP_URL` | `http://localhost:8000` | Public URL used for OAuth redirects and CORS. |
-| `SECRET_KEY` | _(empty)_ | Session-signing key. **Required when `REQUIRE_AUTH=true`** — the app refuses to start otherwise (fail-closed). Generate with `openssl rand -hex 32`. |
+| `SECRET_KEY` | _(empty)_ | Session-signing and token-encryption key. **Required (≥32 chars) when `APP_ENV=production` or `REQUIRE_AUTH=true`** — the app refuses to start otherwise (fail-closed). Generate with `openssl rand -hex 32`. |
 | `SESSION_TTL_HOURS` | `168` | Session lifetime in hours (default = 1 week). |
-| `APP_ENV` | `development` | Free-form env label, surfaced in logs. |
+| `APP_ENV` | `production` | Environment label (`development`/`production`/…). `production` fails to start without a `SECRET_KEY`; used for log labels too. |
 | `DEBUG` | `false` | Enable verbose error pages and set the API log level to `debug`. |
 
 ## Section: Database
@@ -74,8 +74,8 @@ SECRET_KEY=$(openssl rand -hex 32)
 SESSION_TTL_HOURS=72
 ```
 
-!!! warning "`SECRET_KEY` is required when `REQUIRE_AUTH=true`"
-    An empty `SECRET_KEY` with auth enabled will refuse to start sessions. Generate a fresh one per deployment and never commit it.
+!!! warning "`SECRET_KEY` is required when `APP_ENV=production` or `REQUIRE_AUTH=true`"
+    An empty `SECRET_KEY` in production (or with auth enabled) will refuse to start the app. It keys both session signing and at-rest token encryption — generate a fresh one per deployment and never commit it. Rotating `SECRET_KEY` will invalidate stored encrypted tokens.
 
 See [Auth](../guides/auth.md) for the full flow.
 

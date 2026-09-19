@@ -7,6 +7,7 @@ cookie never carries sensitive information.
 
 import hashlib
 import hmac
+import logging
 import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -15,16 +16,19 @@ from sqlalchemy import delete, select
 
 from src.app.db import AsyncSessionLocal
 from src.app.models import UserSession
+from src.app.services.crypto import DecryptionError, decrypt_token, encrypt_token
 
 SESSION_ID_BYTES = 32
 
+logger = logging.getLogger(__name__)
 
-def _sign(session_id: str, secret: str) -> str:
+
+def _sign(session_id: str, secret: bytes) -> str:
     """Return an HMAC-SHA256 hex signature for the session ID."""
-    return hmac.new(secret.encode(), session_id.encode(), hashlib.sha256).hexdigest()
+    return hmac.new(secret, session_id.encode(), hashlib.sha256).hexdigest()
 
 
-def create_session_id(secret: str) -> str:
+def create_session_id(secret: bytes) -> str:
     """Generate a cryptographically random session ID and sign it.
 
     Returns ``session_id.signature`` — the value stored in the cookie.
@@ -34,7 +38,7 @@ def create_session_id(secret: str) -> str:
     return f"{session_id}.{sig}"
 
 
-def verify_session_id(cookie_value: str, secret: str) -> str | None:
+def verify_session_id(cookie_value: str, secret: bytes) -> str | None:
     """Verify the cookie signature and return the session ID, or ``None``."""
     try:
         session_id, sig = cookie_value.rsplit(".", 1)
@@ -51,7 +55,7 @@ def verify_session_id(cookie_value: str, secret: str) -> str | None:
 async def create_session(
     user_data: dict[str, Any],
     plex_token: str,
-    secret: str,
+    secret: bytes,
     ttl_hours: int = 168,
 ) -> str:
     """Persist session data in the DB and return a signed cookie value."""
@@ -65,7 +69,7 @@ async def create_session(
                 username=user_data["username"],
                 email=user_data.get("email"),
                 thumb=user_data.get("thumb"),
-                plex_token=plex_token,
+                plex_token=encrypt_token(plex_token),
                 expires_at=datetime.now(UTC) + timedelta(hours=ttl_hours),
             )
         )
@@ -75,7 +79,7 @@ async def create_session(
     return f"{session_id}.{sig}"
 
 
-async def verify_session(cookie_value: str, secret: str) -> dict[str, Any] | None:
+async def verify_session(cookie_value: str, secret: bytes) -> dict[str, Any] | None:
     """Verify the cookie and load session data from the DB.
 
     Returns the user dict if the session is valid and not expired,
@@ -98,12 +102,20 @@ async def verify_session(cookie_value: str, secret: str) -> dict[str, Any] | Non
             await db.commit()
             return None
 
+        try:
+            plex_token = decrypt_token(row.plex_token)
+        except DecryptionError:
+            logger.warning(
+                "Session %s token could not be decrypted; treating as invalid", session_id
+            )
+            return None
+
         return {
             "plex_user_id": row.plex_user_id,
             "username": row.username,
             "email": row.email,
             "thumb": row.thumb,
-            "plex_token": row.plex_token,
+            "plex_token": plex_token,
             "session_id": row.id,
         }
 

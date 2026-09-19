@@ -16,7 +16,7 @@ APP_ENV=production
 Restart the API for the changes to take effect.
 
 !!! danger "`SECRET_KEY` must be set"
-    With `REQUIRE_AUTH=true`, an empty `SECRET_KEY` prevents sessions from being created and you'll be stuck in an infinite login loop. Generate a fresh 32-byte hex string per deployment and never commit it.
+    `SECRET_KEY` is required whenever `APP_ENV=production` **or** `REQUIRE_AUTH=true` — an empty key makes the app refuse to start (fail-closed). It also keys at-rest token encryption. Generate a fresh 32-byte hex string per deployment and never commit it; rotating it invalidates stored encrypted tokens.
 
 ## How the flow works
 

@@ -15,6 +15,7 @@ from typing import Any
 
 from ytmusicapi import YTMusic
 
+from src.app.services.crypto import decrypt_token
 from src.app.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -36,7 +37,7 @@ def _stored_ytmusic_auth() -> str:
         result = db.execute(select(Config).where(Config.key == "ytmusic_auth"))
         row = result.scalar_one_or_none()
         if row is not None:
-            return row.value or ""
+            return decrypt_token(row.value or "")
     except Exception:
         logger.warning("Could not load ytmusic_auth from DB; falling back to env config")
     finally:

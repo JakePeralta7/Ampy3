@@ -8,24 +8,10 @@ import threading
 from typing import Any
 
 from src.app.services.base import ServiceBase
+from src.app.services.config_fingerprint import _config_fingerprint
 from src.app.worker.session import _worker_loop
 
 logger = logging.getLogger(__name__)
-
-
-def _config_fingerprint() -> str:
-    """Hash the config table to detect target-setting changes."""
-    import hashlib
-
-    from sqlalchemy import select
-
-    from src.app.db import SessionLocal
-    from src.app.models import Config
-
-    with SessionLocal() as db:
-        rows = db.execute(select(Config.key, Config.value).order_by(Config.key)).all()
-    blob = "\n".join(f"{k}={v}" for k, v in rows)
-    return hashlib.sha256(blob.encode()).hexdigest()
 
 
 class TargetService(ServiceBase):
@@ -108,10 +94,15 @@ class TargetService(ServiceBase):
             task.add_done_callback(lambda t: t.exception() if not t.cancelled() else None)
 
         # Update config fingerprint in Valkey so other workers know to reset
-        from src.app.services import get_valkey_client
+        from src.app.services.valkey import ValkeyService
+        from src.app.worker.session import run_async
 
-        valkey = get_valkey_client()
         fp = _config_fingerprint()
-        valkey.set("config:fingerprint", fp)
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            run_async(ValkeyService.check_and_update_fingerprint(fp))
+        else:
+            loop.create_task(ValkeyService.check_and_update_fingerprint(fp))
 
         logger.info("Reset %d target instance(s)", len(instances))

@@ -349,22 +349,26 @@ async def _create_jellyfin_target() -> JellyfinTarget:
 
     from sqlalchemy import select
 
-    from src.app.db import SessionLocal
+    from src.app.db import AsyncSessionLocal
     from src.app.models import Config
+    from src.app.services.crypto import decrypt_token
 
-    def _read_config() -> dict[str, str]:
-        db = SessionLocal()
-        try:
-            result = db.execute(
+    async def _read_config() -> dict[str, str]:
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
                 select(Config).where(
                     Config.key.in_(["jellyfin_server_url", "jellyfin_api_key", "jellyfin_user_id"])
                 )
             )
-            return {row.key: row.value for row in result.scalars().all()}
-        finally:
-            db.close()
+            config = {}
+            for row in result.scalars().all():
+                if row.key == "jellyfin_api_key":
+                    config[row.key] = decrypt_token(row.value)
+                else:
+                    config[row.key] = row.value
+            return config
 
-    rows = await asyncio.to_thread(_read_config)
+    rows = await _read_config()
 
     server_url = rows.get("jellyfin_server_url", "").strip()
     api_key = rows.get("jellyfin_api_key", "").strip()

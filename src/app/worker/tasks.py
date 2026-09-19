@@ -1,7 +1,6 @@
 """Celery task definitions for playlist sync operations."""
 
 import dataclasses
-import hashlib
 import logging
 import random
 import time
@@ -15,6 +14,7 @@ from sqlalchemy import select
 from src.app.constants import DEFAULT_SOURCE, DEFAULT_TARGET
 from src.app.models import Config, SyncRun
 from src.app.services.audit import log_event_sync
+from src.app.services.config_fingerprint import _config_fingerprint
 from src.app.services.sync_tasks import (
     register_sync_task,
     set_fetch_phase,
@@ -30,16 +30,6 @@ from src.app.worker.pipeline import SyncPipeline
 logger = logging.getLogger(__name__)
 
 
-def _config_fingerprint() -> str:
-    """Hash the config table to detect target-setting changes between sync runs."""
-    from src.app.db import SessionLocal
-
-    with SessionLocal() as db:
-        rows = db.execute(select(Config.key, Config.value).order_by(Config.key)).all()
-    blob = "\n".join(f"{k}={v}" for k, v in rows)
-    return hashlib.sha256(blob.encode()).hexdigest()
-
-
 def _retry_countdown(completed_retries: int) -> int:
     """Exponential backoff with jitter for task retries.
 
@@ -53,7 +43,7 @@ def _retry_countdown(completed_retries: int) -> int:
     return base + random.randint(0, 10)
 
 
-@celery_app.task(bind=True)
+@celery_app.task(bind=True, max_retries=3)
 def sync_playlists_task(
     self,
     playlist_url: str,
@@ -211,7 +201,7 @@ def sync_playlists_task(
             raise self.retry(exc=e, countdown=_retry_countdown(self.request.retries)) from e
 
 
-@celery_app.task(bind=True)
+@celery_app.task(bind=True, max_retries=3)
 def sync_target_task(
     self,
     sync_id: int,
@@ -224,18 +214,22 @@ def sync_target_task(
     execution_id: str | None = None,
 ):
     """Match all tracks, then finalize for one target."""
-    from src.app.services import get_valkey_client
+    from src.app.services.valkey import ValkeyService
     from src.app.worker.session import run_async
 
     fp = _config_fingerprint()
-    valkey = get_valkey_client()
-    last_fp = run_async(valkey.get("config:fingerprint"))
-    if last_fp and last_fp.decode() != fp:
+    try:
+        changed, status = run_async(ValkeyService.check_and_update_fingerprint(fp))
+        if changed and status == "changed":
+            from src.app.services.target import TargetService
+
+            TargetService.reset()
+            logger.info("Target config changed — reset cached target instances")
+    except Exception as e:
+        logger.warning("Valkey fingerprint check failed (resetting targets conservatively): %s", e)
         from src.app.services.target import TargetService
 
         TargetService.reset()
-        logger.info("Target config changed — reset cached target instances")
-    run_async(valkey.set("config:fingerprint", fp))
 
     register_sync_task(sync_id, self.request.id)
     ctx = SyncContext(
@@ -346,7 +340,7 @@ def sync_target_task(
             raise self.retry(exc=e, countdown=_retry_countdown(self.request.retries)) from e
 
 
-@celery_app.task(bind=True)
+@celery_app.task(bind=True, max_retries=3)
 def match_track_task(
     self,
     sync_id: int,

@@ -36,7 +36,7 @@ services:
       - APP_URL=${APP_URL:-http://localhost:8000}
       - SECRET_KEY=${SECRET_KEY:-}
       - SESSION_TTL_HOURS=${SESSION_TTL_HOURS:-168}
-      - APP_ENV=${APP_ENV:-development}
+      - APP_ENV=${APP_ENV:-production}
       - DEBUG=${DEBUG:-false}
       - LOG_FORMAT=${LOG_FORMAT:-json}
 
@@ -56,6 +56,10 @@ services:
       - CELERY_WORKER_CONCURRENCY=${CELERY_WORKER_CONCURRENCY:-1}
       - CELERY_LOG_LEVEL=${CELERY_LOG_LEVEL:-info}
       - LOG_FORMAT=${LOG_FORMAT:-json}
+      - SECRET_KEY=${SECRET_KEY:-}
+      - APP_ENV=${APP_ENV:-production}
+      - REQUIRE_AUTH=${REQUIRE_AUTH:-false}
+      - APP_URL=${APP_URL:-http://localhost:8000}
 
   valkey:
     image: valkey/valkey:latest

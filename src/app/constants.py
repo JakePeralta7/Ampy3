@@ -24,3 +24,13 @@ INTERVAL_DELTAS: dict[str, timedelta] = {
     "daily": timedelta(days=1),
     "weekly": timedelta(weeks=1),
 }
+
+# Config keys that contain sensitive credentials and should be encrypted at rest
+SENSITIVE_CONFIG_KEYS: frozenset[str] = frozenset(
+    {
+        "plex_token",
+        "jellyfin_api_key",
+        "owner_plex_token",
+        "ytmusic_auth",
+    }
+)

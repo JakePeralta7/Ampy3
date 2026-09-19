@@ -58,7 +58,7 @@ class Settings(BaseSettings):
         return self
 
     # App
-    app_env: str = "development"
+    app_env: str = "production"
     debug: bool = False
 
     model_config = {"env_prefix": "", "validate_assignment": True}

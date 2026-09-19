@@ -8,6 +8,7 @@ from collections.abc import Iterator
 from concurrent.futures import TimeoutError as FuturesTimeoutError
 from contextlib import contextmanager
 
+from celery.signals import worker_process_init, worker_shutdown
 from sqlalchemy.orm import Session
 
 from src.app.db import SessionLocal
@@ -17,7 +18,7 @@ logger = logging.getLogger(__name__)
 _loop: asyncio.AbstractEventLoop | None = None
 _loop_lock = threading.Lock()
 _loop_thread: threading.Thread | None = None
-_shutdown_registered = False
+_loop_ready: threading.Event = threading.Event()
 
 
 def _get_run_timeout_seconds() -> int:
@@ -27,39 +28,68 @@ def _get_run_timeout_seconds() -> int:
     return max(60, (celery_app.conf.task_soft_time_limit or 3480) - 180)
 
 
-def _worker_loop() -> asyncio.AbstractEventLoop:
-    """Return the single persistent event loop for Celery workers.
+@worker_process_init.connect
+def _init_worker_loop(**kwargs) -> None:
+    """Initialize a fresh event loop in each forked worker process.
 
-    ``asyncio.run()`` creates and closes a fresh loop on every call, stranding
-    any long-lived async resource (httpx clients, cached aiohttp sessions)
-    bound to the now-closed loop. A single long-running loop in a daemon
-    thread keeps those clients valid for the lifetime of the worker process.
+    Prefork workers inherit the parent's memory but NOT the thread driving the
+    event loop. Creating a new loop per process avoids the "inherited dead loop"
+    problem where coroutines hang indefinitely on a loop with no driving thread.
     """
-    global _loop, _loop_thread, _shutdown_registered
-    if _loop is None or _loop.is_closed():
-        with _loop_lock:
-            if _loop is None or _loop.is_closed():
-                _loop = asyncio.new_event_loop()
-                _loop_thread = threading.Thread(
-                    target=_loop.run_forever,
-                    name="ampy-worker-asyncio",
-                    daemon=True,
-                )
-                _loop_thread.start()
+    global _loop, _loop_thread
+    _loop = asyncio.new_event_loop()
+    _loop_thread = threading.Thread(
+        target=_loop.run_forever,
+        name="ampy-worker-asyncio",
+        daemon=True,
+    )
+    _loop_ready.set()
+    _loop_thread.start()
+    logger.debug("Initialized worker event loop in process %s", threading.current_thread().ident)
 
-                if not _shutdown_registered:
-                    from celery.signals import worker_shutdown
 
-                    def _shutdown(**kwargs):
-                        if _loop and not _loop.is_closed():
-                            _loop.call_soon_threadsafe(_loop.stop)
-                        if _loop_thread and _loop_thread.is_alive():
-                            _loop_thread.join(timeout=5)
+@worker_shutdown.connect
+def _shutdown_worker_loop(**kwargs) -> None:
+    """Stop the worker's event loop and join the driver thread."""
+    global _loop, _loop_thread
+    if _loop and not _loop.is_closed():
+        _loop.call_soon_threadsafe(_loop.stop)
+    if _loop_thread and _loop_thread.is_alive():
+        _loop_thread.join(timeout=5)
+    logger.debug("Shutdown worker event loop")
 
-                    worker_shutdown.connect(_shutdown)
-                    _shutdown_registered = True
-    assert _loop is not None
-    return _loop
+
+def _create_loop() -> None:
+    """Create the persistent event loop and its driver thread."""
+    global _loop, _loop_thread
+    with _loop_lock:
+        if _loop is None or _loop.is_closed():
+            _loop = asyncio.new_event_loop()
+            _loop_thread = threading.Thread(
+                target=_loop.run_forever,
+                name="ampy-worker-asyncio",
+                daemon=True,
+            )
+            _loop_thread.start()
+            logger.debug(
+                "Created worker event loop in process %s", threading.current_thread().ident
+            )
+
+
+def _worker_loop() -> asyncio.AbstractEventLoop:
+    """Return the persistent event loop for this worker process.
+
+    The loop is created by `_init_worker_loop` via the `worker_process_init`
+    signal, which fires once per forked child process. Under pools that do not
+    emit that signal (solo/threads), the loop is created lazily on first use.
+    """
+    global _loop
+    if (_loop is None or _loop.is_closed()) and not _loop_ready.wait(timeout=1):
+        _create_loop()
+    loop = _loop
+    if loop is None or loop.is_closed():
+        raise RuntimeError("Worker event loop is not running")
+    return loop
 
 
 def run_async(coro):

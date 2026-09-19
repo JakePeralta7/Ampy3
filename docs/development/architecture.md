@@ -61,7 +61,7 @@ Both sync sources and Explore providers obtain these via `get_ytmusic_client()` 
 
 `src/main.py` defines an async `@asynccontextmanager` lifespan that runs on startup/shutdown:
 
-1. Falls back to no-auth if `REQUIRE_AUTH=true` but `SECRET_KEY` is empty
+1. Fails closed if `APP_ENV=production` without a `SECRET_KEY`, or if `REQUIRE_AUTH=true` without a `SECRET_KEY`
 2. Calls `init_db()` — creates schema or runs Alembic upgrades (see [Migrations](#migrations))
 3. Purges expired sessions
 4. Initialises the Plex client (sections probe)
