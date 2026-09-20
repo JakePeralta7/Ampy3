@@ -204,7 +204,7 @@ export function Nav() {
             href={repositoryUrl}
             target="_blank"
             rel="noreferrer"
-            className="flex items-center justify-center gap-2 rounded-md px-3 py-2 bg-bg-muted text-fg-subtle hover:bg-bg-surface hover:text-fg transition-colors duration-fast"
+            className={`flex items-center justify-center gap-2 rounded-md px-3 py-2 text-fg-subtle hover:text-fg transition-colors duration-fast ${collapsed ? "hover:bg-bg-muted" : "bg-bg-muted hover:bg-bg-surface"}`}
             title="View on GitHub"
           >
             <img src={githubSvg} alt="GitHub" width={16} height={16} className="shrink-0" />
