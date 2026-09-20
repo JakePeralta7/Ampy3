@@ -3,11 +3,13 @@ import { systemInfoAPI } from "../api/system";
 
 export function useVersion() {
   const [version, setVersion] = useState<string | null>(null);
+  const [repositoryUrl, setRepositoryUrl] = useState<string | null>(null);
 
   const fetchVersion = useCallback(async () => {
     try {
       const resp = await systemInfoAPI.getVersion();
       setVersion(resp.version);
+      setRepositoryUrl(resp.repository_url);
     } catch {
       // sidebar simply renders no version if the API is unreachable
     }
@@ -17,5 +19,5 @@ export function useVersion() {
     fetchVersion();
   }, [fetchVersion]);
 
-  return { version };
+  return { version, repositoryUrl };
 }

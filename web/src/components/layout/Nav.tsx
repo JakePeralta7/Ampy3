@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
+import githubSvg from "../../assets/github.svg";
 import { useAuth } from "../../contexts/AuthContext";
 import { useVersion } from "../../hooks/useVersion";
 import { DeezerIcon, YouTubeMusicIcon } from "../ui/SourceIcon";
@@ -63,7 +64,7 @@ export const links: NavLink[] = [
 export function Nav() {
   const location = useLocation();
   const { user, logout, requireAuth } = useAuth();
-  const { version } = useVersion();
+  const { version, repositoryUrl } = useVersion();
   const [collapsed, setCollapsed] = useState(() => {
     try {
       return localStorage.getItem(COLLAPSE_KEY) === "1";
@@ -193,6 +194,23 @@ export function Nav() {
               </button>
             </div>
           )}
+        </div>
+      )}
+
+      {/* GitHub link */}
+      {repositoryUrl && (
+        <div className="px-2 mb-2">
+          <a
+            href={repositoryUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center justify-center gap-2 rounded-md px-3 py-2 text-fg-subtle hover:bg-bg-muted hover:text-fg transition-colors duration-fast"
+            title="View on GitHub"
+          >
+            <img src={githubSvg} alt="GitHub" width={16} height={16} className="shrink-0" />
+            {!collapsed && <span className="text-sm font-medium">GitHub</span>}
+            {collapsed && <span className="sr-only">View on GitHub</span>}
+          </a>
         </div>
       )}
 
