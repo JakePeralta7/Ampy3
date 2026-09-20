@@ -343,22 +343,26 @@ class JellyfinTarget(BaseTarget):
     ) -> list[dict[str, Any]]:
         """Jellyfin uses unified search - delegate to _do_search."""
         from src.app.core.targets.search import SearchCriteria
+
         criteria = SearchCriteria(title=title, artist=artist, album=album, genre=genre)
         return await self._do_search(criteria)
 
     async def _search_by_genre(self, genre: str) -> list[dict[str, Any]]:
         """Jellyfin uses unified search - delegate to _do_search."""
         from src.app.core.targets.search import SearchCriteria
+
         criteria = SearchCriteria(genre=genre)
         return await self._do_search(criteria)
 
     async def search_artist_tracks(self, artist: str, genre: str = "") -> list[dict[str, Any]]:
         from src.app.core.targets.search import SearchCriteria
+
         criteria = SearchCriteria(artist=artist, genre=genre)
         return await self._do_search(criteria)
 
     async def search_title_only(self, title: str) -> list[dict[str, Any]]:
         from src.app.core.targets.search import SearchCriteria
+
         criteria = SearchCriteria(title=title)
         return await self._do_search(criteria)
 

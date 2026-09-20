@@ -693,9 +693,7 @@ class PlexTarget(BaseTarget):
     async def _search_by_genre(self, genre: str) -> list[dict[str, Any]]:
         """Search for artists by genre."""
         try:
-            response = await self.client.get(
-                "/library/all", params={"type": "8", "genre": genre}
-            )
+            response = await self.client.get("/library/all", params={"type": "8", "genre": genre})
             response.raise_for_status()
             root = ET.fromstring(response.text)
             dirs = root.findall(".//Directory")

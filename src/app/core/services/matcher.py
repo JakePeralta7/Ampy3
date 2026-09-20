@@ -170,12 +170,12 @@ class NodeGraphExecutor:
                 )
 
             emit_node_types = (
-            "match_composite",
-            "match_fuzzy",
-            "match_album",
-            "match_mbid",
-            "match_output",
-        )
+                "match_composite",
+                "match_fuzzy",
+                "match_album",
+                "match_mbid",
+                "match_output",
+            )
             if node["type"] in emit_node_types:
                 _emit_match(result.get("out"))
 

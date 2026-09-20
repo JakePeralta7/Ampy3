@@ -18,11 +18,7 @@ from src.app.core.nodes.registry import register_node
 
 def _parse_candidates(candidates_raw: list[dict]) -> list[TrackCandidate]:
     """Parse raw candidate dicts into TrackCandidate objects, filtering None."""
-    return [
-        c
-        for c in [TrackCandidate.from_dict(c) for c in candidates_raw]
-        if c is not None
-    ]
+    return [c for c in [TrackCandidate.from_dict(c) for c in candidates_raw] if c is not None]
 
 
 logger = logging.getLogger(__name__)
@@ -138,10 +134,12 @@ class CompositeMatchNode(NodeHandlerBase):
                     )
                 )
             elif stype == "album":
-                strategies.append(AlbumMatch(
-                    strategy=s.get("strategy", "exact"),
-                    threshold=s.get("threshold", 0.70),
-                ))
+                strategies.append(
+                    AlbumMatch(
+                        strategy=s.get("strategy", "exact"),
+                        threshold=s.get("threshold", 0.70),
+                    )
+                )
             else:
                 logger.warning(f"Unknown match strategy type: {stype}")
 
