@@ -108,7 +108,6 @@ class PlexResource(BaseModel):
     name: str
     client_identifier: str
     connections: list[PlexResourceConnection]
-    access_token: str
     owned: bool = False
     product: str = ""
     product_version: str = ""
@@ -116,11 +115,6 @@ class PlexResource(BaseModel):
 
 class PlexResourcesResponse(BaseModel):
     servers: list[PlexResource]
-
-
-class PlexSetupRequest(BaseModel):
-    server_url: str
-    token: str
 
 
 # ── Routes ──────────────────────────────────────────────────────────────
@@ -360,7 +354,6 @@ async def plex_resources(
                 name=r.get("name", ""),
                 client_identifier=r.get("clientIdentifier", ""),
                 connections=connections,
-                access_token=r.get("accessToken", ""),
                 owned=r.get("owned", True),
                 product=r.get("product", ""),
                 product_version=r.get("productVersion", ""),
@@ -368,6 +361,11 @@ async def plex_resources(
         )
 
     return PlexResourcesResponse(servers=servers)
+
+
+class PlexSetupRequest(BaseModel):
+    server_url: str
+    client_identifier: str
 
 
 @router.post("/plex/setup")
@@ -381,15 +379,45 @@ async def plex_setup(
     can connect without manual configuration.
     """
     server_url = body.server_url.strip().rstrip("/")
-    token = body.token.strip()
+    client_identifier = body.client_identifier.strip()
 
-    if not server_url or not token:
-        raise HTTPException(status_code=400, detail="server_url and token are required")
+    if not server_url or not client_identifier:
+        raise HTTPException(status_code=400, detail="server_url and client_identifier are required")
+
+    # Re-fetch Plex resources using the user's token to get the access_token
+    # for the selected server (never accept token from client).
+    plex_token = user.get("plex_token", "")
+    if not plex_token:
+        raise HTTPException(status_code=400, detail="No Plex token available")
+
+    client_id = await _get_client_id()
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        resp = await client.get(
+            f"{PLEX_TV_API}/resources",
+            headers={
+                "Accept": "application/json",
+                "X-Plex-Token": plex_token,
+                "X-Plex-Client-Identifier": client_id,
+            },
+        )
+        resp.raise_for_status()
+        raw = resp.json()
+
+    # Find the selected server by client_identifier
+    access_token = None
+    for r in raw or []:
+        if r.get("clientIdentifier") == client_identifier:
+            access_token = r.get("accessToken", "")
+            break
+
+    if not access_token:
+        raise HTTPException(status_code=404, detail="Selected Plex server not found")
 
     async with AsyncSessionLocal() as session:
         from sqlalchemy import select
 
-        for key, value in [("plex_host", server_url), ("plex_token", encrypt_token(token))]:
+        for key, value in [("plex_host", server_url), ("plex_token", encrypt_token(access_token))]:
             stmt = select(Config).where(Config.key == key)
             row = (await session.execute(stmt)).scalar_one_or_none()
             if row:

@@ -78,12 +78,20 @@ async def test_ytmusic_playlist_miss_stores_then_hits(cache, yt_client, monkeypa
     }
 
 
+async def _mock_get_ytmusic_auth_none() -> None:
+    return None
+
+
+async def _mock_get_ytmusic_auth_new() -> dict[str, str]:
+    return {"Authorization": "SAPISIDHASH new", "Cookie": "c"}
+
+
 async def test_ytmusic_home_key_annotated_with_session(cache, yt_client, monkeypatch):
     async def fake_run(method_name, *args, **kwargs):
         return {"Personal": [{"title": "Pick", "playlistId": "PL1"}]}
 
     monkeypatch.setattr(yt_client, "_run", fake_run)
-    monkeypatch.setattr("src.app.core.clients.ytmusic.get_ytmusic_auth", lambda: None)
+    monkeypatch.setattr("src.app.core.clients.ytmusic.get_ytmusic_auth", _mock_get_ytmusic_auth_none)
 
     await yt_client.get_home()
 
@@ -100,14 +108,14 @@ async def test_ytmusic_reauth_isolates_home_cache(cache, yt_client, monkeypatch)
         return {"Personal": []}
 
     monkeypatch.setattr(yt_client, "_run", fake_run)
-    monkeypatch.setattr("src.app.core.clients.ytmusic.get_ytmusic_auth", lambda: None)
+    monkeypatch.setattr("src.app.core.clients.ytmusic.get_ytmusic_auth", _mock_get_ytmusic_auth_none)
 
     await yt_client.get_home()
     assert calls == ["get_home"]
 
     monkeypatch.setattr(
         "src.app.core.clients.ytmusic.get_ytmusic_auth",
-        lambda: {"Authorization": "SAPISIDHASH new", "Cookie": "c"},
+        _mock_get_ytmusic_auth_new,
     )
     await yt_client.get_home()
 
@@ -124,7 +132,7 @@ async def test_ytmusic_force_bypasses_cache(cache, yt_client, monkeypatch):
         return {"top_songs": []}
 
     monkeypatch.setattr(yt_client, "_run", fake_run)
-    monkeypatch.setattr("src.app.core.clients.ytmusic.get_ytmusic_auth", lambda: None)
+    monkeypatch.setattr("src.app.core.clients.ytmusic.get_ytmusic_auth", _mock_get_ytmusic_auth_none)
 
     await yt_client.get_home()
     await yt_client.get_home()

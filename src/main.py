@@ -31,6 +31,28 @@ PUBLIC_PATHS = {
 SESSION_COOKIE = "ampy3_session"
 
 
+async def _load_settings_overrides() -> None:
+    """Load user-editable settings from the config table and apply them.
+
+    This merges DB-stored values over environment defaults. Sensitive keys
+    are decrypted before being applied to the settings object.
+    """
+    from src.app.db import AsyncSessionLocal
+    from src.app.models import Config
+    from src.app.settings import settings
+
+    async with AsyncSessionLocal() as session:
+        from sqlalchemy import select
+
+        stmt = select(Config)
+        result = await session.execute(stmt)
+        rows = result.scalars().all()
+        overrides = {row.key: row.value for row in rows}
+
+    if overrides:
+        settings.load_overrides(overrides)
+
+
 # ── Lifespan (replaces deprecated on_event) ─────────────────────────────
 
 
@@ -61,6 +83,12 @@ async def lifespan(app: FastAPI):
         logger.info("Database initialized successfully.")
     except Exception as e:
         logger.warning("Could not initialize database on startup: %s", e)
+
+    # Load DB-stored settings overrides (decrypts sensitive keys)
+    try:
+        await _load_settings_overrides()
+    except Exception as e:
+        logger.warning("Could not load settings overrides: %s", e)
 
     # Purge expired sessions on startup
     try:

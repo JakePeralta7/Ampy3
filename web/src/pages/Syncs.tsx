@@ -78,7 +78,7 @@ export function SyncsPage() {
     if (error) toast.error(error);
   }, [error]);
 
-  const handleFormSubmit = async (input: CreateScheduledSyncInput) => {
+  const handleFormSubmit = async (input: CreateScheduledSyncInput): Promise<boolean> => {
     setFormLoading(true);
     setFormError(null);
     try {
@@ -103,11 +103,10 @@ export function SyncsPage() {
         toast.success("Schedule created");
       }
       setEditingSync(null);
-      setIsFormModalOpen(false);
+      return true;
     } catch (err) {
-      const msg = getErrorMessage(err);
-      setFormError(msg);
-      toast.error(msg);
+      setFormError(getErrorMessage(err));
+      return false;
     } finally {
       setFormLoading(false);
     }

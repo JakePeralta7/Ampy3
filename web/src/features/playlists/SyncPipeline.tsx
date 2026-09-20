@@ -32,8 +32,14 @@ function toPipelineStatus(status: string): PipelineStatus {
   }
 }
 
-function targetSubtitle(matched: number, failed: number, running: boolean): string | undefined {
+function targetSubtitle(
+  matched: number,
+  failed: number,
+  running: boolean,
+  error?: string | null,
+): string | undefined {
   if (running && matched === 0 && failed === 0) return "Matching tracks…";
+  if (error) return error;
   return `${matched} matched${failed > 0 ? `, ${failed} failed` : ""}`;
 }
 
@@ -73,6 +79,7 @@ export function SyncPipeline({ pipeline }: SyncPipelineProps) {
                 target.matched_count,
                 target.failed_count,
                 target.status === "running",
+                target.error,
               )}
               status={toPipelineStatus(target.status)}
               icon={

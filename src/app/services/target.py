@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import threading
 from typing import Any
 
 from src.app.services.base import ServiceBase
@@ -24,7 +23,12 @@ class TargetService(ServiceBase):
     """
 
     _instances: dict[str, Any] = {}
-    _lock = threading.Lock()
+    _lock: asyncio.Lock = asyncio.Lock()
+    # Last config fingerprint the worker has already rebuilt its target cache
+    # for. The worker compares against this instead of the Valkey fingerprint
+    # because the web process writes that key on every settings change, which
+    # would otherwise mask config changes from the worker's own reads.
+    _processed_fp: str | None = None
 
     @classmethod
     def create(cls) -> Any:
@@ -44,7 +48,7 @@ class TargetService(ServiceBase):
         if target_id in cls._instances:
             return cls._instances[target_id]
 
-        with cls._lock:
+        async with cls._lock:
             if target_id in cls._instances:
                 return cls._instances[target_id]
 
@@ -64,10 +68,11 @@ class TargetService(ServiceBase):
 
         Safe to call from both sync and async contexts: when an event loop is
         running the cleanup is scheduled in the background; otherwise it runs
-        on the worker's persistent event loop.
+        on the worker's persistent loop.
         """
         instances = list(cls._instances.values())
         cls._instances.clear()
+        cls._processed_fp = None
 
         async def _close_all() -> None:
             for instance in instances:
@@ -82,6 +87,12 @@ class TargetService(ServiceBase):
                         getattr(instance, "target_id", "?"),
                     )
 
+        async def _update_fingerprint() -> None:
+            from src.app.services.valkey import ValkeyService
+
+            fp = await asyncio.to_thread(_config_fingerprint)
+            await ValkeyService.check_and_update_fingerprint(fp)
+
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
@@ -89,20 +100,13 @@ class TargetService(ServiceBase):
             loop = _worker_loop()
             future = asyncio.run_coroutine_threadsafe(_close_all(), loop)
             future.result(timeout=30)
+            # Update fingerprint on worker loop
+            future2 = asyncio.run_coroutine_threadsafe(_update_fingerprint(), loop)
+            future2.result(timeout=30)
         else:
             task = asyncio.create_task(_close_all())
             task.add_done_callback(lambda t: t.exception() if not t.cancelled() else None)
-
-        # Update config fingerprint in Valkey so other workers know to reset
-        from src.app.services.valkey import ValkeyService
-        from src.app.worker.session import run_async
-
-        fp = _config_fingerprint()
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            run_async(ValkeyService.check_and_update_fingerprint(fp))
-        else:
-            loop.create_task(ValkeyService.check_and_update_fingerprint(fp))
+            future = asyncio.run_coroutine_threadsafe(_update_fingerprint(), loop)
+            future.result(timeout=30)
 
         logger.info("Reset %d target instance(s)", len(instances))

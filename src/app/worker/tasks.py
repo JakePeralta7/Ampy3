@@ -22,12 +22,65 @@ from src.app.services.sync_tasks import (
 )
 from src.app.worker.app import celery_app
 from src.app.worker.context import SyncContext
-from src.app.worker.errors import SyncScheduleMissingError
+from src.app.worker.errors import (
+    SyncScheduleMissingError,
+    SyncTargetConnectionError,
+    SyncValidationError,
+)
 from src.app.worker.log import task_scope, update_log_context
 from src.app.worker.matcher import TrackMatcher
 from src.app.worker.pipeline import SyncPipeline
 
 logger = logging.getLogger(__name__)
+
+
+def _verify_target_connection(ctx: SyncContext) -> None:
+    """Pre-flight: verify the target is reachable before matching any tracks.
+
+    Runs before the match phase so an unreachable target fails fast and is
+    reported as a connection error instead of marking every track as failed.
+    """
+    from src.app.worker.session import run_async
+
+    try:
+        run_async(ctx.target.test_connection())
+    except Exception as e:
+        raise SyncTargetConnectionError(f"Target '{ctx.target_id}' connection failed: {e}") from e
+
+
+def _record_failed_run(ctx: SyncContext, error: str) -> None:
+    """Reuse or create the target's SyncRun and mark it failed with an error."""
+    from src.app.models import SyncRun
+
+    try:
+        with ctx.session() as db:
+            run = (
+                db.execute(
+                    select(SyncRun).where(
+                        SyncRun.sync_id == ctx.sync_id,
+                        SyncRun.target_id == ctx.target_id,
+                        SyncRun.execution_id == ctx.execution_id,
+                        SyncRun.status.in_(("running", "pending")),
+                    )
+                )
+                .scalars()
+                .first()
+            )
+            if run is None:
+                run = SyncRun(
+                    sync_id=ctx.sync_id,
+                    target_id=ctx.target_id,
+                    status="failed",
+                    matched_count=0,
+                    failed_count=0,
+                    execution_id=ctx.execution_id,
+                )
+                db.add(run)
+            run.status = "failed"
+            run.error_message = error[:2000]
+            db.flush()
+    except Exception:
+        logger.warning("Failed to record failed SyncRun", exc_info=True)
 
 
 def _retry_countdown(completed_retries: int) -> int:
@@ -162,6 +215,26 @@ def sync_playlists_task(
             )
             logger.warning("Dropping task: %s", e)
             return {"status": "DROPPED", "sync_id": schedule_id}
+        except SyncValidationError as e:
+            # Validation errors are permanent — do not retry
+            log_event_sync(
+                event_type="sync.failed",
+                resource_type="playlist",
+                resource_id=resource_id,
+                summary=f"Sync validation failed: {e} — {playlist_url}",
+                details={"error": str(e), "playlist_url": playlist_url},
+            )
+            logger.error("Sync validation error (non-retryable): %s — %s", e, playlist_url)
+            if schedule_id is not None:
+                unregister_sync_task(schedule_id, self.request.id)
+            set_fetch_phase(
+                schedule_id,
+                "failed",
+                started_at=started_at,
+                completed_at=datetime.now(UTC).isoformat(),
+                execution_id=execution_id,
+            )
+            return {"status": "VALIDATION_ERROR", "sync_id": schedule_id}
         except Exception as e:
             log_event_sync(
                 event_type="sync.failed",
@@ -214,24 +287,29 @@ def sync_target_task(
     execution_id: str | None = None,
 ):
     """Match all tracks, then finalize for one target."""
-    from src.app.services.valkey import ValkeyService
     from src.app.worker.session import run_async
 
-    fp = _config_fingerprint()
-    try:
-        changed, status = run_async(ValkeyService.check_and_update_fingerprint(fp))
-        if changed and status == "changed":
-            from src.app.services.target import TargetService
+    register_sync_task(sync_id, self.request.id)
 
+    # Detect config changes the same way the pipeline does, but per-process.
+    # The web API writes the Valkey fingerprint on every settings change, so a
+    # worker comparing against that key would never notice a config change via
+    # its own reads (the caching in TargetService hides it). Tracking the last
+    # processed fingerprint here means the next task after a config change
+    # rebuilds the target instance deliberately.
+    try:
+        from src.app.services.target import TargetService
+
+        fp = _config_fingerprint()
+        if fp != TargetService._processed_fp:
             TargetService.reset()
+            TargetService._processed_fp = fp
             logger.info("Target config changed — reset cached target instances")
     except Exception as e:
-        logger.warning("Valkey fingerprint check failed (resetting targets conservatively): %s", e)
+        logger.warning("Config fingerprint check failed (resetting targets conservatively): %s", e)
         from src.app.services.target import TargetService
 
         TargetService.reset()
-
-    register_sync_task(sync_id, self.request.id)
     ctx = SyncContext(
         sync_id=sync_id,
         target_id=target_id,
@@ -256,6 +334,9 @@ def sync_target_task(
             len(track_items or []),
         )
         try:
+            if track_items:
+                _verify_target_connection(ctx)
+
             stats = pipeline.run_target(track_items or [])
 
             log_event_sync(
@@ -283,6 +364,23 @@ def sync_target_task(
             unregister_sync_task(sync_id, self.request.id)
             logger.warning("Dropping task: %s", e)
             return {"status": "DROPPED"}
+        except SyncTargetConnectionError as e:
+            unregister_sync_task(sync_id, self.request.id)
+            _record_failed_run(ctx, str(e))
+            log_event_sync(
+                event_type="sync.failed",
+                resource_type="playlist",
+                resource_id=resource_id,
+                summary=f"Sync failed for {target_id}: target connection failed: {e}",
+                details={"error": str(e), "target_id": target_id},
+            )
+            logger.error(
+                "Target sync failed: sync_id=%d target=%s: %s",
+                sync_id,
+                target_id,
+                e,
+            )
+            return {"status": "CONNECTION_FAILED", "sync_id": sync_id}
         except Exception as e:
             try:
                 with ctx.session() as db:
@@ -298,6 +396,7 @@ def sync_target_task(
                     run = db.execute(stmt).scalars().first()
                     if run:
                         run.status = "failed"
+                        run.error_message = str(e)[:2000]
             except Exception as db_exc:
                 logger.warning(
                     "Failed to mark SyncRun as failed: %s",

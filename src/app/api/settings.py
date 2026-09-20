@@ -46,12 +46,14 @@ def _decrypt_plaintext(value: str) -> str:
 
 
 def _build_settings_out(overrides: dict[str, str]) -> SettingsOut:
+    from src.app.settings import settings
+
     return SettingsOut(
-        plex_host=overrides.get("plex_host", ""),
-        plex_token_set=bool(overrides.get("plex_token", "")),
-        jellyfin_server_url=overrides.get("jellyfin_server_url", ""),
-        jellyfin_api_key_set=bool(overrides.get("jellyfin_api_key", "")),
-        jellyfin_user_id=overrides.get("jellyfin_user_id", ""),
+        plex_host=overrides.get("plex_host", settings.plex_host),
+        plex_token_set=bool(overrides.get("plex_token", settings.plex_token)),
+        jellyfin_server_url=overrides.get("jellyfin_server_url", settings.jellyfin_server_url),
+        jellyfin_api_key_set=bool(overrides.get("jellyfin_api_key", settings.jellyfin_api_key)),
+        jellyfin_user_id=overrides.get("jellyfin_user_id", settings.jellyfin_user_id),
         ytmusic_auth_set=bool(overrides.get("ytmusic_auth", settings.ytmusic_auth)),
         yt_dlp_timeout=int(overrides.get("yt_dlp_timeout", str(settings.yt_dlp_timeout))),
     )
@@ -113,6 +115,11 @@ async def put_settings(
                 if row and row.value and str_value == _decrypt_plaintext(row.value):
                     continue
                 str_value = encrypt_token(str_value) or str_value
+            else:
+                # For non-sensitive keys, skip write if value is unchanged
+                # to avoid churning the config fingerprint and resetting targets.
+                if row and row.value == str_value:
+                    continue
 
             if row:
                 row.value = str_value
@@ -148,5 +155,9 @@ async def put_settings(
         from src.app.services.target import TargetService
 
         TargetService.reset()
+    if "ytmusic_auth" in incoming:
+        from src.app.services.ytauth import invalidate_ytmusic_auth_cache
+
+        invalidate_ytmusic_auth_cache()
 
     return _build_settings_out(overrides)

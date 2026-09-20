@@ -91,19 +91,22 @@ export function useExplore(options: UseExploreOptions = {}) {
   }, []);
 
   const selectMood = useCallback(async (moodId: string | null) => {
+    const currentProvider = activeProviderRef.current;
     if (!moodId) {
       setState((s) => ({ ...s, selectedMoodId: null, moodPlaylists: null }));
       return;
     }
     setState((s) => ({ ...s, selectedMoodId: moodId, moodPlaylists: null, loading: true }));
     try {
-      const playlists = await exploreAPI.getMoodPlaylists(moodId, activeProviderRef.current);
+      const playlists = await exploreAPI.getMoodPlaylists(moodId, currentProvider);
+      if (activeProviderRef.current !== currentProvider) return;
       setState((s) => ({
         ...s,
         moodPlaylists: playlists,
         loading: false,
       }));
     } catch (e) {
+      if (activeProviderRef.current !== currentProvider) return;
       setState((s) => ({
         ...s,
         loading: false,
@@ -112,35 +115,41 @@ export function useExplore(options: UseExploreOptions = {}) {
     }
   }, []);
 
-  const runSearch = useCallback(
-    async (query: string) => {
-      const trimmed = query.trim();
-      if (!trimmed) {
-        setState((s) => ({ ...s, searchResults: null, searchQuery: "" }));
-        return;
-      }
-      setState((s) => ({ ...s, loading: true, searchQuery: trimmed }));
-      try {
-        const results = await exploreAPI.searchPlaylists(trimmed, state.activeProvider);
-        setState((s) => ({ ...s, searchResults: results, loading: false, error: null }));
-      } catch (e) {
-        setState((s) => ({
-          ...s,
-          searchResults: [],
-          loading: false,
-          error: getErrorMessage(e, "Failed to search playlists"),
-        }));
-      }
-    },
-    [state.activeProvider],
-  );
+  const runSearch = useCallback(async (query: string) => {
+    const currentProvider = activeProviderRef.current;
+    const trimmed = query.trim();
+    if (!trimmed) {
+      setState((s) => ({ ...s, searchResults: null, searchQuery: "" }));
+      return;
+    }
+    setState((s) => ({ ...s, loading: true, searchQuery: trimmed }));
+    try {
+      const results = await exploreAPI.searchPlaylists(trimmed, currentProvider);
+      if (activeProviderRef.current !== currentProvider) return;
+      setState((s) => ({ ...s, searchResults: results, loading: false, error: null }));
+    } catch (e) {
+      if (activeProviderRef.current !== currentProvider) return;
+      setState((s) => ({
+        ...s,
+        searchResults: [],
+        loading: false,
+        error: getErrorMessage(e, "Failed to search playlists"),
+      }));
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
-    exploreAPI.listProviders().then((providers) => {
-      if (cancelled) return;
-      setState((s) => ({ ...s, providers }));
-    });
+    exploreAPI
+      .listProviders()
+      .then((providers) => {
+        if (cancelled) return;
+        setState((s) => ({ ...s, providers }));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setState((s) => ({ ...s, providers: [] }));
+      });
     return () => {
       cancelled = true;
     };

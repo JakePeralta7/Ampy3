@@ -86,6 +86,7 @@ export interface SyncRun {
   status: string;
   matched_count: number;
   failed_count: number;
+  error: string | null;
   created_at: string | null;
 }
 
@@ -123,6 +124,7 @@ export interface PipelineTargetStatus {
   status: string;
   matched_count: number;
   failed_count: number;
+  error: string | null;
   created_at: string | null;
 }
 

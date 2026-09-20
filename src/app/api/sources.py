@@ -31,7 +31,7 @@ async def get_sources(
         source_id = str(source["id"])
         auth_set = None
         if source_id == SOURCE_YOUTUBE_MUSIC:
-            auth_set = bool(await asyncio.to_thread(get_ytmusic_auth))
+            auth_set = bool(await get_ytmusic_auth())
         sources.append(
             {
                 "id": source_id,
@@ -57,7 +57,7 @@ async def test_source(
         try:
             raw_auth = (body.auth or "").strip()
             if not raw_auth:
-                stored = get_ytmusic_auth()
+                stored = await get_ytmusic_auth()
                 if stored is None:
                     raise ValueError(
                         "No authentication payload provided. Paste credentials or save them first."

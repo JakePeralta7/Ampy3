@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import re
 
 import httpx
@@ -32,15 +33,43 @@ class DeezerSource(IPlatformSource):
     @classmethod
     def _parse_playlist_id(cls, url: str) -> str:
         match = DEEZER_URL_PATTERN.search(url)
-        if not match:
-            raise ValueError(f"Could not parse Deezer playlist ID from: {url}")
-        return match.group(1)
+        if match:
+            return match.group(1)
+        if LINK_PATTERN.search(url):
+            raise ValueError(f"Short Deezer link must be resolved first: {url}")
+        raise ValueError(f"Could not parse Deezer playlist ID from: {url}")
+
+    @classmethod
+    async def _resolve_playlist_id(cls, url: str) -> str:
+        match = DEEZER_URL_PATTERN.search(url)
+        if match:
+            return match.group(1)
+
+        # Handle deezer.page.link short URLs by following the redirect. The
+        # HTTP call is blocking, so run it off the event loop.
+        if LINK_PATTERN.search(url):
+            try:
+                final_url = await asyncio.to_thread(cls._resolve_short_link, url)
+            except httpx.HTTPError as exc:
+                raise RuntimeError(f"Failed to resolve Deezer short link: {exc}") from exc
+            match = DEEZER_URL_PATTERN.search(final_url)
+            if match:
+                return match.group(1)
+
+        raise ValueError(f"Could not parse Deezer playlist ID from: {url}")
+
+    @staticmethod
+    def _resolve_short_link(url: str) -> str:
+        with httpx.Client(timeout=10.0, follow_redirects=True) as client:
+            resp = client.get(url)
+            resp.raise_for_status()
+            return str(resp.url)
 
     def get_playlist_cache_identifier(self, playlist_url: str) -> str:
         return self._parse_playlist_id(playlist_url)
 
     async def _fetch_playlist(self, playlist_url: str) -> PlaylistMetadata:
-        playlist_id = self._parse_playlist_id(playlist_url)
+        playlist_id = await self._resolve_playlist_id(playlist_url)
         try:
             data = await get_deezer_client().get_playlist(playlist_id)
         except httpx.HTTPError as exc:

@@ -3,11 +3,15 @@ import {
   Compass,
   LayoutDashboard,
   LogOut,
+  type LucideIcon,
   Menu,
   Music2,
   PanelLeftClose,
   PanelLeftOpen,
+  Radio,
   ScrollText,
+  Server,
+  SlidersHorizontal,
   X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -21,7 +25,7 @@ const COLLAPSE_KEY = "ampy3:sidebar-collapsed";
 type SubLink = {
   path: string;
   label: string;
-  icon?: (props: { size?: number }) => ReturnType<typeof YouTubeMusicIcon>;
+  icon?: LucideIcon | ((props: { size?: number }) => ReturnType<typeof YouTubeMusicIcon>);
 };
 
 type NavLink = {
@@ -49,9 +53,9 @@ export const links: NavLink[] = [
     label: "Settings",
     icon: Cog,
     sub: [
-      { path: "/settings/sources", label: "Sources" },
-      { path: "/settings/targets", label: "Targets" },
-      { path: "/settings/matching", label: "Match Rules" },
+      { path: "/settings/sources", label: "Sources", icon: Radio },
+      { path: "/settings/targets", label: "Targets", icon: Server },
+      { path: "/settings/matching", label: "Match Rules", icon: SlidersHorizontal },
     ],
   },
 ];

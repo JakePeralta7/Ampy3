@@ -1,11 +1,29 @@
 """Celery application configuration."""
 
 import logging
+import os
 
 from celery import Celery
 
 from src.app.log_config import setup_logging
 from src.app.settings import settings
+
+# Fail closed: production requires a SECRET_KEY so token encryption at
+# rest is never keyed from a fixed, well-known value.
+if os.environ.get("APP_ENV") == "production" and (
+    not settings.secret_key or len(settings.secret_key) < 32
+):
+    raise RuntimeError(
+        "APP_ENV=production requires SECRET_KEY (at least 32 characters). "
+        'Generate one with: python -c "import secrets; print(secrets.token_hex(32))"'
+    )
+
+# Fail closed: REQUIRE_AUTH=true without SECRET_KEY is a hard error
+if settings.require_auth and (not settings.secret_key or len(settings.secret_key) < 32):
+    raise RuntimeError(
+        "REQUIRE_AUTH=true requires SECRET_KEY (at least 32 characters). "
+        'Generate one with: python -c "import secrets; print(secrets.token_hex(32))"'
+    )
 
 setup_logging(level=settings.celery_log_level, log_format=settings.log_format)
 

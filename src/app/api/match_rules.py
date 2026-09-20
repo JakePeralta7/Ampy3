@@ -121,6 +121,8 @@ async def create_rule(
             )
 
             return _model_to_out(rule)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error creating rule: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to create rule: {str(e)}") from e

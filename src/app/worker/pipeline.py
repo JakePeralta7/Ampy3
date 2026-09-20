@@ -14,7 +14,13 @@ from sqlalchemy import insert, select
 
 from src.app.models import ScheduledPlaylistSync, SyncRun, SyncRunTrack
 from src.app.worker.context import SyncContext
-from src.app.worker.errors import SyncScheduleMissingError
+from src.app.worker.errors import (
+    FinalizeError,
+    MatchError,
+    SyncScheduleMissingError,
+    SyncSourceError,
+    SyncValidationError,
+)
 from src.app.worker.phases import FetchPhase, FinalizePhase, MatchPhase, PhaseResult, SyncPhase
 
 logger = logging.getLogger(__name__)
@@ -64,7 +70,7 @@ class SyncPipeline:
             },
         )
         if not result.success:
-            raise RuntimeError(f"FetchPhase failed: {result.error}")
+            raise SyncValidationError(f"FetchPhase failed: {result.error}")
         logger.info(
             "Fetched %d tracks from %s (%s)",
             len(result.data["track_items"]),
@@ -90,32 +96,69 @@ class SyncPipeline:
             )
             result = phase.execute(self.ctx, input_data)
             if not result.success:
-                raise RuntimeError(f"Phase {phase.__class__.__name__} failed: {result.error}")
+                phase_name = phase.__class__.__name__
+                if phase_name == "MatchPhase":
+                    raise MatchError(f"MatchPhase failed: {result.error}")
+                if phase_name == "FinalizePhase":
+                    raise FinalizeError(f"FinalizePhase failed: {result.error}")
+                raise RuntimeError(f"Phase {phase_name} failed: {result.error}")
             input_data.update(result.data)
 
         return input_data
 
-    def _ensure_sync_run(self) -> None:
-        """Create a new SyncRun with SyncRunTrack history for this target."""
+    def _ensure_sync_run(self) -> bool:
+        """Create or reuse a SyncRun with SyncRunTrack history for this target.
+
+        Reuses an existing non-terminal SyncRun with the same (sync_id, target_id, execution_id)
+        to provide idempotency on retries and worker redelivery.
+
+        Returns True when a new SyncRun was created (and its SyncRunTrack batch
+        should be recorded); False when an existing run was reused (its history
+        batch is already persisted, so recording a second copy would duplicate
+        earlier rows).
+        """
         with self.ctx.session() as db:
             if db.get(ScheduledPlaylistSync, self.ctx.sync_id) is None:
                 raise SyncScheduleMissingError(self.ctx.sync_id)
-            run = SyncRun(
-                sync_id=self.ctx.sync_id,
-                target_id=self.ctx.target_id,
-                status="running",
-                matched_count=0,
-                failed_count=0,
-                execution_id=self.ctx.execution_id,
-            )
-            db.add(run)
-            db.flush()
-            logger.info(
-                "Created SyncRun id=%d for sync %d target %s",
-                run.id,
-                self.ctx.sync_id,
-                self.ctx.target_id,
-            )
+
+            # Check for existing non-terminal run with same execution_id (idempotency)
+            existing = db.execute(
+                select(SyncRun).where(
+                    SyncRun.sync_id == self.ctx.sync_id,
+                    SyncRun.target_id == self.ctx.target_id,
+                    SyncRun.execution_id == self.ctx.execution_id,
+                    SyncRun.status.in_(("running", "pending")),
+                )
+            ).scalar_one_or_none()
+
+            if existing:
+                run = existing
+                run_created = False
+                logger.info(
+                    "Reusing existing SyncRun id=%d for sync %d target %s (execution_id=%s)",
+                    run.id,
+                    self.ctx.sync_id,
+                    self.ctx.target_id,
+                    self.ctx.execution_id,
+                )
+            else:
+                run = SyncRun(
+                    sync_id=self.ctx.sync_id,
+                    target_id=self.ctx.target_id,
+                    status="running",
+                    matched_count=0,
+                    failed_count=0,
+                    execution_id=self.ctx.execution_id,
+                )
+                db.add(run)
+                db.flush()
+                run_created = True
+                logger.info(
+                    "Created SyncRun id=%d for sync %d target %s",
+                    run.id,
+                    self.ctx.sync_id,
+                    self.ctx.target_id,
+                )
 
             from src.app.models import PlaylistTrack
 
@@ -129,7 +172,7 @@ class SyncPipeline:
                 .all()
             )
 
-            if track_rows:
+            if track_rows and run_created:
                 run_track_rows = [
                     {
                         "run_id": run.id,
@@ -148,3 +191,10 @@ class SyncPipeline:
                     len(run_track_rows),
                     run.id,
                 )
+            elif track_rows:
+                logger.info(
+                    "Skipping SyncRunTrack rows for reused run %d (already recorded)",
+                    run.id,
+                )
+
+            return run_created

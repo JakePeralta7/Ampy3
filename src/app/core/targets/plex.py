@@ -523,34 +523,47 @@ class PlexTarget(BaseTarget):
     async def _expand_artists(
         self, dirs: list[ET.Element], genre: str = ""
     ) -> list[dict[str, Any]]:
-        """Expands Directory (artist) entries into their tracks via allLeaves."""
-        results = []
-        for d in dirs:
+        """Expands Directory (artist) entries into their tracks via allLeaves.
+
+        Uses bounded concurrency (max 5 parallel requests) to avoid overwhelming
+        the Plex server with sequential allLeaves calls.
+        """
+        import asyncio
+
+        semaphore = asyncio.Semaphore(5)
+
+        async def fetch_artist_tracks(d: ET.Element) -> list[dict[str, Any]]:
             artist_name = d.get("title", "")
             artist_key = d.get("key", "")
             leaf_key = artist_key.replace("/children", "/allLeaves")
-            try:
-                leaf_resp = await self.client.get(leaf_key)
-                leaf_resp.raise_for_status()
-                leaf_root = ET.fromstring(leaf_resp.text)
-                for track in leaf_root.findall(".//Track"):
-                    duration_ms = int(track.get("duration", 0))
-                    results.append(
-                        {
-                            "item_id": track.get("key"),
-                            "title": track.get("title"),
-                            "artist_name": track.get("grandparentTitle") or artist_name,
-                            "album_name": track.get("parentTitle") or "",
-                            "duration_ms": duration_ms,
-                            "track_number": (
-                                int(track.get("index", 0)) if track.get("index") else None
-                            ),
-                            "genre": genre or None,
-                        }
-                    )
-            except Exception as e:
-                logger.warning(f"Failed to fetch tracks for artist {artist_name}: {e}")
-        return results
+            async with semaphore:
+                try:
+                    leaf_resp = await self.client.get(leaf_key)
+                    leaf_resp.raise_for_status()
+                    leaf_root = ET.fromstring(leaf_resp.text)
+                    tracks = []
+                    for track in leaf_root.findall(".//Track"):
+                        duration_ms = int(track.get("duration", 0))
+                        tracks.append(
+                            {
+                                "item_id": track.get("key"),
+                                "title": track.get("title"),
+                                "artist_name": track.get("grandparentTitle") or artist_name,
+                                "album_name": track.get("parentTitle") or "",
+                                "duration_ms": duration_ms,
+                                "track_number": (
+                                    int(track.get("index", 0)) if track.get("index") else None
+                                ),
+                                "genre": genre or None,
+                            }
+                        )
+                    return tracks
+                except Exception as e:
+                    logger.warning(f"Failed to fetch tracks for artist {artist_name}: {e}")
+                    return []
+
+        results = await asyncio.gather(*[fetch_artist_tracks(d) for d in dirs])
+        return [track for artist_tracks in results for track in artist_tracks]
 
     async def search_artist_tracks(self, artist: str, genre: str = "") -> list[dict[str, Any]]:
         """Search Plex for an artist directory and expand all their tracks."""

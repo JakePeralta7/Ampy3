@@ -174,17 +174,26 @@ class FetchPhase(SyncPhase):
             db.add(sync_record)
             db.flush()
 
-        existing_tracks: dict[int, int] = {}
+        existing_tracks: dict[int, PlaylistTrack] = {}
         if track_rows:
             existing_stmt = select(PlaylistTrack).where(PlaylistTrack.sync_id == sync_record.id)
             for row in db.execute(existing_stmt).scalars().all():
-                existing_tracks[row.position] = row.id
+                existing_tracks[row.position] = row
 
         inserted_track_ids: dict[int, int] = {}
         for row_data in track_rows:
             position = row_data.get("position", 0)
             if position in existing_tracks:
-                inserted_track_ids[position] = existing_tracks[position]
+                track = existing_tracks[position]
+                track.source_title = row_data.get("source_title")
+                track.source_artist = row_data.get("source_artist")
+                track.source_album = row_data.get("source_album")
+                track.source_duration_ms = row_data.get("source_duration_ms")
+                track.item_id = row_data.get("item_id")
+                track.source_mbid = row_data.get("source_mbid")
+                track.source_artist_mbid = row_data.get("source_artist_mbid")
+                track.source_album_mbid = row_data.get("source_album_mbid")
+                inserted_track_ids[position] = track.id
             else:
                 new_track = PlaylistTrack(
                     sync_id=sync_record.id,
@@ -201,6 +210,12 @@ class FetchPhase(SyncPhase):
                 db.add(new_track)
                 db.flush()
                 inserted_track_ids[position] = new_track.id
+
+        if track_rows:
+            max_new_position = max(row_data.get("position", 0) for row_data in track_rows)
+            for pos, track in existing_tracks.items():
+                if pos > max_new_position:
+                    db.delete(track)
 
         if inserted_track_ids:
             track_id_list = list(inserted_track_ids.values())

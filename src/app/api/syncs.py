@@ -47,7 +47,7 @@ from src.app.schemas.syncs import (
     TargetOpenUrlResponse,
     UnmatchedTrackOut,
 )
-from src.app.services import get_sync_target
+from src.app.services import get_sync_target, list_sync_targets
 from src.app.services.audit import log_event
 from src.app.services.sync_tasks import get_fetch_phase_async
 from src.app.worker.tasks import match_track_task, sync_playlists_task
@@ -212,6 +212,14 @@ async def trigger_sync(
 ):
     """Initiate a background sync job for a playlist."""
     try:
+        # Validate source
+        valid_sources = {SOURCE_YOUTUBE_MUSIC, SOURCE_DEEZER}
+        if body.source not in valid_sources:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Invalid source: {body.source}. Valid sources: {', '.join(valid_sources)}",
+            )
+
         is_yt_music = body.source == DEFAULT_SOURCE and not YouTubeMusicSource.is_valid_url(
             body.playlist_url
         )
@@ -220,6 +228,17 @@ async def trigger_sync(
                 status_code=422,
                 detail="Invalid YouTube Music URL format. Must be a valid "
                 "https://music.youtube.com/playlist?list=... URL.",
+            )
+
+        # Validate target_id
+        available_targets = {t["id"] for t in await list_sync_targets()}
+        if body.target_id not in available_targets:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"Unknown target: {body.target_id}. "
+                    f"Available targets: {', '.join(sorted(available_targets))}"
+                ),
             )
 
         task = sync_playlists_task.delay(
@@ -421,6 +440,7 @@ async def get_sync_history(
                 status=run.status,
                 matched_count=run.matched_count,
                 failed_count=run.failed_count,
+                error=run.error_message,
                 created_at=run.created_at.isoformat() if run.created_at else None,
             )
             for run in runs
@@ -522,6 +542,7 @@ async def get_sync_pipeline(
                     status=r.status,
                     matched_count=r.matched_count,
                     failed_count=r.failed_count,
+                    error=r.error_message,
                     created_at=r.created_at.isoformat() if r.created_at else None,
                 )
                 for r in target_runs

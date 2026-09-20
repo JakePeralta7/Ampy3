@@ -34,8 +34,10 @@ export function SourcePlaylistModal({
       setShowScheduleForm(false);
       onClose();
       onSyncCreated();
+      return true;
     } catch (e) {
       setError(getErrorMessage(e, "Failed to create sync"));
+      return false;
     } finally {
       setSaving(false);
     }

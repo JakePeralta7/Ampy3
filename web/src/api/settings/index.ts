@@ -43,7 +43,6 @@ export interface PlexResource {
   name: string;
   client_identifier: string;
   connections: PlexResourceConnection[];
-  access_token: string;
   owned: boolean;
   product: string;
   product_version: string;
@@ -65,8 +64,8 @@ export const settingsAPI = {
 
   getPlexResources: () => apiGet<PlexResourcesResponse>("/auth/plex/resources"),
 
-  setupPlexTarget: (serverUrl: string, token: string) =>
-    apiPost("/auth/plex/setup", { server_url: serverUrl, token }),
+  setupPlexTarget: (serverUrl: string, clientIdentifier: string) =>
+    apiPost("/auth/plex/setup", { server_url: serverUrl, client_identifier: clientIdentifier }),
 
   listSources: () => apiGet<SourceInfo[]>("/v1/sources/"),
 

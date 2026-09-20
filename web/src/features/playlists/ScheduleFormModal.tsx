@@ -5,7 +5,7 @@ import { ScheduleForm, type ScheduleFormPrefill } from "./ScheduleForm";
 interface ScheduleFormModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (input: CreateScheduledSyncInput) => Promise<void>;
+  onSubmit: (input: CreateScheduledSyncInput) => Promise<boolean>;
   editingSync?: ScheduledSync | null;
   prefill?: ScheduleFormPrefill;
   isLoading?: boolean;
@@ -32,8 +32,8 @@ export function ScheduleFormModal({
     >
       <ScheduleForm
         onSubmit={async (input) => {
-          await onSubmit(input);
-          onClose();
+          const success = await onSubmit(input);
+          if (success) onClose();
         }}
         editingSync={editingSync}
         prefill={prefill}

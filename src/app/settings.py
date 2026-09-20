@@ -1,7 +1,10 @@
+import logging
 from typing import Any, Literal, Self
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings
+
+logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
@@ -23,6 +26,13 @@ class Settings(BaseSettings):
     # YouTube Music
     ytmusic_auth: str = ""
     yt_dlp_timeout: int = 300
+
+    # User-editable settings (persisted in config table, merged at startup)
+    plex_host: str = ""
+    plex_token: str = ""
+    jellyfin_server_url: str = ""
+    jellyfin_api_key: str = ""
+    jellyfin_user_id: str = ""
 
     # Auth (Plex SSO)
     require_auth: bool = False
@@ -70,9 +80,25 @@ class Settings(BaseSettings):
         validation (``validate_assignment``) coerces them to the declared
         field type (e.g. ``"300"`` → ``int``) so downstream code never sees a
         str where an int/bool is expected.
+
+        Sensitive config keys are stored encrypted in the DB; they are
+        decrypted here before being applied to the settings object.
         """
+        from src.app.constants import SENSITIVE_CONFIG_KEYS
+        from src.app.services.crypto import DecryptionError, decrypt_token
+
         for key, value in overrides.items():
             if key in self.model_fields:
+                if key in SENSITIVE_CONFIG_KEYS:
+                    try:
+                        value = decrypt_token(value)
+                    except DecryptionError:
+                        logger.warning(
+                            "Failed to decrypt config key '%s' — falling back to env default. "
+                            "Re-enter the value in Settings if needed.",
+                            key,
+                        )
+                        continue
                 setattr(self, key, value)
 
 

@@ -41,13 +41,13 @@ class YouTubeMusicClient(MusicSourceClient):
 
     # ── session management ──────────────────────────────────────────
 
-    def _get_client(self) -> YTMusic:
+    async def _get_client(self) -> YTMusic:
         """Return the SDK instance for the currently stored auth payload.
 
         The SDK holds its request headers, so it is rebuilt whenever the
         stored authentication changes.
         """
-        auth = get_ytmusic_auth()
+        auth = await get_ytmusic_auth()
         key = json.dumps(auth, sort_keys=True) if auth else None
         if self._client is not None and self._client_auth_key == key:
             return self._client
@@ -58,7 +58,7 @@ class YouTubeMusicClient(MusicSourceClient):
         self._client_auth_key = key
         return self._client
 
-    def _session_tag(self) -> str:
+    async def _session_tag(self) -> str:
         """Return a stable tag identifying the current auth session.
 
         ``get_home`` returns a *personalised* feed, so its cache key is
@@ -67,7 +67,7 @@ class YouTubeMusicClient(MusicSourceClient):
         session's cached feed is never served afterwards, and simply expires
         at its TTL.
         """
-        auth = get_ytmusic_auth()
+        auth = await get_ytmusic_auth()
         if not auth:
             return "anon"
         digest = hashlib.sha256(json.dumps(auth, sort_keys=True).encode()).hexdigest()
@@ -84,14 +84,13 @@ class YouTubeMusicClient(MusicSourceClient):
         On timeout, the lock is held until the background thread completes
         to prevent concurrent access to the non-thread-safe SDK.
         """
+        client = await self._get_client()
         loop = asyncio.get_running_loop()
         if self._lock is None or self._lock_loop is not loop:
             self._lock = asyncio.Lock()
             self._lock_loop = loop
         await self._lock.acquire()
-        task = asyncio.create_task(
-            asyncio.to_thread(getattr(self._get_client(), method_name), *args, **kwargs)
-        )
+        task = asyncio.create_task(asyncio.to_thread(getattr(client, method_name), *args, **kwargs))
         try:
             done, _ = await asyncio.wait({task}, timeout=settings.yt_dlp_timeout)
             if done:
@@ -137,9 +136,10 @@ class YouTubeMusicClient(MusicSourceClient):
 
     async def get_home(self, force: bool = False) -> dict[str, Any]:
         """Return the personalised home feed for the current session."""
+        session_tag = await self._session_tag()
         return await self._cached(
             "get_home",
-            (self._session_tag(),),
+            (session_tag,),
             lambda: self._run("get_home"),
             self.explore_cache_ttl,
             force=force,

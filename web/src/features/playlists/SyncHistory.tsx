@@ -105,6 +105,9 @@ export function SyncHistory({ syncId }: SyncHistoryProps) {
                     </Badge>
                   ) : (
                     <>
+                      {run.status === "failed" && run.error && (
+                        <Badge variant="danger">failed</Badge>
+                      )}
                       <Badge variant="success">{run.matched_count} matched</Badge>
                       {run.failed_count > 0 && (
                         <Badge variant="danger">{run.failed_count} failed</Badge>
@@ -113,6 +116,12 @@ export function SyncHistory({ syncId }: SyncHistoryProps) {
                   )}
                 </div>
               </button>
+
+              {run.status === "failed" && run.error && (
+                <p className="text-xs text-danger-500 px-3 pb-2 border-t border-border pt-2">
+                  {run.error}
+                </p>
+              )}
 
               {isSelected && (
                 <div className="border-t border-border px-3 py-3 space-y-3">

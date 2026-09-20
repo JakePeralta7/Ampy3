@@ -475,8 +475,6 @@ async def trigger_sync_now(
 
     from src.app.services.scheduler import SchedulerService
 
-    await SchedulerService.trigger_sync_now(sync)
-
     await log_event(
         event_type="sync.manually_triggered",
         resource_type="schedule",

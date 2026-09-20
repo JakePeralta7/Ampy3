@@ -25,7 +25,7 @@ export function PlexSetupPage() {
     const conn = server.connections[selectedIdx.connIdx];
     setSaving(true);
     try {
-      await setupPlex(conn.uri, server.access_token);
+      await setupPlex(conn.uri, server.client_identifier);
       navigate("/", { replace: true });
     } catch (err) {
       toast.error(getErrorMessage(err, "Failed to configure Plex server"));

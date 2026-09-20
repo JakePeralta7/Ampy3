@@ -85,6 +85,7 @@ class SyncRunOut(BaseModel):
     status: str
     matched_count: int
     failed_count: int
+    error: str | None = None
     created_at: str | None = None
 
 
@@ -132,6 +133,7 @@ class PipelineTargetStatus(BaseModel):
     status: str
     matched_count: int = 0
     failed_count: int = 0
+    error: str | None = None
     created_at: str | None = None
 
 
