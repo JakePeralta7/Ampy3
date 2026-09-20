@@ -116,3 +116,4 @@ jobs:
           docker compose down
         env:
           POSTGRES_PASSWORD: ci-smoke-test-password-123
+          SECRET_KEY: ci-smoke-secret-key-0123456789abcdef
