@@ -3,31 +3,41 @@
 A rule YAML looks like:
 
     name: "Quick Start"
-    description: "Simple search and compare"
+    description: "Search-then-match pipeline with MusicBrainz ID fast-path."
     nodes:
       source:
         type: track_source
       search:
         type: search
         config:
-          fields_to_search: [title, artist, album]
+          fields:
+            - search_title
+            - search_artist
+            - search_album
           max_results: 50
-      compare:
-        type: compare
+      match:
+        type: match_composite
         config:
-          fields_to_match: [title, artist_name, album_name]
-          threshold: 0.75
-          weights: {title: 50, artist_name: 25, album_name: 25}
+          strategies:
+            - type: mbid
+              field: mbid
+            - type: fuzzy
+              title_threshold: 0.75
+              title_weight: 0.6
+              artist_weight: 0.4
+            - type: album
+              strategy: exact
+          require_all: false
       output:
         type: match_output
     edges:
       - from: source
         to: search
       - from: search
-        to: compare
+        to: match
         source_handle: out
         target_handle: candidates
-      - from: compare
+      - from: match
         to: output
 
 Node keys are semantic (user-chosen) identifiers. Positions are never

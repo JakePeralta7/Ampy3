@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
+
+if TYPE_CHECKING:
+    from src.app.core.matching.candidate import TrackCandidate
+    from src.app.core.targets.search import SearchCriteria, SearchStrategy
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +25,9 @@ class BaseTarget(ABC):
 
     display_name: ClassVar[str]
     """Human-readable name, e.g. ``"Plex Media Server"``."""
+
+    search_strategy: ClassVar[SearchStrategy]
+    """Search strategy used by this target's search_library method."""
 
     # ── Playlist operations ──────────────────────────────────────
 
@@ -110,6 +117,65 @@ class BaseTarget(ABC):
         Returns a list of dicts with at least ``item_id``/`id``,
         ``title``, ``artist_name``, ``album_name``, ``duration_ms``.
         """
+
+    async def _search_via_strategy(
+        self,
+        title: str = "",
+        artist: str = "",
+        genre: str = "",
+        album: str = "",
+    ) -> list[dict[str, Any]]:
+        """Default search_library implementation using search_strategy.
+
+        Targets can override search_library entirely, or set search_strategy
+        and rely on this default implementation.
+        """
+        from src.app.core.matching.candidate import TrackCandidate
+        from src.app.core.targets.search import SearchCriteria
+
+        criteria = SearchCriteria(title=title, artist=artist, genre=genre, album=album)
+        candidates = await self.search_strategy.search(self, criteria)
+        return [c.to_dict() for c in candidates]
+
+    async def _do_search(self, criteria) -> list[dict[str, Any]]:
+        """Execute the actual search against the target's API.
+
+        This is called by UnifiedSearchStrategy to avoid infinite recursion.
+        Targets using UnifiedSearchStrategy must implement this instead of
+        overriding search_library.
+
+        Args:
+            criteria: SearchCriteria object with title, artist, genre, album.
+
+        Returns:
+            List of track dicts with at least item_id, title, artist_name,
+            album_name, duration_ms.
+
+        Raises:
+            NotImplementedError: If the target uses a different search strategy
+                (e.g., TitleArtistAlbumSearch) and doesn't implement this method.
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} must implement _do_search() "
+            f"when using UnifiedSearchStrategy"
+        )
+
+    @abstractmethod
+    async def _search_by_title_artist_album(
+        self,
+        title: str,
+        artist: str,
+        album: str = "",
+        genre: str = "",
+    ) -> list[dict[str, Any]]:
+        """Search by title, artist, and optional album (Plex-specific combined search).
+
+        This is used by TitleArtistAlbumSearch strategy to avoid recursion.
+        """
+
+    @abstractmethod
+    async def _search_by_genre(self, genre: str) -> list[dict[str, Any]]:
+        """Search for artists/items by genre only."""
 
     @abstractmethod
     async def search_artist_tracks(self, artist: str, genre: str = "") -> list[dict[str, Any]]:

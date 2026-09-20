@@ -91,7 +91,9 @@ async def test_ytmusic_home_key_annotated_with_session(cache, yt_client, monkeyp
         return {"Personal": [{"title": "Pick", "playlistId": "PL1"}]}
 
     monkeypatch.setattr(yt_client, "_run", fake_run)
-    monkeypatch.setattr("src.app.core.clients.ytmusic.get_ytmusic_auth", _mock_get_ytmusic_auth_none)
+    monkeypatch.setattr(
+        "src.app.core.clients.ytmusic.get_ytmusic_auth", _mock_get_ytmusic_auth_none
+    )
 
     await yt_client.get_home()
 
@@ -108,7 +110,9 @@ async def test_ytmusic_reauth_isolates_home_cache(cache, yt_client, monkeypatch)
         return {"Personal": []}
 
     monkeypatch.setattr(yt_client, "_run", fake_run)
-    monkeypatch.setattr("src.app.core.clients.ytmusic.get_ytmusic_auth", _mock_get_ytmusic_auth_none)
+    monkeypatch.setattr(
+        "src.app.core.clients.ytmusic.get_ytmusic_auth", _mock_get_ytmusic_auth_none
+    )
 
     await yt_client.get_home()
     assert calls == ["get_home"]
@@ -132,7 +136,9 @@ async def test_ytmusic_force_bypasses_cache(cache, yt_client, monkeypatch):
         return {"top_songs": []}
 
     monkeypatch.setattr(yt_client, "_run", fake_run)
-    monkeypatch.setattr("src.app.core.clients.ytmusic.get_ytmusic_auth", _mock_get_ytmusic_auth_none)
+    monkeypatch.setattr(
+        "src.app.core.clients.ytmusic.get_ytmusic_auth", _mock_get_ytmusic_auth_none
+    )
 
     await yt_client.get_home()
     await yt_client.get_home()

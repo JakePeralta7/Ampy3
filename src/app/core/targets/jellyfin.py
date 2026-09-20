@@ -11,7 +11,9 @@ import httpx
 from src.app.constants import TARGET_JELLYFIN
 from src.app.core.matching import normalize
 from src.app.core.targets.base import BaseTarget
+from src.app.core.targets.factory import TargetFactory, target_factory
 from src.app.core.targets.registry import TargetRegistry
+from src.app.core.targets.search import SearchStrategy, UnifiedSearchStrategy
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +35,8 @@ class JellyfinTarget(BaseTarget):
 
     target_id: ClassVar[str] = TARGET_JELLYFIN
     display_name: ClassVar[str] = TARGET_JELLYFIN
+
+    search_strategy: ClassVar[SearchStrategy] = UnifiedSearchStrategy()
 
     def __init__(self, api_key: str, base_url: str, user_id: str) -> None:
         self._api_key = api_key
@@ -93,9 +97,9 @@ class JellyfinTarget(BaseTarget):
         """Return the Jellyfin web-app URL that opens the given playlist item.
 
         Jellyfin web is a hash-routed SPA served from the server base URL.
-        The item details page is reached via ``/web/index.html#/itemdetails?id={itemId}``.
+        The item details page is reached via ``/web/index.html#/details?id={itemId}``.
         """
-        return f"{self._base_url}/web/index.html#/itemdetails?id={playlist_id}"
+        return f"{self._base_url}/web/index.html#/details?id={playlist_id}"
 
     def _track_out(self, item: dict[str, Any]) -> dict[str, Any]:
         item_id = str(item.get("Id", ""))
@@ -283,14 +287,12 @@ class JellyfinTarget(BaseTarget):
 
     # ── Library search ───────────────────────────────────────────
 
-    async def search_library(
-        self,
-        title: str = "",
-        artist: str = "",
-        genre: str = "",
-        album: str = "",
-    ) -> list[dict[str, Any]]:
-        search_term = title or artist or album or genre
+    async def _do_search(self, criteria) -> list[dict[str, Any]]:
+        """Execute the actual Jellyfin search against the API.
+
+        This is called by UnifiedSearchStrategy to avoid infinite recursion.
+        """
+        search_term = criteria.title or criteria.artist or criteria.album or criteria.genre
         search_term = _normalize_search_query(search_term) if search_term else ""
         params = {
             "IncludeItemTypes": "Audio",
@@ -309,9 +311,9 @@ class JellyfinTarget(BaseTarget):
             logger.error("Failed searching Jellyfin library: %s", exc)
             return []
 
-        n_title = normalize(title)
-        n_artist = normalize(artist)
-        n_album = normalize(album)
+        n_title = normalize(criteria.title)
+        n_artist = normalize(criteria.artist)
+        n_album = normalize(criteria.album)
 
         def _matches(item: dict[str, Any]) -> bool:
             if n_title and n_title not in normalize(str(item.get("title", ""))):
@@ -322,11 +324,43 @@ class JellyfinTarget(BaseTarget):
 
         return [i for i in items if _matches(i)]
 
+    async def search_library(
+        self,
+        title: str = "",
+        artist: str = "",
+        genre: str = "",
+        album: str = "",
+    ) -> list[dict[str, Any]]:
+        """Search the Jellyfin music library using the configured search strategy."""
+        return await self._search_via_strategy(title=title, artist=artist, genre=genre, album=album)
+
+    async def _search_by_title_artist_album(
+        self,
+        title: str,
+        artist: str,
+        album: str = "",
+        genre: str = "",
+    ) -> list[dict[str, Any]]:
+        """Jellyfin uses unified search - delegate to _do_search."""
+        from src.app.core.targets.search import SearchCriteria
+        criteria = SearchCriteria(title=title, artist=artist, album=album, genre=genre)
+        return await self._do_search(criteria)
+
+    async def _search_by_genre(self, genre: str) -> list[dict[str, Any]]:
+        """Jellyfin uses unified search - delegate to _do_search."""
+        from src.app.core.targets.search import SearchCriteria
+        criteria = SearchCriteria(genre=genre)
+        return await self._do_search(criteria)
+
     async def search_artist_tracks(self, artist: str, genre: str = "") -> list[dict[str, Any]]:
-        return await self.search_library(artist=artist, genre=genre)
+        from src.app.core.targets.search import SearchCriteria
+        criteria = SearchCriteria(artist=artist, genre=genre)
+        return await self._do_search(criteria)
 
     async def search_title_only(self, title: str) -> list[dict[str, Any]]:
-        return await self.search_library(title=title)
+        from src.app.core.targets.search import SearchCriteria
+        criteria = SearchCriteria(title=title)
+        return await self._do_search(criteria)
 
     # ── Connection test ─────────────────────────────────────────
 
@@ -343,44 +377,16 @@ class JellyfinTarget(BaseTarget):
             self._client = None
 
 
-async def _create_jellyfin_target() -> JellyfinTarget:
-    """Factory: build a JellyfinTarget from DB config."""
-    import asyncio
+@target_factory(TARGET_JELLYFIN, "Jellyfin")
+class JellyfinTargetFactory(TargetFactory):
+    REQUIRED_KEYS = ["jellyfin_server_url", "jellyfin_api_key", "jellyfin_user_id"]
+    SENSITIVE_KEYS = {"jellyfin_api_key"}
+    target_class = JellyfinTarget
 
-    from sqlalchemy import select
-
-    from src.app.db import AsyncSessionLocal
-    from src.app.models import Config
-    from src.app.services.crypto import decrypt_token
-
-    async def _read_config() -> dict[str, str]:
-        async with AsyncSessionLocal() as session:
-            result = await session.execute(
-                select(Config).where(
-                    Config.key.in_(["jellyfin_server_url", "jellyfin_api_key", "jellyfin_user_id"])
-                )
-            )
-            config = {}
-            for row in result.scalars().all():
-                if row.key == "jellyfin_api_key":
-                    config[row.key] = decrypt_token(row.value)
-                else:
-                    config[row.key] = row.value
-            return config
-
-    rows = await _read_config()
-
-    server_url = rows.get("jellyfin_server_url", "").strip()
-    api_key = rows.get("jellyfin_api_key", "").strip()
-    user_id = rows.get("jellyfin_user_id", "").strip()
-
-    if not server_url or not api_key or not user_id:
-        raise RuntimeError(
-            "Jellyfin target not configured. Set jellyfin_server_url, jellyfin_api_key, "
-            "and jellyfin_user_id in Settings."
-        )
-
-    return JellyfinTarget(api_key=api_key, base_url=server_url, user_id=user_id)
-
-
-TargetRegistry.register(TARGET_JELLYFIN, JellyfinTarget, factory=_create_jellyfin_target)
+    @classmethod
+    def _build_kwargs(cls, config: dict[str, str]) -> dict[str, Any]:
+        return {
+            "api_key": config["jellyfin_api_key"],
+            "base_url": config["jellyfin_server_url"],
+            "user_id": config["jellyfin_user_id"],
+        }

@@ -5,7 +5,11 @@ import pytest
 from src.app.api import sources as sources_api
 from src.app.api.sources import get_sources
 from src.app.schemas.sources import SourceTestRequest
-from src.app.services.ytauth import get_ytmusic_auth, invalidate_ytmusic_auth_cache, validate_ytmusic_auth
+from src.app.services.ytauth import (
+    get_ytmusic_auth,
+    invalidate_ytmusic_auth_cache,
+    validate_ytmusic_auth,
+)
 
 
 async def test_get_sources_lists_sources(monkeypatch) -> None:

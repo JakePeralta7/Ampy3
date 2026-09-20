@@ -1,87 +1,58 @@
-"""Comparison and best-match selection node handlers."""
+"""Comparison and best-match selection node handlers using MatchStrategy."""
 
 from __future__ import annotations
 
-import json
 import logging
 
-from src.app.core.matching import _artist_similarity, _best_match, _match_titles, _normalize_album
+from src.app.core.matching.candidate import TrackCandidate
+from src.app.core.matching.strategies import (
+    AlbumMatch,
+    CompositeMatch,
+    FuzzyTitleArtistMatch,
+    MBIDMatch,
+)
 from src.app.core.models import TrackMetadata
 from src.app.core.nodes.base import NodeHandlerBase, NodeInputs, NodeOutputs
 from src.app.core.nodes.registry import register_node
 
+
+def _parse_candidates(candidates_raw: list[dict]) -> list[TrackCandidate]:
+    """Parse raw candidate dicts into TrackCandidate objects, filtering None."""
+    return [
+        c
+        for c in [TrackCandidate.from_dict(c) for c in candidates_raw]
+        if c is not None
+    ]
+
+
 logger = logging.getLogger(__name__)
 
-# ─── Album comparison strategies ────────────────────────────────
 
-
-def _album_exact(ref: str, cand: str) -> float:
-    """Exact normalized string equality: 1.0 or 0.0."""
-    return 1.0 if ref == cand else 0.0
-
-
-def _album_contains(ref: str, cand: str) -> float:
-    """Substring containment scoring: 0.9 for containment, 0.0 otherwise."""
-    if ref == cand:
-        return 1.0
-    if ref in cand or cand in ref:
-        return 0.9
-    return 0.0
-
-
-def _album_fuzzy(ref: str, cand: str) -> float:
-    """Token Jaccard similarity for album names."""
-    ref_tokens = set(ref.split())
-    cand_tokens = set(cand.split())
-    if not ref_tokens or not cand_tokens:
-        return 0.0
-    return len(ref_tokens & cand_tokens) / len(ref_tokens | cand_tokens)
-
-
-_ALBUM_COMPARATORS = {
-    "exact": _album_exact,
-    "contains": _album_contains,
-    "fuzzy": _album_fuzzy,
-}
-
-
-@register_node("mbid_compare")
-class MBIDCompareNode(NodeHandlerBase):
-    """Exact MusicBrainz ID matching node.
-
-    Returns the candidate if source MBID matches target MBID exactly.
-    Source track MBID comes from track.mbid (provided by TrackSourceNode).
-    Target MBID comes from candidate.mbid (returned by search nodes).
+@register_node("match_mbid")
+class MBIDMatchNode(NodeHandlerBase):
+    """Exact MusicBrainz ID matching node using MBIDMatch strategy.
 
     Config:
     - field: which MBID field to compare (mbid, artist_mbid, album_mbid). Default: mbid
     """
 
     async def execute(self, track: TrackMetadata, inputs: NodeInputs) -> NodeOutputs:
-        candidates = inputs.get("candidates") or []
-        if not isinstance(candidates, list) or not candidates:
+        candidates_raw = inputs.get("candidates") or []
+        if not isinstance(candidates_raw, list) or not candidates_raw:
             return {"out": None}
 
         field = self._config.get("field", "mbid")
-        source_mbid = getattr(track, field, None)
+        strategy = MBIDMatch(field=field)
 
-        if not source_mbid:
-            return {"out": None}
+        candidates = _parse_candidates(candidates_raw)
+        match = await strategy.match(track, candidates)
 
-        for candidate in candidates:
-            if not isinstance(candidate, dict):
-                continue
-            target_mbid = candidate.get(field)
-            if target_mbid and source_mbid == target_mbid:
-                logger.debug("[MBID_COMPARE] Exact MBID match: %s", source_mbid)
-                return {"out": candidate}
-
-        return {"out": None}
+        return {"out": match.to_dict() if match else None}
 
 
-@register_node("pick_best")
-class PickBestNode(NodeHandlerBase):
-    """Pick the best matching candidate using combined title + artist similarity.
+@register_node("match_fuzzy")
+class FuzzyMatchNode(NodeHandlerBase):
+    """Fuzzy title + artist matching node using FuzzyTitleArtistMatch strategy.
 
     Config:
     - title_threshold: minimum combined score to accept a match. Default: 0.75
@@ -90,205 +61,111 @@ class PickBestNode(NodeHandlerBase):
     """
 
     async def execute(self, track: TrackMetadata, inputs: NodeInputs) -> NodeOutputs:
-        candidates = inputs.get("candidates", inputs.get("in", []))
-        threshold = self._config.get("title_threshold", 0.75)
-        title_weight = self._config.get("title_weight", 0.6)
-        artist_weight = self._config.get("artist_weight", 0.4)
-
-        search_title: str = ""
-        title_input = inputs.get("title")
-        if title_input is not None:
-            search_title = str(title_input)
-        elif isinstance(track.title, str):
-            search_title = track.title
-
-        search_artist: str = ""
-        artist_input = inputs.get("artist")
-        if artist_input is not None:
-            search_artist = str(artist_input)
-        elif isinstance(track.artist_name, str):
-            search_artist = track.artist_name
-
-        if not search_title or not isinstance(candidates, list):
+        candidates_raw = inputs.get("candidates", inputs.get("in", []))
+        if not isinstance(candidates_raw, list) or not candidates_raw:
             return {"out": None}
 
-        match = _best_match(
-            search_title,
-            candidates,
-            threshold=threshold,
-            search_artist=search_artist or None,
-            title_weight=title_weight,
-            artist_weight=artist_weight,
+        strategy = FuzzyTitleArtistMatch(
+            title_threshold=self._config.get("title_threshold", 0.75),
+            title_weight=self._config.get("title_weight", 0.6),
+            artist_weight=self._config.get("artist_weight", 0.4),
         )
-        return {"out": match}
+
+        candidates = _parse_candidates(candidates_raw)
+        match = await strategy.match(track, candidates)
+
+        return {"out": match.to_dict() if match else None}
 
 
-@register_node("sort_by_score")
-class SortByScoreNode(NodeHandlerBase):
-    async def execute(self, track: TrackMetadata, inputs: NodeInputs) -> NodeOutputs:
-        candidates = inputs.get("in", [])
-        search_title = str(inputs.get("title", track.title or ""))
-
-        if not isinstance(candidates, list) or not search_title:
-            return {"out": candidates}
-
-        scored = []
-        for c in candidates:
-            score = _match_titles(search_title, c.get("title", ""))
-            scored.append((score, c))
-
-        scored.sort(key=lambda x: x[0], reverse=self._config.get("descending", True))
-        return {"out": [c for _, c in scored]}
-
-
-@register_node("compare")
-class CompareNode(NodeHandlerBase):
-    """Compare search candidates against a reference track and return best match.
-
-    Combines logic from pick_best, filter, and similarity nodes.
+@register_node("match_album")
+class AlbumMatchNode(NodeHandlerBase):
+    """Album name matching node using AlbumMatch strategy.
 
     Config:
-    - fields_to_match: list of field names (title, artist_name, album_name)
-    - threshold: minimum similarity score (0.0-1.0). Default: 0.75
-    - weights: dict of field weights {title: 50, artist_name: 25, album_name: 25}
-    - album_comparison: album matching strategy - "exact" | "contains" | "fuzzy". Default: exact
+    - strategy: album matching strategy - "exact" | "contains" | "fuzzy". Default: exact
+    - threshold: minimum score to accept a match. Default: 0.70
     """
 
     async def execute(self, track: TrackMetadata, inputs: NodeInputs) -> NodeOutputs:
-        candidates = inputs.get("candidates") or inputs.get("in") or inputs.get("out") or []
-        logger.debug(f"[COMPARE] Received inputs keys: {list(inputs.keys())}")
-        c_len = len(candidates) if isinstance(candidates, list) else "N/A"
-        logger.debug(
-            "[COMPARE] Received candidates type: %s, len: %s",
-            type(candidates),
-            c_len,
-        )
-
-        if not isinstance(candidates, list):
-            logger.debug("[COMPARE] Candidates is not a list, returning None")
+        candidates_raw = inputs.get("candidates") or []
+        if not isinstance(candidates_raw, list) or not candidates_raw:
             return {"out": None}
 
-        if not candidates:
-            logger.debug("[COMPARE] Candidates list is empty, returning None")
+        strategy = AlbumMatch(
+            strategy=self._config.get("strategy", "exact"),
+            threshold=self._config.get("threshold", 0.70),
+        )
+
+        candidates = _parse_candidates(candidates_raw)
+        match = await strategy.match(track, candidates)
+
+        return {"out": match.to_dict() if match else None}
+
+
+@register_node("match_composite")
+class CompositeMatchNode(NodeHandlerBase):
+    """Composite match node using CompositeMatch strategy.
+
+    Combines multiple match strategies with configurable logic (AND/OR).
+
+    Config:
+    - strategies: list of strategy configs, each with:
+      - type: "mbid" | "fuzzy" | "album"
+      - field (for mbid): MBID field to compare. Default: mbid
+      - title_threshold, title_weight, artist_weight (for fuzzy)
+      - strategy (for album): "exact" | "contains" | "fuzzy". Default: exact
+      - threshold (for album): minimum score. Default: 0.70
+    - require_all: if true, all strategies must match (AND). Default: false (OR)
+    - mode: "sequential" | "intersection". Default: "sequential"
+    """
+
+    async def execute(self, track: TrackMetadata, inputs: NodeInputs) -> NodeOutputs:
+        candidates_raw = inputs.get("candidates", inputs.get("in", []))
+        if not isinstance(candidates_raw, list) or not candidates_raw:
             return {"out": None}
 
-        fields_config = self._config.get("fields_to_match", "title")
-        if isinstance(fields_config, str):
-            fields = [f.strip() for f in fields_config.split(",")]
-        else:
-            fields = fields_config if isinstance(fields_config, list) else ["title"]
-
-        threshold = self._config.get("threshold", 0.75)
-        weights_config = self._config.get("weights", {})
-
-        ref = inputs.get("reference")
-        if not isinstance(ref, dict):
-            ref = {
-                "title": track.title or "",
-                "artist_name": track.artist_name or "",
-                "album_name": track.album_name or "",
-            }
-        ref_title = ref.get("title", track.title or "")
-        ref_artist = ref.get("artist_name", track.artist_name or "")
-        ref_album = ref.get("album_name", track.album_name or "")
-
-        album_comparison = self._config.get("album_comparison", "exact")
-        album_comparator = _ALBUM_COMPARATORS.get(album_comparison, _album_exact)
-        logger.debug(
-            "[COMPARE] Reference: title=%s, artist=%s, album=%s",
-            ref_title,
-            ref_artist,
-            ref_album,
-        )
-        logger.debug(f"[COMPARE] Fields to match: {fields}, threshold: {threshold}")
-
-        if isinstance(weights_config, str):
-            try:
-                weights = (
-                    json.loads(weights_config)
-                    if (weights_config and weights_config != "[object Object]")
-                    else {}
+        strategies = []
+        for s in self._config.get("strategies", []):
+            stype = s.get("type")
+            if stype == "mbid":
+                strategies.append(MBIDMatch(field=s.get("field", "mbid")))
+            elif stype == "fuzzy":
+                strategies.append(
+                    FuzzyTitleArtistMatch(
+                        title_threshold=s.get("title_threshold", 0.75),
+                        title_weight=s.get("title_weight", 0.6),
+                        artist_weight=s.get("artist_weight", 0.4),
+                    )
                 )
-            except Exception:
-                weights = {}
-        else:
-            weights = weights_config if isinstance(weights_config, dict) else {}
+            elif stype == "album":
+                strategies.append(AlbumMatch(
+                    strategy=s.get("strategy", "exact"),
+                    threshold=s.get("threshold", 0.70),
+                ))
+            else:
+                logger.warning(f"Unknown match strategy type: {stype}")
 
-        if not weights:
-            if "title" in fields:
-                weights.setdefault("title", 50)
-            if "artist_name" in fields:
-                weights.setdefault("artist_name", 25 if "title" in fields else 50)
-            if "album_name" in fields:
-                weights.setdefault("album_name", 25 if "title" in fields else 25)
+        if not strategies:
+            return {"out": None}
 
-        total_weight = sum(weights.get(f, 0) for f in fields)
-        if total_weight > 0:
-            normalized_weights = {f: (weights.get(f, 0) / total_weight * 100) for f in fields}
-        else:
-            normalized_weights = {f: (100 / len(fields)) for f in fields}
-
-        best_match = None
-        best_score = 0.0
-
-        for candidate in candidates:
-            field_scores = {}
-
-            if "title" in fields:
-                ref_title = ref.get("title", "") or track.title or ""
-                cand_title = candidate.get("title", "")
-                title_match = (
-                    _match_titles(ref_title, cand_title) if ref_title and cand_title else 0.0
-                )
-                field_scores["title"] = title_match
-
-            if "artist_name" in fields:
-                ref_artist = ref.get("artist_name", "") or track.artist_name or ""
-                cand_artist = candidate.get("artist_name", "")
-                artist_match = (
-                    _artist_similarity(ref_artist, cand_artist)
-                    if ref_artist and cand_artist
-                    else 0.0
-                )
-                field_scores["artist_name"] = artist_match
-
-            if "album_name" in fields:
-                ref_album = ref.get("album_name", "") or track.album_name or ""
-                cand_album = candidate.get("album_name", "")
-                ref_norm = _normalize_album(ref_album).lower().strip()
-                cand_norm = _normalize_album(cand_album).lower().strip()
-                if ref_norm and cand_norm:
-                    field_scores["album_name"] = album_comparator(ref_norm, cand_norm)
-                else:
-                    field_scores["album_name"] = 0.0
-
-            weighted_score = sum(
-                field_scores.get(f, 0.0) * (normalized_weights.get(f, 0) / 100) for f in fields
-            )
-
-            c_title = candidate.get("title")
-            c_artist = candidate.get("artist_name")
-            logger.debug(
-                "[COMPARE] Candidate: %s by %s - score: %.2f, field_scores: %s",
-                c_title,
-                c_artist,
-                weighted_score,
-                field_scores,
-            )
-
-            if weighted_score > best_score:
-                best_score = weighted_score
-                best_match = candidate
-
-        best_title = best_match.get("title") if best_match else "None"
-        logger.debug(
-            "[COMPARE] Best match: %s, score: %.2f, threshold: %s",
-            best_title,
-            best_score,
-            threshold,
+        composite = CompositeMatch(
+            strategies=tuple(strategies),
+            require_all=self._config.get("require_all", False),
+            mode=self._config.get("mode", "sequential"),
         )
 
-        if best_score >= threshold and best_match:
-            return {"out": best_match}
+        candidates = _parse_candidates(candidates_raw)
+        match = await composite.match(track, candidates)
 
-        return {"out": None}
+        return {"out": match.to_dict() if match else None}
+
+
+@register_node("match_output")
+class MatchOutputNode(NodeHandlerBase):
+    """Pass-through node to emit a match result.
+
+    Used as the final node in a match chain to emit the matched candidate.
+    """
+
+    async def execute(self, track: TrackMetadata, inputs: NodeInputs) -> NodeOutputs:
+        return {"out": inputs.get("in")}

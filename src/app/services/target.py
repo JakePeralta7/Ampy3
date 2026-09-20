@@ -104,9 +104,9 @@ class TargetService(ServiceBase):
             future2 = asyncio.run_coroutine_threadsafe(_update_fingerprint(), loop)
             future2.result(timeout=30)
         else:
+            # Async context (e.g., FastAPI) — run directly on current loop
             task = asyncio.create_task(_close_all())
             task.add_done_callback(lambda t: t.exception() if not t.cancelled() else None)
-            future = asyncio.run_coroutine_threadsafe(_update_fingerprint(), loop)
-            future.result(timeout=30)
+            asyncio.create_task(_update_fingerprint())
 
         logger.info("Reset %d target instance(s)", len(instances))

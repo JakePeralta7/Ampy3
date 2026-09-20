@@ -19,7 +19,9 @@ from src.app.core.matching import (
     normalize,
 )
 from src.app.core.targets.base import BaseTarget
+from src.app.core.targets.factory import TargetFactory, target_factory
 from src.app.core.targets.registry import TargetRegistry
+from src.app.core.targets.search import SearchStrategy, TitleArtistAlbumSearch
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +52,8 @@ class PlexTarget(BaseTarget):
 
     target_id: ClassVar[str] = TARGET_PLEX
     display_name: ClassVar[str] = TARGET_PLEX
+
+    search_strategy: ClassVar[SearchStrategy] = TitleArtistAlbumSearch()
 
     def __init__(self, token: str, base_url: str) -> None:
         self._token = token
@@ -600,6 +604,123 @@ class PlexTarget(BaseTarget):
         tracks = root.findall(".//Track")
         return self._parse_tracks(tracks) if tracks else []
 
+    async def _search_by_title_artist_album(
+        self,
+        title: str,
+        artist: str,
+        album: str = "",
+        genre: str = "",
+    ) -> list[dict[str, Any]]:
+        """Search by title, artist, and optional album (Plex-specific combined search).
+
+        This mirrors the original search_library logic for title+artist+album.
+        """
+        try:
+            primary_artist = _extract_primary_artist(artist)
+            log_msg = f"Searching for track by artist='{primary_artist}', title='{title}'"
+            if album:
+                log_msg += f", album='{album}'"
+            if genre:
+                log_msg += f", genre='{genre}'"
+            logger.debug(log_msg)
+
+            result_tracks = await self.search_artist_tracks(primary_artist, genre)
+
+            if result_tracks:
+                logger.debug(f"Expanded artist '{artist}' to {len(result_tracks)} tracks")
+
+                if album:
+                    norm_album = _normalize_album(album)
+                    album_tracks = [
+                        t
+                        for t in result_tracks
+                        if _normalize_album(t.get("album_name", "")) == norm_album
+                    ]
+                    logger.debug(f"Found {len(album_tracks)} tracks in album '{album}'")
+                    if album_tracks:
+                        match = _best_match(title, album_tracks)
+                        if match:
+                            logger.debug(
+                                "Album match: '%s' -> '%s' in '%s'",
+                                title,
+                                match.get("title"),
+                                album,
+                            )
+                            return [match]
+
+                match = _best_match(title, result_tracks)
+                if match:
+                    logger.debug(
+                        "Matched '%s' -> '%s' by %s",
+                        title,
+                        match.get("title"),
+                        match.get("artist_name", ""),
+                    )
+                    return [match]
+
+                logger.debug(f"No match found for '{title}' by '{artist}'")
+                return []
+
+            logger.debug(
+                "Artist directory not found: '%s' - falling back to title-only search",
+                artist,
+            )
+            if title:
+                results = await self.search_title_only(title)
+                if results:
+                    norm_artist = _normalize_for_compare(artist)
+                    filtered = [
+                        t
+                        for t in results
+                        if norm_artist in _normalize_for_compare(t.get("artist_name", ""))
+                        or _normalize_for_compare(t.get("artist_name", "")) in norm_artist
+                    ]
+                    if filtered:
+                        return filtered
+                    logger.debug(
+                        "No results matching artist '%s' in title-only fallback",
+                        artist,
+                    )
+                    return []
+            return []
+        except httpx.HTTPStatusError as e:
+            logger.warning(f"HTTP error searching library: {e}")
+            return []
+        except ET.ParseError as e:
+            logger.error(f"XML parse error in _search_by_title_artist_album: {e}")
+            return []
+
+    async def _search_by_genre(self, genre: str) -> list[dict[str, Any]]:
+        """Search for artists by genre."""
+        try:
+            response = await self.client.get(
+                "/library/all", params={"type": "8", "genre": genre}
+            )
+            response.raise_for_status()
+            root = ET.fromstring(response.text)
+            dirs = root.findall(".//Directory")
+            results = []
+            for d in dirs:
+                results.append(
+                    {
+                        "item_id": d.get("ratingKey"),
+                        "title": f"[Artist] {d.get('title', '')}",
+                        "artist_name": d.get("title", ""),
+                        "album_name": "",
+                        "duration_ms": 0,
+                        "track_number": None,
+                        "genre": genre,
+                    }
+                )
+                logger.debug(f"Found {len(results)} artists matching genre '{genre}'")
+            return results
+        except httpx.HTTPStatusError as e:
+            logger.warning(f"HTTP error searching by genre: {e}")
+            return []
+        except ET.ParseError as e:
+            logger.error(f"XML parse error in _search_by_genre: {e}")
+            return []
+
     async def search_library(
         self,
         title: str = "",
@@ -607,124 +728,8 @@ class PlexTarget(BaseTarget):
         genre: str = "",
         album: str = "",
     ) -> list[dict[str, Any]]:
-        """Searches the Plex music library for tracks matching the criteria."""
-        try:
-            if genre and not title and not artist:
-                response = await self.client.get(
-                    "/library/all", params={"type": "8", "genre": genre}
-                )
-                response.raise_for_status()
-                root = ET.fromstring(response.text)
-                dirs = root.findall(".//Directory")
-                results = []
-                for d in dirs:
-                    results.append(
-                        {
-                            "item_id": d.get("ratingKey"),
-                            "title": f"[Artist] {d.get('title', '')}",
-                            "artist_name": d.get("title", ""),
-                            "album_name": "",
-                            "duration_ms": 0,
-                            "track_number": None,
-                            "genre": genre,
-                        }
-                    )
-                    logger.debug(f"Found {len(results)} artists matching genre '{genre}'")
-                return results
-
-            if title and artist:
-                primary_artist = _extract_primary_artist(artist)
-                log_msg = f"Searching for track by artist='{primary_artist}', title='{title}'"
-                if album:
-                    log_msg += f", album='{album}'"
-                logger.debug(log_msg)
-
-                result_tracks = await self.search_artist_tracks(primary_artist, genre)
-
-                if result_tracks:
-                    logger.debug(f"Expanded artist '{artist}' to {len(result_tracks)} tracks")
-
-                    if album:
-                        norm_album = _normalize_album(album)
-                        album_tracks = [
-                            t
-                            for t in result_tracks
-                            if _normalize_album(t.get("album_name", "")) == norm_album
-                        ]
-                        logger.debug(f"Found {len(album_tracks)} tracks in album '{album}'")
-                        if album_tracks:
-                            match = _best_match(title, album_tracks)
-                            if match:
-                                logger.debug(
-                                    "Album match: '%s' -> '%s' in '%s'",
-                                    title,
-                                    match.get("title"),
-                                    album,
-                                )
-                                return [match]
-
-                    match = _best_match(title, result_tracks)
-                    if match:
-                        logger.debug(
-                            "Matched '%s' -> '%s' by %s",
-                            title,
-                            match.get("title"),
-                            match.get("artist_name", ""),
-                        )
-                        return [match]
-
-                    logger.debug(f"No match found for '{title}' by '{artist}'")
-                    return []
-
-                logger.debug(
-                    "Artist directory not found: '%s' - falling back to title-only search",
-                    artist,
-                )
-                if title:
-                    results = await self.search_title_only(title)
-                    if results:
-                        norm_artist = _normalize_for_compare(artist)
-                        filtered = [
-                            t
-                            for t in results
-                            if norm_artist in _normalize_for_compare(t.get("artist_name", ""))
-                            or _normalize_for_compare(t.get("artist_name", "")) in norm_artist
-                        ]
-                        if filtered:
-                            return filtered
-                        logger.debug(
-                            "No results matching artist '%s' in title-only fallback",
-                            artist,
-                        )
-                        return []
-                return []
-
-            elif artist:
-                logger.debug(f"Searching for artist='{artist}'")
-                results = await self.search_artist_tracks(artist, genre)
-                if results:
-                    logger.debug(f"Found {len(results)} tracks for artist '{artist}'")
-                    return results
-                logger.debug(f"Artist not found: '{artist}'")
-                return []
-
-            elif title:
-                logger.debug(f"Searching for title='{title}'")
-                results = await self.search_title_only(title)
-                if results:
-                    logger.debug(f"Found {len(results)} tracks for title '{title}'")
-                    return results
-                logger.debug(f"No tracks found for title '{title}'")
-                return []
-
-            logger.debug("No search criteria provided")
-            return []
-        except httpx.HTTPStatusError as e:
-            logger.warning(f"HTTP error searching library: {e}")
-            return []
-        except ET.ParseError as e:
-            logger.error(f"XML parse error in search_library: {e}")
-            return []
+        """Search the Plex music library using the configured search strategy."""
+        return await self._search_via_strategy(title=title, artist=artist, genre=genre, album=album)
 
     def _parse_tracks(self, track_elements: list[ET.Element]) -> list[dict[str, Any]]:
         """Parses Track XML elements into dicts."""
@@ -759,37 +764,12 @@ class PlexTarget(BaseTarget):
             self._client = None
 
 
-async def _create_plex_target() -> PlexTarget:
-    """Factory: build a PlexTarget from DB config."""
-    import asyncio
+@target_factory(TARGET_PLEX, "Plex Media Server")
+class PlexTargetFactory(TargetFactory):
+    REQUIRED_KEYS = ["plex_host", "plex_token"]
+    SENSITIVE_KEYS = {"plex_token"}
+    target_class = PlexTarget
 
-    from sqlalchemy import select
-
-    from src.app.db import AsyncSessionLocal
-    from src.app.models import Config
-    from src.app.services.crypto import decrypt_token
-
-    async def _read_config() -> dict[str, str]:
-        async with AsyncSessionLocal() as session:
-            stmt = select(Config).where(Config.key.in_(["plex_host", "plex_token"]))
-            result = await session.execute(stmt)
-            config = {}
-            for row in result.scalars().all():
-                if row.key == "plex_token":
-                    config[row.key] = decrypt_token(row.value)
-                else:
-                    config[row.key] = row.value
-            return config
-
-    config = await _read_config()
-
-    token = config.get("plex_token", "").strip()
-    server_url = config.get("plex_host", "").strip()
-
-    if not token or not server_url:
-        raise RuntimeError("Plex server not configured. Set up the server in Settings.")
-
-    return PlexTarget(token=token, base_url=server_url)
-
-
-TargetRegistry.register(TARGET_PLEX, PlexTarget, factory=_create_plex_target)
+    @classmethod
+    def _build_kwargs(cls, config: dict[str, str]) -> dict[str, Any]:
+        return {"token": config["plex_token"], "base_url": config["plex_host"]}

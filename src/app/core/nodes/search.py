@@ -67,7 +67,7 @@ class SearchNode(NodeHandlerBase):
     """Search the target library for candidates matching the input track.
 
     Config:
-    - fields_to_search: list of fields to include (search_title, search_artist, search_album)
+    - fields: list of fields to include (search_title, search_artist, search_album)
     - max_results: maximum number of results to return. Default: 50
     """
 
@@ -82,7 +82,7 @@ class SearchNode(NodeHandlerBase):
                 "album_name": track.album_name or "",
             }
 
-        fields = self._config.get("fields_to_search", [])
+        fields = self._config.get("fields", [])
         search_title = "search_title" in fields
         search_artist = "search_artist" in fields
         search_album = "search_album" in fields

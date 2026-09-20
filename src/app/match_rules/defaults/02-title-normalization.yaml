@@ -3,9 +3,9 @@ description: >
   Handles YouTube Music metadata quirks where the video title contains
   "Artist – Song" or "Song (ft. Artist)" patterns. Extracts the artist
   from the title prefix, strips feature credits and common suffixes
-  (Official Video, M/V, [label], etc.), then searches and compares on
-  the cleaned title and extracted artist. Uses a slightly relaxed 0.70
-  threshold because the normalization step introduces some uncertainty.
+  (Official Video, M/V, [label], etc.), then searches and matches on
+  the cleaned title and extracted artist using a composite match strategy
+  with MBID fast-path and fuzzy fallback at 0.70 threshold.
 
 nodes:
   source:
@@ -92,22 +92,24 @@ nodes:
   search:
     type: search
     config:
-      fields_to_search:
+      fields:
         - search_title
         - search_artist
       max_results: 50
 
-  compare:
-    type: compare
+  match:
+    type: match_composite
     config:
-      fields_to_match:
-        - title
-        - artist_name
-      threshold: 0.70
-      weights:
-        title: 60
-        artist_name: 40
-      album_comparison: exact
+      strategies:
+        - type: mbid
+          field: mbid
+        - type: fuzzy
+          title_threshold: 0.70
+          title_weight: 0.6
+          artist_weight: 0.4
+        - type: album
+          strategy: exact
+      require_all: false
 
   output:
     type: match_output
@@ -141,9 +143,9 @@ edges:
     to: search
 
   - from: search
-    to: compare
+    to: match
     source_handle: out
     target_handle: candidates
 
-  - from: compare
+  - from: match
     to: output

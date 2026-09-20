@@ -1,8 +1,8 @@
 name: "Quick Start"
 description: >
-  Search-then-compare pipeline with MusicBrainz ID fast-path.
+  Search-then-match pipeline with MusicBrainz ID fast-path.
   First tries exact MBID matching (if both source and target have MBIDs),
-  then falls back to text-based search+compare with 0.75 weighted threshold.
+  then falls back to fuzzy title+artist matching with 0.75 threshold.
 
 nodes:
   source:
@@ -11,30 +11,25 @@ nodes:
   search:
     type: search
     config:
-      fields_to_search:
+      fields:
         - search_title
         - search_artist
         - search_album
       max_results: 50
 
-  mbid_compare:
-    type: mbid_compare
+  match:
+    type: match_composite
     config:
-      field: mbid
-
-  compare:
-    type: compare
-    config:
-      fields_to_match:
-        - title
-        - artist_name
-        - album_name
-      threshold: 0.75
-      weights:
-        title: 50
-        artist_name: 25
-        album_name: 25
-      album_comparison: exact
+      strategies:
+        - type: mbid
+          field: mbid
+        - type: fuzzy
+          title_threshold: 0.75
+          title_weight: 0.6
+          artist_weight: 0.4
+        - type: album
+          strategy: exact
+      require_all: false
 
   output:
     type: match_output
@@ -44,17 +39,9 @@ edges:
     to: search
 
   - from: search
-    to: mbid_compare
+    to: match
     source_handle: out
     target_handle: candidates
 
-  - from: mbid_compare
-    to: output
-
-  - from: search
-    to: compare
-    source_handle: out
-    target_handle: candidates
-
-  - from: compare
+  - from: match
     to: output

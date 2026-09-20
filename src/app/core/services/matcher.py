@@ -140,8 +140,9 @@ class NodeGraphExecutor:
                 tgt_handle = edge.get("targetHandle", "in")
                 inputs[tgt_handle] = src_outputs.get(src_handle)
 
-            # Auto-provide reference data for compare nodes
-            if node["type"] == "compare" and "reference" not in inputs:
+            # Auto-provide reference data for match nodes
+            match_node_types = ("match_composite", "match_fuzzy", "match_album", "match_mbid")
+            if node["type"] in match_node_types and "reference" not in inputs:
                 for src_nid in reversed(sorted_ids[: sorted_ids.index(nid)]):
                     src_output = outputs.get(src_nid, {})
                     for val in src_output.values():
@@ -168,10 +169,14 @@ class NodeGraphExecutor:
                     }
                 )
 
-            if node["type"] in ("compare", "mbid_compare"):
-                _emit_match(result.get("out"))
-
-            if node["type"] == "match_output":
+            emit_node_types = (
+            "match_composite",
+            "match_fuzzy",
+            "match_album",
+            "match_mbid",
+            "match_output",
+        )
+            if node["type"] in emit_node_types:
                 _emit_match(result.get("out"))
 
             if node.get("config", {}).get("breakpoint"):
