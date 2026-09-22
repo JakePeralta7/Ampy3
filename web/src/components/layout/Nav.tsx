@@ -19,6 +19,7 @@ import { Link, useLocation } from "react-router-dom";
 import githubSvg from "../../assets/github.svg";
 import { useAuth } from "../../contexts/AuthContext";
 import { useVersion } from "../../hooks/useVersion";
+import { Ampy3Icon } from "../ui/Ampy3Icon";
 import { DeezerIcon, YouTubeMusicIcon } from "../ui/SourceIcon";
 
 const COLLAPSE_KEY = "ampy3:sidebar-collapsed";
@@ -106,7 +107,7 @@ export function Nav() {
         className="flex items-center gap-2 p-4"
         title={collapsed ? `Ampy3 v${version ?? ""}` : undefined}
       >
-        <img src="/ampy3.svg" alt="" className="h-8 w-8 shrink-0" />
+        <Ampy3Icon size={32} className="shrink-0" />
         {!collapsed && (
           <div className="flex flex-col leading-tight">
             <span className="font-bold text-accent-700">Ampy3</span>

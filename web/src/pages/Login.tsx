@@ -1,4 +1,5 @@
 import { Navigate, useSearchParams } from "react-router-dom";
+import { Ampy3Icon } from "../components/ui/Ampy3Icon";
 import { useAuth } from "../contexts/AuthContext";
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -25,9 +26,7 @@ export function LoginPage() {
       <div className="w-full max-w-sm mx-auto px-4">
         <div className="bg-bg-surface rounded-xl border border-border shadow-sm p-8 text-center">
           <div className="mb-6">
-            <div className="h-14 w-14 rounded-xl bg-accent-500 text-accent-fg flex items-center justify-center font-bold text-xl mx-auto">
-              A
-            </div>
+            <Ampy3Icon size={56} className="mx-auto" />
           </div>
 
           <h1 className="text-xl font-semibold text-fg mb-8">Ampy3</h1>
