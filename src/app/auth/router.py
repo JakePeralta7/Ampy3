@@ -121,7 +121,8 @@ async def _fetch_machine_identifier(server_url: str) -> str | None:
         container = data.get("MediaContainer") or {}
         machine_id = container.get("machineIdentifier", "")
         return machine_id or None
-    except Exception:
+    except Exception as exc:
+        logger.debug(f"Failed to fetch identity from {server_url}: {exc}")
         return None
 
 
@@ -457,8 +458,24 @@ async def plex_setup(
     # (reverse proxy, custom DNS, localhost), but /identity must identify this
     # exact server. A discovered credential is never combined with a server
     # that does not answer as the selected one.
-    machine_id_matches = await _matches_resource_identity(server_url, client_identifier)
-    if not machine_id_matches:
+    #
+    # Try the user's selected URL first, then fall back to other advertised
+    # URLs if it fails (e.g., private IP unreachable from backend).
+    urls_to_try = [server_url]
+    for conn in resource_connections:
+        conn_uri = conn.get("uri", "").rstrip("/")
+        if conn_uri and conn_uri != server_url:
+            urls_to_try.append(conn_uri)
+
+    working_url = None
+    for url in urls_to_try:
+        if await _matches_resource_identity(url, client_identifier):
+            working_url = url
+            logger.info(f"Plex server verified at {url} (expected {client_identifier})")
+            break
+        logger.debug(f"Plex verification failed for {url}")
+
+    if not working_url:
         advertised = ", ".join(c.get("uri", "") for c in resource_connections if c.get("uri"))
         hint = f" Advertised: {advertised}" if advertised else ""
         raise HTTPException(
@@ -468,6 +485,9 @@ async def plex_setup(
                 f"(expected machineIdentifier {client_identifier}).{hint}"
             ),
         )
+    
+    # Use the verified working URL instead of the user's selection
+    server_url = working_url
 
     async with AsyncSessionLocal() as session:
         from sqlalchemy import select
