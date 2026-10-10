@@ -106,12 +106,15 @@ async def _matches_resource_identity(server_url: str, client_identifier: str) ->
     """
     if not client_identifier:
         return False
-    machine_id = await _fetch_machine_identifier(server_url)
+    machine_id, _ = await _fetch_machine_identifier(server_url)
     return machine_id is not None and machine_id == client_identifier
 
 
-async def _fetch_machine_identifier(server_url: str) -> str | None:
-    """Return the Plex ``machineIdentifier`` advertised at *server_url*, if any."""
+async def _fetch_machine_identifier(server_url: str) -> tuple[str | None, str | None]:
+    """Return the Plex ``machineIdentifier`` advertised at *server_url*, and error reason if any.
+
+    Returns: (machine_id, error_reason) where machine_id is None if unreachable/failed.
+    """
     try:
         url = f"{server_url.rstrip('/')}/identity"
         async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
@@ -120,10 +123,9 @@ async def _fetch_machine_identifier(server_url: str) -> str | None:
             data = resp.json()
         container = data.get("MediaContainer") or {}
         machine_id = container.get("machineIdentifier", "")
-        return machine_id or None
+        return (machine_id or None, None)
     except Exception as exc:
-        logger.debug(f"Failed to fetch identity from {server_url}: {exc}")
-        return None
+        return (None, str(exc))
 
 
 # ── Schemas ───────────────────────────────────────────────────────────
@@ -467,24 +469,33 @@ async def plex_setup(
         if conn_uri and conn_uri != server_url:
             urls_to_try.append(conn_uri)
 
+    logger.info(
+        f"Plex setup: attempting to verify server {client_identifier} "
+        f"against {len(urls_to_try)} URL(s): {urls_to_try}"
+    )
+
     working_url = None
-    for url in urls_to_try:
-        if await _matches_resource_identity(url, client_identifier):
+    for i, url in enumerate(urls_to_try, 1):
+        machine_id, error = await _fetch_machine_identifier(url)
+        if machine_id and machine_id == client_identifier:
             working_url = url
-            logger.info(f"Plex server verified at {url} (expected {client_identifier})")
+            logger.info(
+                f"Plex server verified at URL {i}/{len(urls_to_try)}: {url} "
+                f"(machineIdentifier: {machine_id})"
+            )
             break
-        logger.debug(f"Plex verification failed for {url}")
+        error_msg = error if error else f"machineIdentifier mismatch (got: {machine_id})"
+        logger.warning(f"Plex setup URL {i}/{len(urls_to_try)} failed for {url}: {error_msg}")
 
     if not working_url:
         advertised = ", ".join(c.get("uri", "") for c in resource_connections if c.get("uri"))
         hint = f" Advertised: {advertised}" if advertised else ""
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"server_url does not resolve to the selected Plex server "
-                f"(expected machineIdentifier {client_identifier}).{hint}"
-            ),
+        error_detail = (
+            f"server_url does not resolve to the selected Plex server "
+            f"(expected machineIdentifier {client_identifier}).{hint}"
         )
+        logger.error(f"Plex setup failed: {error_detail}")
+        raise HTTPException(status_code=400, detail=error_detail)
 
     # Use the verified working URL instead of the user's selection
     server_url = working_url
