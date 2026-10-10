@@ -3,7 +3,7 @@
 from collections.abc import AsyncGenerator, Generator
 
 from alembic.config import Config
-from sqlalchemy import create_engine, inspect
+from sqlalchemy import create_engine, inspect, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
@@ -102,6 +102,28 @@ async def init_db() -> None:
     from src.app.match_rules.loader import seed_default_rules
 
     await seed_default_rules()
+
+    # Ensure "local" user session exists when REQUIRE_AUTH=false
+    if not settings.require_auth:
+        from datetime import datetime, timezone
+
+        from src.app.models import UserSession
+
+        async with AsyncSessionLocal() as session:
+            existing = await session.execute(
+                select(UserSession).where(UserSession.plex_user_id == "local")
+            )
+            if not existing.scalar():
+                session.add(
+                    UserSession(
+                        id="local",
+                        plex_user_id="local",
+                        username="local",
+                        plex_token="",
+                        expires_at=datetime(2099, 12, 31, 23, 59, 59, tzinfo=timezone.utc),
+                    )
+                )
+                await session.commit()
 
 
 async def close_db() -> None:

@@ -272,7 +272,7 @@ async def trigger_sync(
         raise
     except Exception as e:
         logger.error(f"Error triggering sync: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to start sync job: {str(e)}") from e
+        raise HTTPException(status_code=500, detail="Failed to start sync job") from e
 
 
 @router.get("/status/{task_id}")
@@ -292,7 +292,7 @@ async def get_sync_status(
 @router.get("/{sync_id}/tracks", response_model=SyncTracksResponse)
 async def get_sync_tracks(
     sync_id: int,
-    _user: dict[str, Any] = Depends(get_current_user),  # noqa: B008
+    user: dict[str, Any] = Depends(get_current_user),  # noqa: B008
 ):
     """Get all tracks for a sync record by sync ID."""
     try:
@@ -310,6 +310,8 @@ async def get_sync_tracks(
 
             if not sync_record:
                 raise HTTPException(status_code=404, detail=f"Sync {sync_id} not found")
+            if sync_record.user_id != user["plex_user_id"]:
+                raise HTTPException(status_code=404, detail=f"Sync {sync_id} not found")
 
             return _build_track_response(
                 sync_record,
@@ -319,14 +321,14 @@ async def get_sync_tracks(
         raise
     except Exception as e:
         logger.error(f"Error getting sync tracks: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get sync tracks: {str(e)}") from e
+        raise HTTPException(status_code=500, detail="Failed to get sync tracks") from e
 
 
 @router.get("/{sync_id}/open-url", response_model=TargetOpenUrlResponse)
 async def get_sync_open_url(
     sync_id: int,
     target_id: str = Query(default=DEFAULT_TARGET),
-    _user: dict[str, Any] = Depends(get_current_user),  # noqa: B008
+    user: dict[str, Any] = Depends(get_current_user),  # noqa: B008
 ):
     """Return the target web-app URL to open the synced playlist.
 
@@ -346,6 +348,8 @@ async def get_sync_open_url(
             sync_record = result.scalars().first()
 
             if not sync_record:
+                raise HTTPException(status_code=404, detail=f"Sync {sync_id} not found")
+            if sync_record.user_id != user["plex_user_id"]:
                 raise HTTPException(status_code=404, detail=f"Sync {sync_id} not found")
 
             playlist_id = next(
@@ -414,13 +418,16 @@ async def get_unmatched_tracks(
 @router.get("/{sync_id}/history", response_model=list[SyncRunOut])
 async def get_sync_history(
     sync_id: int,
-    _user: dict[str, Any] = Depends(get_current_user),  # noqa: B008
+    user: dict[str, Any] = Depends(get_current_user),  # noqa: B008
 ):
     """Get sync run history for a scheduled sync."""
     async with AsyncSessionLocal() as session:
         sync_stmt = select(ScheduledPlaylistSync).where(ScheduledPlaylistSync.id == sync_id)
         sync_result = await session.execute(sync_stmt)
-        if not sync_result.scalar_one_or_none():
+        sync_record = sync_result.scalar_one_or_none()
+        if not sync_record:
+            raise HTTPException(status_code=404, detail=f"Sync {sync_id} not found")
+        if sync_record.user_id != user["plex_user_id"]:
             raise HTTPException(status_code=404, detail=f"Sync {sync_id} not found")
 
         stmt = (
@@ -453,9 +460,9 @@ async def get_sync_pipeline(
     run_id: int | None = Query(
         default=None, description="Sync run ID whose execution pipeline to show"
     ),
-    _user: dict[str, Any] = Depends(get_current_user),  # noqa: B008
+    user: dict[str, Any] = Depends(get_current_user),  # noqa: B008
 ):
-    """Return the pipeline (fetch \u2192 per-target match/sync) for a sync execution.
+    """Return the pipeline (fetch → per-target match/sync) for a sync execution.
 
     Without ``run_id``, the latest (or in-progress) execution is returned: the
     runs whose ``execution_id`` matches the recorded FetchPhase's. With
@@ -467,6 +474,8 @@ async def get_sync_pipeline(
         sync_result = await session.execute(sync_stmt)
         sync_record = sync_result.scalar_one_or_none()
         if not sync_record:
+            raise HTTPException(status_code=404, detail=f"Sync {sync_id} not found")
+        if sync_record.user_id != user["plex_user_id"]:
             raise HTTPException(status_code=404, detail=f"Sync {sync_id} not found")
 
         runs_stmt = (
@@ -555,18 +564,24 @@ async def get_sync_diff(
     sync_id: int,
     from_run: int = Query(..., description="Previous run ID to diff from"),
     to_run: int = Query(..., description="Current run ID to diff to"),
-    _user: dict[str, Any] = Depends(get_current_user),  # noqa: B008
+    user: dict[str, Any] = Depends(get_current_user),  # noqa: B008
 ):
     """Compute the diff between two sync runs."""
     async with AsyncSessionLocal() as session:
         sync_stmt = select(ScheduledPlaylistSync).where(ScheduledPlaylistSync.id == sync_id)
         sync_result = await session.execute(sync_stmt)
-        if not sync_result.scalar_one_or_none():
+        sync_record = sync_result.scalar_one_or_none()
+        if not sync_record:
+            raise HTTPException(status_code=404, detail=f"Sync {sync_id} not found")
+        if sync_record.user_id != user["plex_user_id"]:
             raise HTTPException(status_code=404, detail=f"Sync {sync_id} not found")
 
         stmt = (
             select(SyncRun)
-            .where(SyncRun.id.in_([from_run, to_run]))
+            .where(
+                SyncRun.sync_id == sync_id,
+                SyncRun.id.in_([from_run, to_run]),
+            )
             .options(selectinload(SyncRun.tracks).selectinload(SyncRunTrack.targets))
         )
         result = await session.execute(stmt)
@@ -680,14 +695,17 @@ async def match_track(
     body: MatchTrackInput,
     target_id: str = Query(default=DEFAULT_TARGET, description="Target platform ID"),
     item_id: str | None = Query(default=None, description="Source track item ID"),
-    _user: dict[str, Any] = Depends(get_current_user),  # noqa: B008
+    user: dict[str, Any] = Depends(get_current_user),  # noqa: B008
 ):
     """Dispatch a match task for a track via sync ID, running in a Celery worker."""
     try:
         async with AsyncSessionLocal() as session:
             stmt = select(ScheduledPlaylistSync).where(ScheduledPlaylistSync.id == sync_id)
             result = await session.execute(stmt)
-            if not result.scalars().first():
+            sync_record = result.scalar_one_or_none()
+            if not sync_record:
+                raise HTTPException(status_code=404, detail=f"Sync {sync_id} not found")
+            if sync_record.user_id != user["plex_user_id"]:
                 raise HTTPException(status_code=404, detail=f"Sync {sync_id} not found")
 
         task = match_track_task.delay(
@@ -705,4 +723,4 @@ async def match_track(
         raise
     except Exception as e:
         logger.error(f"Error dispatching match for sync {sync_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to dispatch match: {str(e)}") from e
+        raise HTTPException(status_code=500, detail="Failed to dispatch match") from e

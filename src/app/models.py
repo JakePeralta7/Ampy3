@@ -86,6 +86,9 @@ class ScheduledPlaylistSync(TimestampMixin, Base):
     __tablename__ = "scheduled_playlist_syncs"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("user_sessions.plex_user_id"), nullable=False, index=True
+    )
     source: Mapped[str] = mapped_column(
         String(50), default=PlaylistSourceEnum.YOUTUBE_MUSIC, nullable=False
     )
@@ -112,6 +115,7 @@ class ScheduledPlaylistSync(TimestampMixin, Base):
     runs: Mapped[list[SyncRun]] = relationship(
         back_populates="sync", cascade="all, delete-orphan", order_by="SyncRun.created_at.desc()"
     )
+    user: Mapped[UserSession] = relationship(back_populates="scheduled_syncs")
 
     def __repr__(self) -> str:
         return f"<ScheduledPlaylistSync(id={self.id}, playlist={self.target_playlist_name})>"
@@ -196,6 +200,7 @@ class AuditLog(Base):
     event_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     resource_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     resource_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    actor_user_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     summary: Mapped[str] = mapped_column(Text, nullable=False)
     details: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -212,13 +217,17 @@ class UserSession(CreatedAtMixin, Base):
     __tablename__ = "user_sessions"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    plex_user_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    plex_user_id: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
     username: Mapped[str] = mapped_column(String(255), nullable=False)
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     thumb: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     plex_token: Mapped[str] = mapped_column(Text, nullable=False)
     expires_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, index=True
+    )
+
+    scheduled_syncs: Mapped[list[ScheduledPlaylistSync]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
     )
 
 

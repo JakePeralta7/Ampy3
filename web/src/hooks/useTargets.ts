@@ -1,9 +1,27 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { type PlexResource, settingsAPI } from "../api/settings";
+import { POLLING_CONFIG } from "../lib/pollingConfig";
 import { getErrorMessage } from "../lib/utils";
 
-export function useTargets() {
+export interface UseTargetsReturn {
+  values: Record<string, string>;
+  original: Record<string, string>;
+  loading: boolean;
+  saving: boolean;
+  plexConfigured: boolean;
+  jellyfinConfigured: boolean;
+  plexTesting: boolean;
+  plexTestResult: "pass" | "fail" | null;
+  jellyfinTesting: boolean;
+  jellyfinTestResult: "pass" | "fail" | null;
+  setField: (key: string, val: string) => void;
+  testConnection: (targetId: string) => Promise<void>;
+  save: (targetId: string) => Promise<void>;
+  lastUpdated: Date | null;
+}
+
+export function useTargets(): UseTargetsReturn {
   const [values, setValues] = useState<Record<string, string>>({});
   const [original, setOriginal] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
@@ -14,31 +32,64 @@ export function useTargets() {
   const [plexTestResult, setPlexTestResult] = useState<"pass" | "fail" | null>(null);
   const [jellyfinTesting, setJellyfinTesting] = useState(false);
   const [jellyfinTestResult, setJellyfinTestResult] = useState<"pass" | "fail" | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isMountedRef = useRef(true);
 
   const fetchSettings = useCallback(async () => {
-    setLoading(true);
+    if (!isMountedRef.current) return;
     try {
       const data = await settingsAPI.getSettings();
-      const flat: Record<string, string> = {
-        plex_host: data.plex_host,
-        plex_token: "",
-        jellyfin_server_url: data.jellyfin_server_url,
-        jellyfin_api_key: "",
-        jellyfin_user_id: data.jellyfin_user_id,
-      };
-      setValues(flat);
-      setOriginal(flat);
-      setPlexConfigured(data.plex_token_set);
-      setJellyfinConfigured(data.jellyfin_api_key_set);
+      if (isMountedRef.current) {
+        const flat: Record<string, string> = {
+          plex_host: data.plex_host,
+          plex_token: "",
+          jellyfin_server_url: data.jellyfin_server_url,
+          jellyfin_api_key: "",
+          jellyfin_user_id: data.jellyfin_user_id,
+        };
+        setOriginal(flat);
+        setPlexConfigured(data.plex_token_set);
+        setJellyfinConfigured(data.jellyfin_api_key_set);
+        setLastUpdated(new Date());
+        // Only update values if no unsaved changes
+        if (
+          !values.plex_token &&
+          !values.jellyfin_api_key &&
+          values.plex_host === original.plex_host &&
+          values.jellyfin_server_url === original.jellyfin_server_url &&
+          values.jellyfin_user_id === original.jellyfin_user_id
+        ) {
+          setValues(flat);
+        }
+      }
     } catch (err) {
       toast.error(getErrorMessage(err, "Failed to load settings"));
     } finally {
-      setLoading(false);
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
     }
-  }, []);
+  }, [values, original]);
 
   useEffect(() => {
+    isMountedRef.current = true;
+
+    // Initial fetch
     fetchSettings();
+
+    // Set up polling
+    pollIntervalRef.current = setInterval(() => {
+      fetchSettings();
+    }, POLLING_CONFIG.DEFAULT_INTERVAL);
+
+    return () => {
+      isMountedRef.current = false;
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+      }
+    };
   }, [fetchSettings]);
 
   const setField = useCallback((key: string, val: string) => {
@@ -120,6 +171,7 @@ export function useTargets() {
         });
         if (targetId === "Plex") setPlexTestResult(null);
         else setJellyfinTestResult(null);
+        setLastUpdated(new Date());
         toast.success(`${targetId} settings saved`);
       } catch (err) {
         toast.error(getErrorMessage(err, "Failed to save settings"));
@@ -144,6 +196,7 @@ export function useTargets() {
     setField,
     testConnection,
     save,
+    lastUpdated,
   };
 }
 
@@ -167,36 +220,58 @@ export function usePlexSetup() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [configured, setConfigured] = useState<boolean | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isMountedRef = useRef(true);
+
+  const fetchResources = useCallback(async () => {
+    if (!isMountedRef.current) return;
+    try {
+      const [targets, data] = await Promise.all([
+        settingsAPI.getConfiguredTargets(),
+        settingsAPI.getPlexResources(),
+      ]);
+      if (!isMountedRef.current) return;
+      if (targets.includes("Plex")) {
+        setConfigured(true);
+        return;
+      }
+      setConfigured(false);
+      setResources(data.servers);
+      if (data.servers.length === 0) setError("No Plex Media Servers found on your account.");
+      else setError(null);
+      setLastUpdated(new Date());
+    } catch (err) {
+      if (!isMountedRef.current) return;
+      setError(getErrorMessage(err, "Failed to discover Plex servers"));
+    } finally {
+      if (isMountedRef.current) setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    Promise.all([settingsAPI.getConfiguredTargets(), settingsAPI.getPlexResources()])
-      .then(([targets, data]) => {
-        if (cancelled) return;
-        if (targets.includes("Plex")) {
-          setConfigured(true);
-          return;
-        }
-        setConfigured(false);
-        setResources(data.servers);
-        if (data.servers.length === 0) setError("No Plex Media Servers found on your account.");
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setError(getErrorMessage(err, "Failed to discover Plex servers"));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+    isMountedRef.current = true;
+
+    fetchResources();
+
+    // Set up polling
+    pollIntervalRef.current = setInterval(() => {
+      fetchResources();
+    }, POLLING_CONFIG.DEFAULT_INTERVAL);
+
     return () => {
-      cancelled = true;
+      isMountedRef.current = false;
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+      }
     };
-  }, []);
+  }, [fetchResources]);
 
   const setupPlex = useCallback(async (serverUrl: string, token: string) => {
     await settingsAPI.setupPlexTarget(serverUrl, token);
     toast.success("Plex server configured");
   }, []);
 
-  return { resources, loading, error, configured, setupPlex };
+  return { resources, loading, error, configured, setupPlex, lastUpdated };
 }

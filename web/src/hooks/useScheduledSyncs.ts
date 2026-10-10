@@ -24,6 +24,7 @@ interface UseScheduledSyncsReturn {
   bulkSyncNow: (ids: number[]) => Promise<void>;
   bulkToggleActive: (ids: number[], isActive: boolean) => Promise<void>;
   bulkDelete: (ids: number[]) => Promise<void>;
+  lastUpdated: Date | null;
 }
 
 const POLL_INTERVAL_MS = 30000;
@@ -33,6 +34,7 @@ export function useScheduledSyncs(): UseScheduledSyncsReturn {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const fastPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const prevSyncsRef = useRef<ScheduledSync[]>([]);
 
@@ -96,6 +98,7 @@ export function useScheduledSyncs(): UseScheduledSyncsReturn {
           setSyncs(data);
           prevSyncsRef.current = data;
         }
+        setLastUpdated(new Date());
       } catch (err) {
         setError(getErrorMessage(err, "Failed to load syncs"));
       } finally {
@@ -252,5 +255,6 @@ export function useScheduledSyncs(): UseScheduledSyncsReturn {
     bulkSyncNow,
     bulkToggleActive,
     bulkDelete,
+    lastUpdated,
   };
 }

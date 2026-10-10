@@ -1,10 +1,26 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { settingsAPI } from "../api/settings";
 import { SOURCE_YOUTUBE_MUSIC } from "../lib/constants";
+import { POLLING_CONFIG } from "../lib/pollingConfig";
 import { getErrorMessage } from "../lib/utils";
 
-export function useSources() {
+export interface UseSourcesReturn {
+  values: Record<string, string>;
+  original: Record<string, string>;
+  authSet: boolean;
+  loading: boolean;
+  saving: boolean;
+  testing: boolean;
+  testResult: "pass" | "fail" | null;
+  hasChanges: boolean;
+  setField: (key: string, val: string) => void;
+  testAuth: () => Promise<void>;
+  save: () => Promise<void>;
+  lastUpdated: Date | null;
+}
+
+export function useSources(): UseSourcesReturn {
   const [values, setValues] = useState<Record<string, string>>({});
   const [original, setOriginal] = useState<Record<string, string>>({});
   const [authSet, setAuthSet] = useState(false);
@@ -12,27 +28,54 @@ export function useSources() {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<"pass" | "fail" | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isMountedRef = useRef(true);
 
   const fetchSettings = useCallback(async () => {
-    setLoading(true);
+    if (!isMountedRef.current) return;
     try {
       const data = await settingsAPI.getSettings();
-      const flat: Record<string, string> = {
-        ytmusic_auth: "",
-        yt_dlp_timeout: String(data.yt_dlp_timeout),
-      };
-      setValues(flat);
-      setOriginal(flat);
-      setAuthSet(data.ytmusic_auth_set);
+      if (isMountedRef.current) {
+        const flat: Record<string, string> = {
+          ytmusic_auth: "",
+          yt_dlp_timeout: String(data.yt_dlp_timeout),
+        };
+        setOriginal(flat);
+        setAuthSet(data.ytmusic_auth_set);
+        setLastUpdated(new Date());
+        // Only update values if no unsaved changes
+        if (!values.ytmusic_auth && (values.yt_dlp_timeout ?? "") === (original.yt_dlp_timeout ?? "")) {
+          setValues(flat);
+        }
+      }
     } catch (err) {
       toast.error(getErrorMessage(err, "Failed to load source settings"));
     } finally {
-      setLoading(false);
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
     }
-  }, []);
+  }, [values, original]);
 
   useEffect(() => {
+    isMountedRef.current = true;
+
+    // Initial fetch
     fetchSettings();
+
+    // Set up polling
+    pollIntervalRef.current = setInterval(() => {
+      fetchSettings();
+    }, POLLING_CONFIG.DEFAULT_INTERVAL);
+
+    return () => {
+      isMountedRef.current = false;
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+      }
+    };
   }, [fetchSettings]);
 
   const hasChanges =
@@ -76,6 +119,7 @@ export function useSources() {
       setOriginal(flat);
       setAuthSet(result.ytmusic_auth_set);
       setTestResult(null);
+      setLastUpdated(new Date());
       toast.success("YouTube Music settings saved");
     } catch (err) {
       toast.error(getErrorMessage(err, "Failed to save source settings"));
@@ -96,5 +140,6 @@ export function useSources() {
     setField,
     testAuth,
     save,
+    lastUpdated,
   };
 }

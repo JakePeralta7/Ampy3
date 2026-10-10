@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from celery import Celery
+from celery.signals import task_postrun
 from sqlalchemy import select
 
 from src.app.constants import DEFAULT_SOURCE, DEFAULT_TARGET
@@ -104,10 +105,22 @@ def sync_playlists_task(
     target_ids: list[str] | None = None,
     schedule_id: int | None = None,
     target_playlist_name: str | None = None,
+    dispatch_token: str | None = None,
 ):
-    """Fetch source playlist once, then dispatch per-target sync tasks."""
+    """Fetch source playlist once, then dispatch per-target sync tasks.
+
+    ``dispatch_token`` is the owner token of the per-schedule dispatch lock
+    acquired by the scheduler. The lock is handed to this run's per-target
+    children (see ``_release_dispatch_lock_on_postrun``); this task only
+    releases it when it never spawned any children.
+    """
     if not target_ids:
         target_ids = [DEFAULT_TARGET]
+
+    # Whether this run handed the dispatch lock to per-target children. See
+    # ``_release_dispatch_lock_on_postrun`` — the parent only releases the
+    # lock when it never spawned children.
+    self.spawned_targets = False
 
     if schedule_id is not None:
         register_sync_task(schedule_id, self.request.id)
@@ -181,6 +194,7 @@ def sync_playlists_task(
                     unregister_sync_task(schedule_id, self.request.id)
                 return {"status": "SUCCESS", "stats": {"matched": 0, "failed": 0}}
 
+            self.spawned_targets = True
             for tid in target_ids:
                 child = sync_target_task.delay(
                     sync_id=sync_id,
@@ -191,6 +205,8 @@ def sync_playlists_task(
                     playlist_url=playlist_url,
                     resource_id=resource_id,
                     execution_id=execution_id,
+                    schedule_id=schedule_id,
+                    dispatch_token=dispatch_token,
                 )
                 register_sync_task(sync_id, child.id)
 
@@ -274,6 +290,36 @@ def sync_playlists_task(
             raise self.retry(exc=e, countdown=_retry_countdown(self.request.retries)) from e
 
 
+@task_postrun.connect
+def _release_dispatch_lock_on_postrun(sender=None, kwargs=None, state=None, **_):
+    """Release the per-schedule dispatch lock once the run has finished.
+
+    The parent fetch task hands the lock to its per-target children, so the
+    lock is held for the whole run — fetch, matching and every target update:
+    the last child to finish deletes it. The parent only releases when it
+    never spawned children (empty track list, dropped sync, validation error,
+    or permanent failure). A ``RETRY`` state keeps the lock held while a
+    retry attempt is still pending. Tasks queued without a token no-op, and a
+    worker that dies mid-run falls back to the lock TTL.
+    """
+    from src.app.services.scheduler import (
+        _child_finished_dispatch_lock,
+        _release_dispatch_lock,
+    )
+
+    task_kwargs = kwargs or {}
+    schedule_id = task_kwargs.get("schedule_id")
+    token = task_kwargs.get("dispatch_token")
+    if schedule_id is None or not token:
+        return
+    if state == "RETRY":
+        return
+    if "target_id" in task_kwargs:
+        _child_finished_dispatch_lock(int(schedule_id), str(token))
+    elif not getattr(sender, "spawned_targets", False):
+        _release_dispatch_lock(int(schedule_id), str(token))
+
+
 @celery_app.task(bind=True, max_retries=3)
 def sync_target_task(
     self,
@@ -285,6 +331,8 @@ def sync_target_task(
     playlist_url: str = "",
     resource_id: str | None = None,
     execution_id: str | None = None,
+    schedule_id: int | None = None,
+    dispatch_token: str | None = None,
 ):
     """Match all tracks, then finalize for one target."""
     from src.app.worker.session import run_async

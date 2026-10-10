@@ -22,6 +22,11 @@ from src.app.core.targets.base import BaseTarget
 from src.app.core.targets.factory import TargetFactory, target_factory
 from src.app.core.targets.registry import TargetRegistry
 from src.app.core.targets.search import SearchStrategy, TitleArtistAlbumSearch
+from src.app.core.urls import (
+    InvalidServerUrlError,
+    source_id_from_url,
+    validate_server_url,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -56,8 +61,12 @@ class PlexTarget(BaseTarget):
     search_strategy: ClassVar[SearchStrategy] = TitleArtistAlbumSearch()
 
     def __init__(self, token: str, base_url: str) -> None:
+        try:
+            validate_server_url(base_url, field="plex_host")
+        except InvalidServerUrlError as exc:
+            raise ValueError(f"Invalid plex_host: {exc}") from exc
         self._token = token
-        self._base_url = base_url
+        self._base_url = base_url.rstrip("/")
         self._client: httpx.AsyncClient | None = None
         self._machine_identifier: str | None = None
 
@@ -293,7 +302,15 @@ class PlexTarget(BaseTarget):
             to_add_ids = [pid for pid in desired_ids if pid not in current_set]
 
             if to_remove:
-                await self.remove_items_from_playlist(playlist_id, to_remove)
+                removed = await self.remove_items_from_playlist(playlist_id, to_remove)
+                if removed < len(to_remove):
+                    logger.error(
+                        "Playlist %s: only removed %d/%d stale items",
+                        playlist_id,
+                        removed,
+                        len(to_remove),
+                    )
+                    return False
 
             to_remove_set = set(to_remove)
             remaining_ids = [pid for pid in current_ids if pid not in to_remove_set]
@@ -302,13 +319,37 @@ class PlexTarget(BaseTarget):
 
             if needs_reorder:
                 if remaining_ids:
-                    await self.remove_items_from_playlist(playlist_id, remaining_ids)
+                    removed = await self.remove_items_from_playlist(playlist_id, remaining_ids)
+                    if removed < len(remaining_ids):
+                        logger.error(
+                            "Playlist %s: only removed %d/%d items during reorder",
+                            playlist_id,
+                            removed,
+                            len(remaining_ids),
+                        )
+                        return False
                 if desired_ids:
-                    await self.add_items_to_playlist(playlist_id, desired_ids)
+                    added = await self.add_items_to_playlist(playlist_id, desired_ids)
+                    if added < len(desired_ids):
+                        logger.error(
+                            "Playlist %s: only added %d/%d items during reorder",
+                            playlist_id,
+                            added,
+                            len(desired_ids),
+                        )
+                        return False
                 logger.info(f"Reordered playlist {playlist_id}: {len(desired_ids)} items")
             else:
                 if to_add_ids:
-                    await self.add_items_to_playlist(playlist_id, to_add_ids)
+                    added = await self.add_items_to_playlist(playlist_id, to_add_ids)
+                    if added < len(to_add_ids):
+                        logger.error(
+                            "Playlist %s: only added %d/%d new items",
+                            playlist_id,
+                            added,
+                            len(to_add_ids),
+                        )
+                        return False
                 logger.info(
                     "Updated playlist %s: removed %d, added %d",
                     playlist_id,
@@ -432,7 +473,16 @@ class PlexTarget(BaseTarget):
         return None
 
     async def get_playlist_by_source_id(self, source_id: str) -> dict[str, Any] | None:
-        """Retrieves a playlist by source_id stored in custom metadata."""
+        """Retrieves a playlist by the exact source id stored in its summary.
+
+        Summaries created by Ampy3 hold a JSON metadata blob
+        (``{"source_url": ..., "sync_id": ...}`` plus ``source_id`` going
+        forward). Exact comparison (never ``in`` substring) prevents one id
+        matching a playlist whose metadata merely happens to contain it.
+        """
+        if not source_id:
+            return None
+        source_id = str(source_id).strip()
         try:
             response = await self.client.get("/playlists")
             response.raise_for_status()
@@ -440,7 +490,15 @@ class PlexTarget(BaseTarget):
             root = ET.fromstring(response.text)
             for playlist in root.findall(".//Playlist"):
                 summary = playlist.get("summary", "")
-                if source_id in summary:
+                meta = self._meta_from_summary(summary)
+                if meta.get("source_id") == source_id:
+                    return {
+                        "rating_key": playlist.get("ratingKey"),
+                        "title": playlist.get("title"),
+                        "summary": summary,
+                    }
+                url = meta.get("source_url")
+                if isinstance(url, str) and self._source_id_from_url(url) == source_id:
                     return {
                         "rating_key": playlist.get("ratingKey"),
                         "title": playlist.get("title"),
@@ -455,6 +513,20 @@ class PlexTarget(BaseTarget):
         except ET.ParseError as e:
             logger.error(f"XML parse error in get_playlist_by_source_id: {e}")
             return None
+
+    @staticmethod
+    def _meta_from_summary(summary: str) -> dict[str, Any]:
+        if not summary:
+            return {}
+        try:
+            data = json.loads(summary)
+        except ValueError, TypeError:
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    @staticmethod
+    def _source_id_from_url(url: str) -> str:
+        return source_id_from_url(url)
 
     # ── Item management ──────────────────────────────────────────
 

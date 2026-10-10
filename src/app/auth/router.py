@@ -16,6 +16,7 @@ from pydantic import BaseModel
 
 from src.app.auth.dependencies import SESSION_COOKIE, get_current_user
 from src.app.auth.tokens import create_session, destroy_session
+from src.app.core.urls import InvalidServerUrlError, validate_server_url
 from src.app.db import AsyncSessionLocal
 from src.app.models import Config
 from src.app.services.audit import log_event
@@ -92,6 +93,36 @@ async def get_plex_server_url() -> str | None:
 def _cookie_secure() -> bool:
     """Cookies must always use the Secure flag when auth is required."""
     return settings.require_auth or settings.app_env == "production"
+
+
+async def _matches_resource_identity(server_url: str, client_identifier: str) -> bool:
+    """Whether *server_url* is the Plex server identified by *client_identifier*.
+
+    Probes ``GET {server_url}/identity`` and compares the returned
+    ``machineIdentifier`` to the resource's ``clientIdentifier``. This binds a
+    discovered token to the *actual* reachable server, so reverse-proxy /
+    custom-DNS / localhost setups are allowed while an arbitrary destination
+    fails.
+    """
+    if not client_identifier:
+        return False
+    machine_id = await _fetch_machine_identifier(server_url)
+    return machine_id is not None and machine_id == client_identifier
+
+
+async def _fetch_machine_identifier(server_url: str) -> str | None:
+    """Return the Plex ``machineIdentifier`` advertised at *server_url*, if any."""
+    try:
+        url = f"{server_url.rstrip('/')}/identity"
+        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+            resp = await client.get(url)
+            resp.raise_for_status()
+            data = resp.json()
+        container = data.get("MediaContainer") or {}
+        machine_id = container.get("machineIdentifier", "")
+        return machine_id or None
+    except Exception:
+        return None
 
 
 # ── Schemas ───────────────────────────────────────────────────────────
@@ -384,6 +415,12 @@ async def plex_setup(
     if not server_url or not client_identifier:
         raise HTTPException(status_code=400, detail="server_url and client_identifier are required")
 
+    # Reject malformed URLs before any network interaction.
+    try:
+        validate_server_url(server_url, field="server_url")
+    except InvalidServerUrlError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     # Re-fetch Plex resources using the user's token to get the access_token
     # for the selected server (never accept token from client).
     plex_token = user.get("plex_token", "")
@@ -406,13 +443,31 @@ async def plex_setup(
 
     # Find the selected server by client_identifier
     access_token = None
+    resource_connections: list[dict[str, Any]] = []
     for r in raw or []:
         if r.get("clientIdentifier") == client_identifier:
             access_token = r.get("accessToken", "")
+            resource_connections = r.get("connections", [])
             break
 
     if not access_token:
         raise HTTPException(status_code=404, detail="Selected Plex server not found")
+
+    # Bind the submitted URL to the actual Plex server: any hostname works
+    # (reverse proxy, custom DNS, localhost), but /identity must identify this
+    # exact server. A discovered credential is never combined with a server
+    # that does not answer as the selected one.
+    machine_id_matches = await _matches_resource_identity(server_url, client_identifier)
+    if not machine_id_matches:
+        advertised = ", ".join(c.get("uri", "") for c in resource_connections if c.get("uri"))
+        hint = f" Advertised: {advertised}" if advertised else ""
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"server_url does not resolve to the selected Plex server "
+                f"(expected machineIdentifier {client_identifier}).{hint}"
+            ),
+        )
 
     async with AsyncSessionLocal() as session:
         from sqlalchemy import select

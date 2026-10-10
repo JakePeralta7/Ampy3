@@ -18,6 +18,7 @@ export function useSyncHistory(syncId: number) {
   const [pipelineLoading, setPipelineLoading] = useState(false);
   const [pipelineError, setPipelineError] = useState<string | null>(null);
   const [livePipeline, setLivePipeline] = useState<PipelineStatusResponse | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -26,7 +27,10 @@ export function useSyncHistory(syncId: number) {
     syncsAPI
       .getSyncHistory(syncId)
       .then((data) => {
-        if (!cancelled) setRuns(data);
+        if (!cancelled) {
+          setRuns(data);
+          setLastUpdated(new Date());
+        }
       })
       .catch(() => {
         if (!cancelled) setError("Failed to load sync history");
@@ -88,6 +92,7 @@ export function useSyncHistory(syncId: number) {
         const current = await syncsAPI.getSyncPipeline(syncId);
         if (cancelled) return;
         setLivePipeline(current);
+        setLastUpdated(new Date());
         try {
           const history = await syncsAPI.getSyncHistory(syncId);
           if (cancelled) return;
@@ -172,5 +177,6 @@ export function useSyncHistory(syncId: number) {
     livePipeline,
     pipelineActive,
     selectRun,
+    lastUpdated,
   };
 }

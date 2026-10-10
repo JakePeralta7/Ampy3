@@ -48,7 +48,7 @@ async def list_rules(
         raise
     except Exception as e:
         logger.error(f"Error listing rules: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to list rules: {str(e)}") from e
+        raise HTTPException(status_code=500, detail="Failed to list rules") from e
 
 
 @router.get("/{rule_id}", response_model=MatchRuleOut)
@@ -71,7 +71,7 @@ async def get_rule(
         raise
     except Exception as e:
         logger.error(f"Error getting rule {rule_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to get rule: {str(e)}") from e
+        raise HTTPException(status_code=500, detail="Failed to get rule") from e
 
 
 @router.post("", response_model=MatchRuleOut, status_code=201)
@@ -125,7 +125,7 @@ async def create_rule(
         raise
     except Exception as e:
         logger.error(f"Error creating rule: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to create rule: {str(e)}") from e
+        raise HTTPException(status_code=500, detail="Failed to create rule") from e
 
 
 @router.post("/{rule_id}/clone", response_model=MatchRuleOut, status_code=201)
@@ -196,7 +196,7 @@ async def clone_rule(
         raise
     except Exception as e:
         logger.error(f"Error cloning rule {rule_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to clone rule: {str(e)}") from e
+        raise HTTPException(status_code=500, detail="Failed to clone rule") from e
 
 
 @router.put("/reorder", response_model=list[MatchRuleOut])
@@ -248,7 +248,7 @@ async def reorder_rules(
         raise
     except Exception as e:
         logger.error(f"Error reordering rules: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to reorder rules: {str(e)}") from e
+        raise HTTPException(status_code=500, detail="Failed to reorder rules") from e
 
 
 @router.post("/test", response_model=MatchRuleTestResponse)
@@ -320,7 +320,7 @@ async def test_rules(
         raise
     except Exception as e:
         logger.error(f"Error testing rules: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to test rules: {str(e)}") from e
+        raise HTTPException(status_code=500, detail="Failed to test rules") from e
 
 
 @router.put("/{rule_id}", response_model=MatchRuleOut)
@@ -416,7 +416,7 @@ async def update_rule(
         raise
     except Exception as e:
         logger.error(f"Error updating rule {rule_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to update rule: {str(e)}") from e
+        raise HTTPException(status_code=500, detail="Failed to update rule") from e
 
 
 @router.delete("/{rule_id}", response_model=MatchRuleDeleteResponse)
@@ -459,4 +459,4 @@ async def delete_rule(
         raise
     except Exception as e:
         logger.error(f"Error deleting rule {rule_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to delete rule: {str(e)}") from e
+        raise HTTPException(status_code=500, detail="Failed to delete rule") from e

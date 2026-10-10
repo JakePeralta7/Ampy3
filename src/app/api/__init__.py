@@ -16,6 +16,7 @@ from src.app.api.sources import router as sources_router
 from src.app.api.syncs import router as syncs_router
 from src.app.api.system import router as system_router
 from src.app.api.targets import router as targets_router
+from src.app.api.websocket import router as websocket_router
 from src.app.auth.router import router as auth_router
 
 
@@ -32,6 +33,7 @@ def register_routers(app: FastAPI) -> None:
     app.include_router(syncs_router)
     app.include_router(system_router)
     app.include_router(targets_router)
+    app.include_router(websocket_router)
 
 
 __all__ = [
@@ -46,4 +48,5 @@ __all__ = [
     "syncs_router",
     "system_router",
     "targets_router",
+    "websocket_router",
 ]

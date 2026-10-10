@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from typing import Any, ClassVar
@@ -14,6 +15,11 @@ from src.app.core.targets.base import BaseTarget
 from src.app.core.targets.factory import TargetFactory, target_factory
 from src.app.core.targets.registry import TargetRegistry
 from src.app.core.targets.search import SearchStrategy, UnifiedSearchStrategy
+from src.app.core.urls import (
+    InvalidServerUrlError,
+    source_id_from_url,
+    validate_server_url,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +45,10 @@ class JellyfinTarget(BaseTarget):
     search_strategy: ClassVar[SearchStrategy] = UnifiedSearchStrategy()
 
     def __init__(self, api_key: str, base_url: str, user_id: str) -> None:
+        try:
+            validate_server_url(base_url, field="jellyfin_server_url")
+        except InvalidServerUrlError as exc:
+            raise ValueError(f"Invalid jellyfin_server_url: {exc}") from exc
         self._api_key = api_key
         self._base_url = base_url.rstrip("/")
         self._user_id = user_id
@@ -63,6 +73,52 @@ class JellyfinTarget(BaseTarget):
         return self._client
 
     # ── Helpers ──────────────────────────────────────────────────
+
+    async def _get_all_items(self, path: str, params: dict[str, Any]) -> list[dict[str, Any]]:
+        """Fetch every page of a Jellyfin Items response using StartIndex paging.
+
+        Without this, playlists larger than the API ``Limit`` (or a hardcoded
+        cap like 1000) would be silently truncated. ``limit=200`` was found in
+        working set as truncation risk for large libraries.
+
+        Safety limits prevent infinite loops if the server returns an incorrect
+        TotalRecordCount or never empties the response.
+        """
+        page_size = 500
+        max_pages = 100
+        max_total_items = 50_000
+        all_items: list[dict[str, Any]] = []
+        start_index = 0
+        pages_fetched = 0
+        while True:
+            if pages_fetched >= max_pages:
+                logger.warning(
+                    "Jellyfin pagination hit max_pages=%d for %s, stopping",
+                    max_pages,
+                    path,
+                )
+                break
+            if len(all_items) >= max_total_items:
+                logger.warning(
+                    "Jellyfin pagination hit max_total_items=%d for %s, stopping",
+                    max_total_items,
+                    path,
+                )
+                break
+            page_params = dict(params)
+            page_params["Limit"] = str(page_size)
+            page_params["StartIndex"] = str(start_index)
+            resp = await self.client.get(path, params=page_params)
+            resp.raise_for_status()
+            data = resp.json()
+            items = data.get("Items", [])
+            all_items.extend(items)
+            total = int(data.get("TotalRecordCount") or 0)
+            start_index += len(items)
+            pages_fetched += 1
+            if start_index >= total or not items:
+                break
+        return all_items
 
     @staticmethod
     def _to_duration_seconds(runtime_ticks: int | None) -> int:
@@ -121,18 +177,15 @@ class JellyfinTarget(BaseTarget):
 
     async def search_playlists(self, query: str) -> list[dict[str, Any]]:
         try:
-            resp = await self.client.get(
+            items = await self._get_all_items(
                 f"/Users/{self._user_id}/Items",
-                params={
+                {
                     "IncludeItemTypes": "Playlist",
                     "Recursive": "true",
                     "Fields": "ChildCount,Overview",
                     "SortBy": "SortName",
-                    "Limit": "200",
                 },
             )
-            resp.raise_for_status()
-            items = resp.json().get("Items", [])
             out = [self._playlist_out(item) for item in items]
             if not query:
                 return out
@@ -158,7 +211,6 @@ class JellyfinTarget(BaseTarget):
         items: list[dict[str, Any]],
         custom_metadata: dict[str, Any] | None = None,
     ) -> str | None:
-        del custom_metadata
         ids = [str(i.get("item_id") or i.get("id") or "") for i in items]
         ids = [i for i in ids if i]
         try:
@@ -173,12 +225,32 @@ class JellyfinTarget(BaseTarget):
             resp.raise_for_status()
             data = resp.json()
             playlist_id = data.get("Id")
-            if isinstance(playlist_id, str) and playlist_id:
-                return playlist_id
-            if isinstance(data.get("ItemId"), str):
-                return data["ItemId"]
-            logger.error("Jellyfin playlist creation response missing Id: %s", data)
-            return None
+            if (not isinstance(playlist_id, str) or not playlist_id) and isinstance(
+                data.get("ItemId"), str
+            ):
+                playlist_id = data["ItemId"]
+            if not isinstance(playlist_id, str) or not playlist_id:
+                logger.error("Jellyfin playlist creation response missing Id: %s", data)
+                return None
+
+            # CreatePlaylistDto has no Overview field: write metadata via a
+            # follow-up item update so get_playlist_by_source_id can locate
+            # this playlist by its source identity later.
+            if custom_metadata:
+                try:
+                    meta_resp = await self.client.post(
+                        f"/Items/{playlist_id}",
+                        json={"Overview": json.dumps(custom_metadata, default=str)},
+                    )
+                    meta_resp.raise_for_status()
+                except Exception as exc:
+                    logger.warning(
+                        "Created Jellyfin playlist %s but failed to store metadata: %s",
+                        playlist_id,
+                        exc,
+                    )
+
+            return playlist_id
         except Exception as exc:
             logger.error("Failed to create Jellyfin playlist '%s': %s", title, exc)
             return None
@@ -188,12 +260,28 @@ class JellyfinTarget(BaseTarget):
             current = await self.get_items_in_playlist(playlist_id)
             existing_ids = [str(i.get("item_id")) for i in current if i.get("item_id")]
             if existing_ids:
-                await self.remove_items_from_playlist(playlist_id, existing_ids)
+                removed = await self.remove_items_from_playlist(playlist_id, existing_ids)
+                if removed < len(existing_ids):
+                    logger.error(
+                        "Jellyfin playlist %s: only removed %d/%d stale items",
+                        playlist_id,
+                        removed,
+                        len(existing_ids),
+                    )
+                    return False
 
             desired_ids = [str(i.get("item_id") or i.get("id") or "") for i in items]
             desired_ids = [i for i in desired_ids if i]
             if desired_ids:
-                await self.add_items_to_playlist(playlist_id, desired_ids)
+                added = await self.add_items_to_playlist(playlist_id, desired_ids)
+                if added < len(desired_ids):
+                    logger.error(
+                        "Jellyfin playlist %s: only added %d/%d desired items",
+                        playlist_id,
+                        added,
+                        len(desired_ids),
+                    )
+                    return False
             return True
         except Exception as exc:
             logger.error("Failed updating Jellyfin playlist %s: %s", playlist_id, exc)
@@ -210,16 +298,13 @@ class JellyfinTarget(BaseTarget):
 
     async def get_items_in_playlist(self, playlist_id: str) -> list[dict[str, Any]]:
         try:
-            resp = await self.client.get(
+            items = await self._get_all_items(
                 f"/Playlists/{playlist_id}/Items",
-                params={
+                {
                     "UserId": self._user_id,
-                    "Limit": "1000",
                     "Fields": "RunTimeTicks,ArtistItems,Album,PlaylistItemId",
                 },
             )
-            resp.raise_for_status()
-            items = resp.json().get("Items", [])
             return [self._track_out(item) for item in items]
         except Exception as exc:
             logger.error("Failed to list Jellyfin playlist items for %s: %s", playlist_id, exc)
@@ -236,8 +321,40 @@ class JellyfinTarget(BaseTarget):
         return None
 
     async def get_playlist_by_source_id(self, source_id: str) -> dict[str, Any] | None:
-        del source_id
+        """Find a playlist by the exact source id stored in its metadata.
+
+        Every Ampy3-created playlist stores ``{"source_url": ...,
+        "sync_id": ...}`` (and, going forward, ``source_id``) as a JSON
+        ``Overview`` string. We compare exact values rather than substring
+        matching so one id can never match a foreign playlist's metadata.
+        """
+        if not source_id:
+            return None
+        source_id = str(source_id).strip()
+        results = await self.search_playlists("")
+        for playlist in results:
+            meta = self._meta_from_overview(playlist)
+            if meta.get("source_id") == source_id:
+                return playlist
+            url = meta.get("source_url")
+            if isinstance(url, str) and self._source_id_from_url(url) == source_id:
+                return playlist
         return None
+
+    @staticmethod
+    def _meta_from_overview(playlist: dict[str, Any]) -> dict[str, Any]:
+        summary = str(playlist.get("summary") or "")
+        if not summary:
+            return {}
+        try:
+            data = json.loads(summary)
+        except ValueError, TypeError:
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    @staticmethod
+    def _source_id_from_url(url: str) -> str:
+        return source_id_from_url(url)
 
     # ── Item management ──────────────────────────────────────────
 

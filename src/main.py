@@ -13,9 +13,10 @@ from fastapi.staticfiles import StaticFiles
 from src.app import __version__
 from src.app.api import register_routers
 from src.app.auth.tokens import purge_expired_sessions, verify_session
-from src.app.db import init_db
+from src.app.db import close_db, init_db
 from src.app.log_config import setup_logging
 from src.app.services import get_sync_target
+from src.app.services.audit import set_audit_actor
 from src.app.services.crypto import get_session_signing_key
 from src.app.services.scheduler import SchedulerService
 from src.app.settings import settings
@@ -77,12 +78,16 @@ async def lifespan(app: FastAPI):
 
     logger.info("Starting Ampy3 API...")
 
-    # Initialize database
-    try:
-        await init_db()
-        logger.info("Database initialized successfully.")
-    except Exception as e:
-        logger.warning("Could not initialize database on startup: %s", e)
+    if not settings.require_auth:
+        logger.warning(
+            "REQUIRE_AUTH=false — the API is running WITHOUT authentication. "
+            "Do not expose this instance to untrusted networks."
+        )
+
+    # Initialize database. Fail hard: an unreachable schema means every
+    # request would 500 — refusing to start surfaces the problem immediately.
+    await init_db()
+    logger.info("Database initialized successfully.")
 
     # Load DB-stored settings overrides (decrypts sensitive keys)
     try:
@@ -125,6 +130,10 @@ async def lifespan(app: FastAPI):
         await plex_target.close()
     except Exception:
         pass
+    try:
+        await close_db()
+    except Exception as e:
+        logger.warning("Failed to close database connections: %s", e)
     logger.info("Ampy3 API shut down gracefully.")
 
 
@@ -203,16 +212,19 @@ async def session_middleware(request: Request, call_next):
     request.state.user = None
 
     if not settings.require_auth:
+        set_audit_actor(None)
         return await call_next(request)
 
     path = request.url.path
 
     # Only enforce on API routes
     if not path.startswith("/api/"):
+        set_audit_actor(None)
         return await call_next(request)
 
     # Allow public auth endpoints
     if path in PUBLIC_PATHS:
+        set_audit_actor(None)
         return await call_next(request)
 
     token = request.cookies.get(SESSION_COOKIE)
@@ -224,7 +236,11 @@ async def session_middleware(request: Request, call_next):
         return JSONResponse(status_code=401, content={"detail": "unauthenticated"})
 
     request.state.user = user
-    return await call_next(request)
+    set_audit_actor(user)
+    try:
+        return await call_next(request)
+    finally:
+        set_audit_actor(None)
 
 
 # ── Routers ─────────────────────────────────────────────────────────────
@@ -236,6 +252,22 @@ register_routers(app)
 async def health():
     """Liveness probe for container healthchecks."""
     return {"status": "ok"}
+
+
+@app.get("/health/ready")
+async def health_ready():
+    """Readiness probe: report OK only when the database is reachable."""
+    from sqlalchemy import text
+
+    from src.app.db import async_engine
+
+    try:
+        async with async_engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+    except Exception as e:
+        logger.error("Readiness probe failed: %s", e, exc_info=True)
+        return JSONResponse(status_code=503, content={"status": "not_ready"})
+    return {"status": "ready"}
 
 
 # ── Static files / SPA ──────────────────────────────────────────────────

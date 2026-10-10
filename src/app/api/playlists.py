@@ -37,7 +37,7 @@ async def list_user_playlists(
         return playlists
     except Exception as e:
         logger.error(f"Error listing playlists: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to list playlists: {str(e)}") from e
+        raise HTTPException(status_code=500, detail="Failed to list playlists") from e
 
 
 @router.get("/search", response_model=PlaylistSearchResponse)
@@ -57,4 +57,4 @@ async def search_playlists(
         raise
     except Exception as e:
         logger.error(f"Error searching playlists: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to search playlists: {str(e)}") from e
+        raise HTTPException(status_code=500, detail="Failed to search playlists") from e

@@ -85,7 +85,7 @@ async def get_home(
         home: ExploreHome = await prov.get_home(force=refresh)
     except Exception as exc:
         logger.error("Explore home failed for '%s': %s", provider, exc, exc_info=True)
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise HTTPException(status_code=502, detail="Failed to load explore home content") from exc
 
     return ExploreHomeOut(
         sections=[
@@ -114,7 +114,7 @@ async def get_charts(
         charts: ChartsBundle = await prov.get_charts(force=refresh)
     except Exception as exc:
         logger.error("Explore charts failed for '%s': %s", provider, exc, exc_info=True)
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise HTTPException(status_code=502, detail="Failed to load explore charts") from exc
 
     return ChartsBundleOut(
         top_songs=[_item_out(i) for i in charts.top_songs],
@@ -138,7 +138,7 @@ async def get_moods(
         moods: list[MoodCategory] = await prov.get_moods(force=refresh)
     except Exception as exc:
         logger.error("Explore moods failed for '%s': %s", provider, exc, exc_info=True)
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise HTTPException(status_code=502, detail="Failed to load explore moods") from exc
 
     return [
         MoodCategoryOut(
@@ -169,7 +169,7 @@ async def get_mood_playlists(
         logger.error(
             "Explore mood playlists failed for '%s'/%s: %s", provider, mood_id, exc, exc_info=True
         )
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise HTTPException(status_code=502, detail="Failed to load mood playlists") from exc
 
     return [_item_out(i) for i in playlists]
 
@@ -190,6 +190,6 @@ async def search_playlists(
         results: list[ExploreItem] = await prov.search_playlists(q, force=refresh)
     except Exception as exc:
         logger.error("Explore search failed for '%s': %s", provider, exc, exc_info=True)
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise HTTPException(status_code=502, detail="Explore provider search failed") from exc
 
     return [_item_out(i) for i in results]

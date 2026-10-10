@@ -9,6 +9,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 
+from src.app.core.urls import source_id_from_url
 from src.app.models import ScheduleTarget
 from src.app.worker.context import SyncContext
 from src.app.worker.session import run_async, session_scope
@@ -81,31 +82,6 @@ class PlaylistSync:
         if existing_playlist_id:
             try:
                 existing = await target.get_playlist_details(existing_playlist_id)
-                if existing:
-                    current_items = await target.get_items_in_playlist(existing_playlist_id)
-                    current_ids = sorted(i["item_id"] for i in current_items if i.get("item_id"))
-                    desired_ids = sorted(matched_item_ids)
-                    if current_ids == desired_ids:
-                        logger.info(
-                            "Playlist %s already up to date (%d items), skipping",
-                            existing_playlist_id,
-                            len(desired_ids),
-                        )
-                        return existing_playlist_id
-                    items = [{"item_id": iid} for iid in matched_item_ids]
-                    await target.update_playlist(existing_playlist_id, items)
-                    logger.info(
-                        "Updated existing playlist %s for target %s (%d → %d items)",
-                        existing_playlist_id,
-                        self.ctx.target_id,
-                        len(current_ids),
-                        len(desired_ids),
-                    )
-                    return existing_playlist_id
-                logger.warning(
-                    "Playlist %s not found on target, creating new",
-                    existing_playlist_id,
-                )
             except Exception as e:
                 logger.warning(
                     "Exception checking playlist %s: %s — creating new",
@@ -113,12 +89,47 @@ class PlaylistSync:
                     e,
                     exc_info=True,
                 )
+                existing = None
+
+            if existing:
+                current_items = await target.get_items_in_playlist(existing_playlist_id)
+                current_ids = sorted(i["item_id"] for i in current_items if i.get("item_id"))
+                desired_ids = sorted(matched_item_ids)
+                if current_ids == desired_ids:
+                    logger.info(
+                        "Playlist %s already up to date (%d items), skipping",
+                        existing_playlist_id,
+                        len(desired_ids),
+                    )
+                    return existing_playlist_id
+                items = [{"item_id": iid} for iid in matched_item_ids]
+                if not await target.update_playlist(existing_playlist_id, items):
+                    raise RuntimeError(
+                        "Failed to update existing playlist "
+                        f"{existing_playlist_id} for target {self.ctx.target_id}"
+                    )
+                logger.info(
+                    "Updated existing playlist %s for target %s (%d → %d items)",
+                    existing_playlist_id,
+                    self.ctx.target_id,
+                    len(current_ids),
+                    len(desired_ids),
+                )
+                return existing_playlist_id
+            logger.warning(
+                "Playlist %s not found on target, creating new",
+                existing_playlist_id,
+            )
 
         items = [{"item_id": iid} for iid in matched_item_ids]
+        metadata: dict[str, Any] = {"source_url": source_url, "sync_id": sync_id}
+        source_id = source_id_from_url(source_url)
+        if source_id:
+            metadata["source_id"] = source_id
         playlist_id = await target.create_playlist(
             title=title,
             items=items,
-            custom_metadata={"source_url": source_url, "sync_id": sync_id},
+            custom_metadata=metadata,
         )
 
         if playlist_id:

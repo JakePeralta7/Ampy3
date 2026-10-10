@@ -3,6 +3,7 @@
 from pydantic import BaseModel, Field
 
 from src.app.constants import DEFAULT_TARGET
+from src.app.settings import settings
 
 
 class CreateScheduledSyncInput(BaseModel):
@@ -64,20 +65,35 @@ class SchedulerReloadResponse(BaseModel):
 class BulkSyncNowInput(BaseModel):
     """Input for bulk sync-now action."""
 
-    ids: list[int] = Field(..., min_length=1, description="Schedule IDs to sync")
+    ids: list[int] = Field(
+        ...,
+        min_length=1,
+        max_length=settings.max_bulk_operations,
+        description="Schedule IDs to sync",
+    )
 
 
 class BulkToggleActiveInput(BaseModel):
     """Input for bulk toggle-active action."""
 
-    ids: list[int] = Field(..., min_length=1, description="Schedule IDs to update")
+    ids: list[int] = Field(
+        ...,
+        min_length=1,
+        max_length=settings.max_bulk_operations,
+        description="Schedule IDs to update",
+    )
     is_active: bool = Field(..., description="New active state")
 
 
 class BulkDeleteInput(BaseModel):
     """Input for bulk delete action."""
 
-    ids: list[int] = Field(..., min_length=1, description="Schedule IDs to delete")
+    ids: list[int] = Field(
+        ...,
+        min_length=1,
+        max_length=settings.max_bulk_operations,
+        description="Schedule IDs to delete",
+    )
 
 
 class BulkResponse(BaseModel):
@@ -85,3 +101,4 @@ class BulkResponse(BaseModel):
 
     processed: int
     task_ids: list[str] | None = None
+    skipped_ids: list[int] = []

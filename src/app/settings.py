@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     log_format: Literal["json", "console"] = "json"
     source_playlist_cache_ttl_seconds: int = Field(default=300, ge=1)
     explore_cache_ttl_seconds: int = Field(default=900, ge=1)
+    max_bulk_operations: int = Field(default=100, ge=1, le=1000)
 
     # YouTube Music
     ytmusic_auth: str = ""

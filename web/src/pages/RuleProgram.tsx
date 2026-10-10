@@ -1,11 +1,13 @@
 import { SlidersHorizontal } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { type MatchRule, type MatchRuleCanvas, matchRulesAPI } from "../api/rules";
 import { PageLayout } from "../components/layout/PageLayout";
 import { LoadingSpinner } from "../components/ui/LoadingSpinner";
+import { UpdateTimestamp } from "../components/ui/UpdateTimestamp";
 import { ProgramCanvas } from "../features/rules/ProgramCanvas";
+import { POLLING_CONFIG } from "../lib/pollingConfig";
 import { getErrorMessage } from "../lib/utils";
 
 export function RuleProgramPage() {
@@ -15,18 +17,61 @@ export function RuleProgramPage() {
   const [rule, setRule] = useState<MatchRule | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   const numericId = ruleId ? parseInt(ruleId, 10) : null;
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isMountedRef = useRef(true);
+
+  const fetchRule = useCallback(async () => {
+    if (!numericId || !isMountedRef.current) return;
+    try {
+      const r = await matchRulesAPI.get(numericId);
+      if (isMountedRef.current) {
+        setRule(r);
+        setLastUpdated(new Date());
+      }
+    } catch (err) {
+      if (isMountedRef.current) {
+        toast.error(getErrorMessage(err, "Failed to reload rule"));
+        navigate("/settings/matching");
+      }
+    }
+  }, [numericId, navigate]);
 
   useEffect(() => {
+    isMountedRef.current = true;
+
     if (!numericId) return;
+
     setLoading(true);
     matchRulesAPI
       .get(numericId)
-      .then((r) => setRule(r))
+      .then((r) => {
+        if (isMountedRef.current) {
+          setRule(r);
+          setLastUpdated(new Date());
+        }
+      })
       .catch(() => navigate("/settings/matching"))
-      .finally(() => setLoading(false));
-  }, [numericId, navigate]);
+      .finally(() => {
+        if (isMountedRef.current) {
+          setLoading(false);
+        }
+      });
+
+    // Set up polling
+    pollIntervalRef.current = setInterval(() => {
+      fetchRule();
+    }, POLLING_CONFIG.DEFAULT_INTERVAL);
+
+    return () => {
+      isMountedRef.current = false;
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+      }
+    };
+  }, [numericId, navigate, fetchRule]);
 
   const handleCanvasChange = useCallback((canvas: MatchRuleCanvas) => {
     setRule((prev) => (prev ? { ...prev, canvas } : prev));
@@ -47,6 +92,7 @@ export function RuleProgramPage() {
           yaml_content: yamlContent,
         });
         setRule(updated);
+        setLastUpdated(new Date());
         toast.success("Rule saved");
       } catch (err) {
         toast.error(getErrorMessage(err, "Failed to save rule"));
@@ -82,7 +128,7 @@ export function RuleProgramPage() {
       icon={<SlidersHorizontal size={28} className="text-fg-muted" />}
       subtitle="Rule program canvas"
     >
-      <div className="h-[calc(100dvh-16rem)]">
+      <div className="h-[calc(100dvh-16rem)] flex flex-col">
         <ProgramCanvas
           ruleId={numericId}
           ruleName={rule.name}
@@ -95,6 +141,9 @@ export function RuleProgramPage() {
           onClone={handleClone}
           saving={saving}
         />
+        <div className="border-t border-border bg-bg-subtle p-3 text-xs text-gray-500">
+          <UpdateTimestamp lastUpdated={lastUpdated} />
+        </div>
       </div>
     </PageLayout>
   );

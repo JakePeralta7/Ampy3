@@ -10,6 +10,7 @@ from typing import Any
 from src.app.services.celery import CeleryService
 from src.app.services.target import TargetService
 from src.app.services.valkey import ValkeyService
+from src.app.services.websocket_manager import get_websocket_manager, reset_websocket_manager
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +22,7 @@ def reset_services() -> None:
     TargetService.reset()
     CeleryService.reset()
     ValkeyService.reset()
+    reset_websocket_manager()
     reset_clients()
     logger.info("All services reset")
 
@@ -75,4 +77,6 @@ __all__ = [
     "get_deezer_client",
     "get_sync_target",
     "list_sync_targets",
+    "get_websocket_manager",
+    "reset_websocket_manager",
 ]

@@ -19,6 +19,7 @@ async def _make_session() -> AsyncSession:
     session.add(
         ScheduledPlaylistSync(
             id=1,
+            user_id="test-user",
             source="youtube_music",
             source_url="https://music.youtube.com/playlist?list=test",
             target_playlist_name="Test Playlist",

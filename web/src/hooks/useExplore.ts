@@ -7,6 +7,7 @@ import {
   exploreAPI,
   type MoodCategoryOut,
 } from "../api/explore";
+import { POLLING_CONFIG } from "../lib/pollingConfig";
 import { getErrorMessage } from "../lib/utils";
 
 interface ExploreState {
@@ -21,6 +22,7 @@ interface ExploreState {
   searchQuery: string;
   loading: boolean;
   error: string | null;
+  lastUpdated: Date | null;
 }
 
 interface UseExploreOptions {
@@ -39,6 +41,7 @@ const initialState: ExploreState = {
   searchQuery: "",
   loading: true,
   error: null,
+  lastUpdated: null,
 };
 
 export function useExplore(options: UseExploreOptions = {}) {
@@ -48,14 +51,18 @@ export function useExplore(options: UseExploreOptions = {}) {
   });
 
   const activeProviderRef = useRef(state.activeProvider);
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isMountedRef = useRef(true);
 
   const fetchProviderContent = useCallback(async (provider: string, refresh = false) => {
+    if (!isMountedRef.current) return;
     activeProviderRef.current = provider;
     setState((s) => ({
       ...initialState,
       activeProvider: provider,
       providers: s.providers,
       loading: true,
+      lastUpdated: s.lastUpdated,
     }));
 
     const [moodsRes, homeRes, chartsRes] = await Promise.allSettled([
@@ -64,7 +71,7 @@ export function useExplore(options: UseExploreOptions = {}) {
       exploreAPI.getCharts(provider, refresh),
     ]);
 
-    if (activeProviderRef.current !== provider) return;
+    if (activeProviderRef.current !== provider || !isMountedRef.current) return;
 
     setState((s) => {
       const errors: string[] = [];
@@ -86,6 +93,7 @@ export function useExplore(options: UseExploreOptions = {}) {
         selectedMoodId: null,
         loading: false,
         error: errors.length ? errors[0] : null,
+        lastUpdated: new Date(),
       };
     });
   }, []);
@@ -99,14 +107,14 @@ export function useExplore(options: UseExploreOptions = {}) {
     setState((s) => ({ ...s, selectedMoodId: moodId, moodPlaylists: null, loading: true }));
     try {
       const playlists = await exploreAPI.getMoodPlaylists(moodId, currentProvider);
-      if (activeProviderRef.current !== currentProvider) return;
+      if (activeProviderRef.current !== currentProvider || !isMountedRef.current) return;
       setState((s) => ({
         ...s,
         moodPlaylists: playlists,
         loading: false,
       }));
     } catch (e) {
-      if (activeProviderRef.current !== currentProvider) return;
+      if (activeProviderRef.current !== currentProvider || !isMountedRef.current) return;
       setState((s) => ({
         ...s,
         loading: false,
@@ -125,10 +133,10 @@ export function useExplore(options: UseExploreOptions = {}) {
     setState((s) => ({ ...s, loading: true, searchQuery: trimmed }));
     try {
       const results = await exploreAPI.searchPlaylists(trimmed, currentProvider);
-      if (activeProviderRef.current !== currentProvider) return;
+      if (activeProviderRef.current !== currentProvider || !isMountedRef.current) return;
       setState((s) => ({ ...s, searchResults: results, loading: false, error: null }));
     } catch (e) {
-      if (activeProviderRef.current !== currentProvider) return;
+      if (activeProviderRef.current !== currentProvider || !isMountedRef.current) return;
       setState((s) => ({
         ...s,
         searchResults: [],
@@ -139,15 +147,16 @@ export function useExplore(options: UseExploreOptions = {}) {
   }, []);
 
   useEffect(() => {
+    isMountedRef.current = true;
     let cancelled = false;
     exploreAPI
       .listProviders()
       .then((providers) => {
-        if (cancelled) return;
+        if (cancelled || !isMountedRef.current) return;
         setState((s) => ({ ...s, providers }));
       })
       .catch(() => {
-        if (cancelled) return;
+        if (cancelled || !isMountedRef.current) return;
         setState((s) => ({ ...s, providers: [] }));
       });
     return () => {
@@ -156,8 +165,40 @@ export function useExplore(options: UseExploreOptions = {}) {
   }, []);
 
   useEffect(() => {
+    isMountedRef.current = true;
     fetchProviderContent(state.activeProvider);
   }, [fetchProviderContent, state.activeProvider]);
+
+  // Set up auto-refresh polling
+  useEffect(() => {
+    isMountedRef.current = true;
+
+    // Auto-refresh every 60 seconds (when not searching or selecting moods)
+    const shouldPoll = !state.searchQuery && !state.selectedMoodId;
+    if (shouldPoll) {
+      pollIntervalRef.current = setInterval(() => {
+        if (isMountedRef.current) {
+          fetchProviderContent(activeProviderRef.current, false);
+        }
+      }, POLLING_CONFIG.EXPLORE_CACHE_TTL);
+    }
+
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+      }
+    };
+  }, [fetchProviderContent, state.searchQuery, state.selectedMoodId]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+      }
+    };
+  }, []);
 
   const setProvider = useCallback(
     (provider: string) => {

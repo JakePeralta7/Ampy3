@@ -49,6 +49,7 @@ async def list_audit_logs(
                         event_type=log.event_type,
                         resource_type=log.resource_type,
                         resource_id=log.resource_id,
+                        actor_user_id=log.actor_user_id,
                         summary=log.summary,
                         details=log.details,
                         created_at=log.created_at.isoformat() if log.created_at else None,
@@ -63,4 +64,4 @@ async def list_audit_logs(
         raise
     except Exception as e:
         logger.error("Error listing audit logs: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to list audit logs: {str(e)}") from e
+        raise HTTPException(status_code=500, detail="Failed to list audit logs") from e

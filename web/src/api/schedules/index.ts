@@ -38,6 +38,7 @@ export interface UpdateScheduledSyncInput {
 export interface BulkResponse {
   processed: number;
   task_ids?: string[];
+  skipped_ids?: number[];
 }
 
 export const scheduledSyncsAPI = {
