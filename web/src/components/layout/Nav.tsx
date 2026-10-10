@@ -24,7 +24,7 @@ import { DeezerIcon, YouTubeMusicIcon } from "../ui/SourceIcon";
 
 const COLLAPSE_KEY = "ampy3:sidebar-collapsed";
 
-type SubLink = {
+export type SubLink = {
   path: string;
   label: string;
   icon?: LucideIcon | ((props: { size?: number }) => ReturnType<typeof YouTubeMusicIcon>);

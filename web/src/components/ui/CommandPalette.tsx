@@ -1,11 +1,12 @@
 import { type LucideIcon, Search } from "lucide-react";
+import type { ComponentType } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 export interface PaletteItem {
   to: string;
   label: string;
-  icon: LucideIcon;
+  icon: LucideIcon | ComponentType<{ size?: number }>;
   parentLabel?: string;
 }
 

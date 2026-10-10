@@ -10,7 +10,6 @@ import { links, Nav } from "./Nav";
 
 function linksToPaletteItems(navLinks: typeof links): PaletteItem[] {
   const items: PaletteItem[] = [];
-  const subIcon = ChevronRight; // default icon for sub-items
 
   for (const link of navLinks) {
     if (link.sub) {
@@ -19,7 +18,7 @@ function linksToPaletteItems(navLinks: typeof links): PaletteItem[] {
         items.push({
           to: sub.path,
           label: sub.label,
-          icon: subIcon,
+          icon: sub.icon ?? ChevronRight,
           parentLabel: link.label,
         });
       }
