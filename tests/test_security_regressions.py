@@ -40,32 +40,32 @@ class TestValidateServerUrl:
 async def test_identity_probe_allows_custom_hostname_when_server_matches(monkeypatch):
     from src.app.auth import router as auth_router
 
-    async def fake_fetch(url):
+    async def fake_fetch(url, access_token):
         assert url == "https://plex.mydomain.com"
-        return "M1"
+        return ("M1", None)
 
     monkeypatch.setattr(auth_router, "_fetch_machine_identifier", fake_fetch)
-    assert await auth_router._matches_resource_identity("https://plex.mydomain.com", "M1")
+    assert await auth_router._matches_resource_identity("https://plex.mydomain.com", "M1", "token123")
 
 
 async def test_identity_probe_rejects_mismatched_server(monkeypatch):
     from src.app.auth import router as auth_router
 
-    async def fake_fetch(url):
-        return "M2"  # a different Plex server answers at this URL
+    async def fake_fetch(url, access_token):
+        return ("M2", None)  # a different Plex server answers at this URL
 
     monkeypatch.setattr(auth_router, "_fetch_machine_identifier", fake_fetch)
-    assert not await auth_router._matches_resource_identity("https://evil.example.com", "M1")
+    assert not await auth_router._matches_resource_identity("https://evil.example.com", "M1", "token123")
 
 
 async def test_identity_probe_rejects_unreachable_server(monkeypatch):
     from src.app.auth import router as auth_router
 
-    async def fake_fetch(url):
-        return None
+    async def fake_fetch(url, access_token):
+        return (None, "Server unreachable")
 
     monkeypatch.setattr(auth_router, "_fetch_machine_identifier", fake_fetch)
-    assert not await auth_router._matches_resource_identity("https://down.example.com", "M1")
+    assert not await auth_router._matches_resource_identity("https://down.example.com", "M1", "token123")
 
 
 async def test_fetch_machine_identifier_parses_identity_response(monkeypatch):
@@ -78,6 +78,10 @@ async def test_fetch_machine_identifier_parses_identity_response(monkeypatch):
         def raise_for_status(self):
             return None
 
+        @property
+        def text(self):
+            return '<?xml version="1.0"?><MediaContainer machineIdentifier="M1"></MediaContainer>'
+
     class FakeClient:
         def __init__(self, *args, **kwargs):
             pass
@@ -88,13 +92,15 @@ async def test_fetch_machine_identifier_parses_identity_response(monkeypatch):
         async def __aexit__(self, *args):
             return None
 
-        async def get(self, url):
-            assert url == "http://server.myproxy.example:32400/identity"
+        async def get(self, url, headers=None):
+            assert url == "http://server.myproxy.example:32400"
+            assert headers == {"X-Plex-Token": "token123"}
             return FakeResp()
 
     monkeypatch.setattr(auth_router.httpx, "AsyncClient", FakeClient)
-    machine_id = await auth_router._fetch_machine_identifier("http://server.myproxy.example:32400")
+    machine_id, error = await auth_router._fetch_machine_identifier("http://server.myproxy.example:32400", "token123")
     assert machine_id == "M1"
+    assert error is None
 
 
 def test_dispatch_lock_blocks_overlap_and_fails_open(monkeypatch):
