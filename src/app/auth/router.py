@@ -485,7 +485,7 @@ async def plex_setup(
                 f"(expected machineIdentifier {client_identifier}).{hint}"
             ),
         )
-    
+
     # Use the verified working URL instead of the user's selection
     server_url = working_url
 
