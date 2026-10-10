@@ -39,7 +39,31 @@ async def test_init_db_bootstraps_and_stamps_a_fresh_database(monkeypatch):
     async def seed_rules():
         return None
 
+    class FakeAsyncSessionLocal:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            pass
+
+        async def execute(self, query):
+            class FakeResult:
+                def scalar(self):
+                    return None
+
+            return FakeResult()
+
+        def add(self, obj):
+            pass
+
+        async def commit(self):
+            pass
+
+        def __call__(self):
+            return self
+
     monkeypatch.setattr(db, "async_engine", engine)
+    monkeypatch.setattr(db, "AsyncSessionLocal", FakeAsyncSessionLocal())
     monkeypatch.setattr(db, "_is_alembic_managed", is_unmanaged)
     monkeypatch.setattr(db.command, "stamp", lambda config, revision: stamped.append(revision))
     monkeypatch.setattr("src.app.match_rules.loader.seed_default_rules", seed_rules)
@@ -62,7 +86,31 @@ async def test_init_db_upgrades_a_managed_database_without_creating_tables(monke
     async def seed_rules():
         return None
 
+    class FakeAsyncSessionLocal:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            pass
+
+        async def execute(self, query):
+            class FakeResult:
+                def scalar(self):
+                    return None
+
+            return FakeResult()
+
+        def add(self, obj):
+            pass
+
+        async def commit(self):
+            pass
+
+        def __call__(self):
+            return self
+
     monkeypatch.setattr(db, "async_engine", engine)
+    monkeypatch.setattr(db, "AsyncSessionLocal", FakeAsyncSessionLocal())
     monkeypatch.setattr(db, "_is_alembic_managed", is_managed)
     monkeypatch.setattr(db.command, "upgrade", lambda config, revision: upgraded.append(revision))
     monkeypatch.setattr("src.app.match_rules.loader.seed_default_rules", seed_rules)
