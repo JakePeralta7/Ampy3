@@ -6,6 +6,7 @@ https://forums.plex.tv/t/authenticating-with-plex/609370
 
 import logging
 import uuid
+import xml.etree.ElementTree as ET
 from datetime import UTC, datetime
 from typing import Any
 
@@ -95,10 +96,12 @@ def _cookie_secure() -> bool:
     return settings.require_auth or settings.app_env == "production"
 
 
-async def _matches_resource_identity(server_url: str, client_identifier: str) -> bool:
+async def _matches_resource_identity(
+    server_url: str, client_identifier: str, access_token: str
+) -> bool:
     """Whether *server_url* is the Plex server identified by *client_identifier*.
 
-    Probes ``GET {server_url}/identity`` and compares the returned
+    Probes the root endpoint of *server_url* and compares the returned
     ``machineIdentifier`` to the resource's ``clientIdentifier``. This binds a
     discovered token to the *actual* reachable server, so reverse-proxy /
     custom-DNS / localhost setups are allowed while an arbitrary destination
@@ -106,26 +109,34 @@ async def _matches_resource_identity(server_url: str, client_identifier: str) ->
     """
     if not client_identifier:
         return False
-    machine_id, _ = await _fetch_machine_identifier(server_url)
+    machine_id, _ = await _fetch_machine_identifier(server_url, access_token)
     return machine_id is not None and machine_id == client_identifier
 
 
-async def _fetch_machine_identifier(server_url: str) -> tuple[str | None, str | None]:
+async def _fetch_machine_identifier(
+    server_url: str, access_token: str
+) -> tuple[str | None, str | None]:
     """Return the Plex ``machineIdentifier`` advertised at *server_url*, and error reason if any.
+
+    Calls GET / on the Plex server and parses the XML root element.
+    Requires the access_token to authenticate the request.
 
     Returns: (machine_id, error_reason) where machine_id is None if unreachable/failed.
     """
     try:
-        url = f"{server_url.rstrip('/')}/identity"
+        url = server_url.rstrip("/")
         async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
-            resp = await client.get(url)
+            resp = await client.get(
+                url,
+                headers={"X-Plex-Token": access_token},
+            )
             resp.raise_for_status()
-            data = resp.json()
-        container = data.get("MediaContainer") or {}
-        machine_id = container.get("machineIdentifier", "")
-        return (machine_id or None, None)
+            root = ET.fromstring(resp.text)
+            machine_id = root.get("machineIdentifier", "")
+            return (machine_id or None, None)
     except Exception as exc:
-        return (None, str(exc))
+        exc_name = type(exc).__name__
+        return (None, f"{exc_name}: {str(exc)}")
 
 
 # ── Schemas ───────────────────────────────────────────────────────────
@@ -476,7 +487,7 @@ async def plex_setup(
 
     working_url = None
     for i, url in enumerate(urls_to_try, 1):
-        machine_id, error = await _fetch_machine_identifier(url)
+        machine_id, error = await _fetch_machine_identifier(url, access_token)
         if machine_id and machine_id == client_identifier:
             working_url = url
             logger.info(
