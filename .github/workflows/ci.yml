@@ -65,6 +65,20 @@ jobs:
   test:
     name: Tests
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: ampy3
+          POSTGRES_PASSWORD: ampy3
+          POSTGRES_DB: ampy3
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
     steps:
       - uses: actions/checkout@v7
 
@@ -79,6 +93,7 @@ jobs:
         run: python -m pytest --tb=short -q
         env:
           PYTHONPATH: src
+          DATABASE_URL: postgresql://ampy3:ampy3@localhost:5432/ampy3
 
   docker-build:
     name: Docker build
