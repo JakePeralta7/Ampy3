@@ -36,7 +36,7 @@ export const POLLING_CONFIG = {
  */
 export function getRetryDelay(attemptNumber: number): number {
   // Exponential backoff: 5s, 10s, 20s, 30s (capped at MAX_RETRY_DELAY)
-  const exponential = POLLING_CONFIG.RETRY_INTERVAL * Math.pow(2, attemptNumber - 1);
+  const exponential = POLLING_CONFIG.RETRY_INTERVAL * 2 ** (attemptNumber - 1);
   return Math.min(exponential, POLLING_CONFIG.RETRY_INTERVAL * 6); // 30s max
 }
 

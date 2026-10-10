@@ -1,6 +1,7 @@
 """Database configuration and initialization."""
 
 from collections.abc import AsyncGenerator, Generator
+from datetime import UTC
 
 from alembic.config import Config
 from sqlalchemy import create_engine, inspect, select
@@ -120,7 +121,7 @@ async def init_db() -> None:
                         plex_user_id="local",
                         username="local",
                         plex_token="",
-                        expires_at=datetime(2099, 12, 31, 23, 59, 59, tzinfo=timezone.utc),
+                        expires_at=datetime(2099, 12, 31, 23, 59, 59, tzinfo=UTC),
                     )
                 )
                 await session.commit()

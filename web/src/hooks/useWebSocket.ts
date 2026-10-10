@@ -120,10 +120,7 @@ export function useWebSocket(
         // Attempt to reconnect with exponential backoff
         if (retryCountRef.current < retryAttempts) {
           retryCountRef.current += 1;
-          const delay = Math.min(
-            retryDelay * Math.pow(2, retryCountRef.current - 1),
-            MAX_RETRY_DELAY,
-          );
+          const delay = Math.min(retryDelay * 2 ** (retryCountRef.current - 1), MAX_RETRY_DELAY);
           retryTimeoutRef.current = setTimeout(() => {
             if (isMountedRef.current) {
               connect();

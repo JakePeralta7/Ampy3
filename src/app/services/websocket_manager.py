@@ -135,8 +135,7 @@ class WebSocketConnectionManager:
         """Close all active WebSocket connections gracefully."""
         async with self._lock:
             connections = [
-                ws for subscription_set in self._subscriptions.values()
-                for ws in subscription_set
+                ws for subscription_set in self._subscriptions.values() for ws in subscription_set
             ]
         for websocket in connections:
             try:

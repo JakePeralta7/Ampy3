@@ -46,7 +46,10 @@ export function useSources(): UseSourcesReturn {
         setAuthSet(data.ytmusic_auth_set);
         setLastUpdated(new Date());
         // Only update values if no unsaved changes
-        if (!values.ytmusic_auth && (values.yt_dlp_timeout ?? "") === (original.yt_dlp_timeout ?? "")) {
+        if (
+          !values.ytmusic_auth &&
+          (values.yt_dlp_timeout ?? "") === (original.yt_dlp_timeout ?? "")
+        ) {
           setValues(flat);
         }
       }

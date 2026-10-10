@@ -104,7 +104,7 @@ def test_acquire_returns_none_when_locked(monkeypatch):
 
 def test_acquire_returns_unstored_token_on_valkey_outage(monkeypatch):
     """On Valkey outage, return an unstored token so sync proceeds (fail-open).
-    
+
     The token won't be stored in Valkey, so release functions treat it as a no-op.
     This ensures scheduled syncs are never blocked by infrastructure outages.
     """

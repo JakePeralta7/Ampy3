@@ -39,7 +39,7 @@ export function useAuditLogs(limit = 100): UseAuditLogsReturn {
 
   useEffect(() => {
     isMountedRef.current = true;
-    
+
     // Initial fetch
     fetchLogs();
 
