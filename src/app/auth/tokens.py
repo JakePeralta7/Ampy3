@@ -13,6 +13,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import delete, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from src.app.db import AsyncSessionLocal
 from src.app.models import UserSession
@@ -58,21 +59,39 @@ async def create_session(
     secret: bytes,
     ttl_hours: int = 168,
 ) -> str:
-    """Persist session data in the DB and return a signed cookie value."""
+    """Upsert session data in the DB and return a signed cookie value.
+
+    ``user_sessions.plex_user_id`` is unique (one active session per user),
+    so a re-login must update the existing row in place — a plain INSERT
+    raises ``UniqueViolationError`` when a stale session row still exists.
+    Updating in place (instead of delete+insert) also preserves the
+    ``scheduled_playlist_syncs`` FK that points at ``plex_user_id``.
+    """
     session_id = secrets.token_hex(SESSION_ID_BYTES)
 
+    stmt = pg_insert(UserSession).values(
+        id=session_id,
+        plex_user_id=user_data["plex_user_id"],
+        username=user_data["username"],
+        email=user_data.get("email"),
+        thumb=user_data.get("thumb"),
+        plex_token=encrypt_token(plex_token),
+        expires_at=datetime.now(UTC) + timedelta(hours=ttl_hours),
+    )
+    stmt = stmt.on_conflict_do_update(
+        index_elements=[UserSession.plex_user_id],
+        set_={
+            "id": stmt.excluded.id,
+            "username": stmt.excluded.username,
+            "email": stmt.excluded.email,
+            "thumb": stmt.excluded.thumb,
+            "plex_token": stmt.excluded.plex_token,
+            "expires_at": stmt.excluded.expires_at,
+        },
+    )
+
     async with AsyncSessionLocal() as db:
-        db.add(
-            UserSession(
-                id=session_id,
-                plex_user_id=user_data["plex_user_id"],
-                username=user_data["username"],
-                email=user_data.get("email"),
-                thumb=user_data.get("thumb"),
-                plex_token=encrypt_token(plex_token),
-                expires_at=datetime.now(UTC) + timedelta(hours=ttl_hours),
-            )
-        )
+        await db.execute(stmt)
         await db.commit()
 
     sig = _sign(session_id, secret)

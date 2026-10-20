@@ -3,10 +3,13 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from sqlalchemy.dialects import postgresql
+from sqlalchemy.dialects.postgresql import Insert as PgInsert
 
 from src.app.auth.tokens import (
     SESSION_ID_BYTES,
     _sign,
+    create_session,
     create_session_id,
     verify_session_id,
 )
@@ -130,3 +133,41 @@ class TestSessionCRUD:
     async def test_purge_expired_sessions(self, monkeypatch):
         """purge_expired_sessions removes expired rows."""
         pytest.skip("Requires database - integration test")
+
+
+class TestCreateSessionUpsert:
+    """create_session must upsert on plex_user_id (regression: re-login 500)."""
+
+    async def test_create_session_uses_upsert(self):
+        """Re-login issues an ON CONFLICT DO UPDATE, never a blind INSERT."""
+        mock_db = MagicMock()
+        mock_db.execute = AsyncMock()
+        mock_db.commit = AsyncMock()
+        mock_db_context = MagicMock()
+        mock_db_context.__aenter__ = AsyncMock(return_value=mock_db)
+        mock_db_context.__aexit__ = AsyncMock(return_value=None)
+
+        secret = b"test-secret-key-32-bytes-long!!"
+        user_data = {
+            "plex_user_id": "22718109",
+            "username": "jakeperalta7",
+            "email": "user@example.com",
+            "thumb": "https://example.com/avatar",
+        }
+
+        with patch("src.app.auth.tokens.AsyncSessionLocal", return_value=mock_db_context):
+            cookie = await create_session(
+                user_data=user_data, plex_token="plain-token", secret=secret
+            )
+
+        # Cookie format unchanged: session_id.signature
+        session_id, sig = cookie.rsplit(".", 1)
+        assert verify_session_id(cookie, secret) == session_id
+
+        # The executed statement is a Postgres upsert on plex_user_id
+        mock_db.execute.assert_awaited_once()
+        stmt = mock_db.execute.await_args.args[0]
+        assert isinstance(stmt, PgInsert)
+        compiled = str(stmt.compile(dialect=postgresql.dialect()))
+        assert "ON CONFLICT (plex_user_id) DO UPDATE" in compiled
+        assert mock_db.commit.await_count == 1
