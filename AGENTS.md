@@ -86,7 +86,7 @@ python bump_version.py check     # Verify all locations agree; edit nothing
 
 The app version is defined in exactly three places (`pyproject.toml`, `src/app/__init__.py`, `web/package.json`) and must stay in sync. `pyproject.toml` is the source of truth; always use this script instead of editing them by hand. The MusicBrainz user-agent derives from `src.app.__version__` — do not hardcode it anywhere.
 
-Releasing = commit the bump, tag `vX.Y.Z`, push both: pushing a `v*` tag triggers `.github/workflows/release.yml`, which builds and pushes the `ghcr.io/jakeperalta7/ampy3-web`/`-worker` images (also refreshed to `latest` on main pushes) and creates a GitHub Release. External deployments (the `IaC/Ampy3` Forgejo repo) consume those images — this repo does not hold the deployment env.
+Releasing = commit the bump, tag `vX.Y.Z`, push both: pushing a `v*` tag triggers `.github/workflows/release.yml`, which builds and pushes the `ghcr.io/jakeperalta7/ampy3-web`/`-worker` images (also refreshed to `latest` on main pushes) and creates a GitHub Release.
 
 ### Database migrations
 
