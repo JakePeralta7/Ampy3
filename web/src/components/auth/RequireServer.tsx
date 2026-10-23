@@ -1,7 +1,4 @@
-import { createContext, useEffect, useState } from "react";
-import { Navigate } from "react-router-dom";
-import { getConfiguredTargets } from "../../api/settings";
-import { LoadingSpinner } from "../ui/LoadingSpinner";
+import { createContext } from "react";
 
 interface ServerContextValue {
   configured: boolean | null;
@@ -10,21 +7,7 @@ interface ServerContextValue {
 const ServerContext = createContext<ServerContextValue>({ configured: null });
 
 export function RequireServer({ children }: { children: React.ReactNode }) {
-  const [configured, setConfigured] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    getConfiguredTargets()
-      .then((targets) => setConfigured(targets.length > 0))
-      .catch(() => setConfigured(false));
-  }, []);
-
-  if (configured === null) {
-    return <LoadingSpinner />;
-  }
-
-  if (!configured) {
-    return <Navigate to="/plex-setup" replace />;
-  }
-
-  return <ServerContext.Provider value={{ configured }}>{children}</ServerContext.Provider>;
+  // All protected routes are now guarded by CheckSetup at a higher level
+  // This component is kept for future extensibility
+  return <ServerContext.Provider value={{ configured: true }}>{children}</ServerContext.Provider>;
 }

@@ -26,14 +26,17 @@ class WebSocketConnectionManager:
         self._subscriptions: dict[str, set[WebSocket]] = {}
         # WebSocket -> subscription types (for cleanup on disconnect)
         self._connection_subscriptions: dict[WebSocket, set[str]] = {}
+        # WebSocket -> user_id (for filtering)
+        self._connection_user_id: dict[WebSocket, str] = {}
         self._lock = asyncio.Lock()
 
-    async def connect(self, websocket: WebSocket, subscription_type: str) -> None:
+    async def connect(self, websocket: WebSocket, subscription_type: str, user_id: str) -> None:
         """Accept and register a WebSocket connection.
 
         Args:
             websocket: The WebSocket connection to register
             subscription_type: The subscription category (e.g., 'syncs', 'pipeline_{sync_id}')
+            user_id: The authenticated user's plex_user_id
         """
         await websocket.accept()
         async with self._lock:
@@ -43,6 +46,7 @@ class WebSocketConnectionManager:
             if websocket not in self._connection_subscriptions:
                 self._connection_subscriptions[websocket] = set()
             self._connection_subscriptions[websocket].add(subscription_type)
+            self._connection_user_id[websocket] = user_id
             count = len(self._subscriptions[subscription_type])
             logger.debug(f"WebSocket connected to '{subscription_type}' ({count} total)")
 
@@ -53,12 +57,17 @@ class WebSocketConnectionManager:
             websocket: The WebSocket connection to disconnect
         """
         async with self._lock:
-            if websocket in self._connection_subscriptions:
-                for subscription_type in self._connection_subscriptions[websocket]:
-                    self._subscriptions[subscription_type].discard(websocket)
-                    if not self._subscriptions[subscription_type]:
-                        del self._subscriptions[subscription_type]
-                del self._connection_subscriptions[websocket]
+            try:
+                if websocket in self._connection_subscriptions:
+                    for subscription_type in self._connection_subscriptions[websocket]:
+                        self._subscriptions[subscription_type].discard(websocket)
+                        if not self._subscriptions[subscription_type]:
+                            del self._subscriptions[subscription_type]
+                    del self._connection_subscriptions[websocket]
+            finally:
+                # Always clean up user_id mapping even if subscription cleanup fails
+                if websocket in self._connection_user_id:
+                    del self._connection_user_id[websocket]
         logger.debug("WebSocket disconnected")
 
     async def broadcast(
@@ -66,6 +75,7 @@ class WebSocketConnectionManager:
         subscription_type: str,
         message_type: str,
         data: dict[str, Any],
+        owner_id: str | None = None,
     ) -> None:
         """Broadcast a message to all subscribers of a subscription type.
 
@@ -73,6 +83,7 @@ class WebSocketConnectionManager:
             subscription_type: The subscription category to broadcast to
             message_type: The type of message (e.g., 'sync_updated', 'pipeline_stage_changed')
             data: The data payload to send
+            owner_id: If provided, only send to the user with this id (for multi-user filtering)
         """
         payload = {
             "type": message_type,
@@ -85,6 +96,9 @@ class WebSocketConnectionManager:
 
         disconnected = []
         for websocket in connections:
+            # Filter by owner if specified
+            if owner_id is not None and self._connection_user_id.get(websocket) != owner_id:
+                continue
             try:
                 await websocket.send_text(message_json)
             except Exception as e:
@@ -145,6 +159,7 @@ class WebSocketConnectionManager:
         async with self._lock:
             self._subscriptions.clear()
             self._connection_subscriptions.clear()
+            self._connection_user_id.clear()
 
 
 # Global singleton instance
@@ -167,3 +182,16 @@ def reset_websocket_manager() -> None:
     """Reset the WebSocket connection manager (for testing)."""
     global _manager
     _manager = None
+
+
+async def broadcast_sync_event(user_id: str, event_type: str, data: dict[str, Any]) -> None:
+    """Push a sync event to the WebSocket clients of a single user.
+
+    The broadcast is scoped to the owner: a user must never receive another
+    user's sync events. Failures are swallowed — a broken socket must not
+    fail the API request that produced the event.
+    """
+    try:
+        await get_websocket_manager().broadcast("syncs", event_type, data, owner_id=user_id)
+    except Exception as e:
+        logger.warning("Failed to broadcast %s to user %s: %s", event_type, user_id, e)

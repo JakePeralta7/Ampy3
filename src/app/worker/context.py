@@ -35,12 +35,13 @@ class SyncContext:
     and worker objects. Owns session lifecycle and lazy target resolution.
     """
 
-    sync_id: int
     target_id: str
     playlist_title: str = ""
     source_url: str = ""
     source: str = ""
     execution_id: str | None = None
+    user_id: str | None = None
+    sync_id: int | None = None
 
     _target: BaseTarget | None = field(default=None, repr=False)
 

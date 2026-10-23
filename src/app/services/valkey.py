@@ -29,6 +29,19 @@ redis.call('SET', key, new_fp)
 return {1, 'changed'}
 """
 
+# Lua script for an atomic fixed-window rate limit.
+# INCR and EXPIRE must happen in the same round trip: if the process died
+# between them the counter would keep its value forever and the client would
+# stay blocked for good. The window is only (re)armed when the counter is
+# created, so it does not slide on every hit.
+RATE_LIMIT_SCRIPT = """
+local count = redis.call('INCR', KEYS[1])
+if count == 1 then
+    redis.call('EXPIRE', KEYS[1], ARGV[1])
+end
+return count
+"""
+
 
 class ValkeyService(ServiceBase):
     """Service for managing Valkey/Redis client instances.

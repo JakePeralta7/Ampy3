@@ -17,6 +17,14 @@ logger = logging.getLogger(__name__)
 KEY_PREFIX = "ampy3:sync-tasks:"
 KEY_TTL_SECONDS = 24 * 3600
 
+REVERSE_KEY_PREFIX = "ampy3:task-to-sync:"  # reverse lookup: task_id → sync_id
+# Reverse mapping TTL: aligned with the Celery result backend TTL
+# (``result_expires`` = 7 days). The mapping must outlive the task result,
+# otherwise the status endpoint would 404 while the result is still readable.
+# Task IDs are unique and never reused; the TTL bounds staleness from crashed
+# tasks.
+REVERSE_KEY_TTL_SECONDS = 7 * 24 * 3600
+
 PHASE_KEY_PREFIX = "ampy3:sync-phases:"
 PHASE_TTL_SECONDS = 24 * 3600
 
@@ -25,12 +33,20 @@ def _key(sync_id: int) -> str:
     return f"{KEY_PREFIX}{sync_id}"
 
 
+def _reverse_key(task_id: str) -> str:
+    return f"{REVERSE_KEY_PREFIX}{task_id}"
+
+
 def _client() -> Any:
     return ValkeyService.get_sync_instance()
 
 
 def register_sync_task(sync_id: int | None, task_id: str) -> None:
-    """Track a Celery task under a schedule id so it can be revoked on delete."""
+    """Track a Celery task under a sync id so it can be revoked on delete.
+
+    Also stores the reverse mapping ``task_id → sync_id`` used by the API to
+    authorize status polling for a task.
+    """
     if sync_id is None or not task_id:
         return
     try:
@@ -38,18 +54,77 @@ def register_sync_task(sync_id: int | None, task_id: str) -> None:
         key = _key(sync_id)
         client.sadd(key, task_id)
         client.expire(key, KEY_TTL_SECONDS)
+        # Reverse mapping: task_id → sync_id. It is kept after the task
+        # finished so the status endpoint can still authorize the poll.
+        reverse_key = _reverse_key(task_id)
+        client.set(reverse_key, str(sync_id), ex=REVERSE_KEY_TTL_SECONDS)
+    except Exception as e:
+        logger.warning("Failed to register task %s for sync %s: %s", task_id, sync_id, e)
+
+
+async def register_sync_task_async(sync_id: int | None, task_id: str) -> None:
+    """Async variant of :func:`register_sync_task` for FastAPI handlers.
+
+    The API registers the ``task_id → sync_id`` mapping *at enqueue time*, so
+    a client that starts polling immediately after the response can always
+    resolve the task. Registering only inside the task body would leave a
+    window in which the task is queued but not yet running, and the status
+    endpoint would 404 for it.
+
+    The revocation set is only written by the worker (which owns the task
+    lifecycle), so this helper stores the reverse mapping alone.
+    """
+    if sync_id is None or not task_id:
+        return
+    try:
+        await ValkeyService.get_instance().set(
+            _reverse_key(task_id), str(sync_id), ex=REVERSE_KEY_TTL_SECONDS
+        )
     except Exception as e:
         logger.warning("Failed to register task %s for sync %s: %s", task_id, sync_id, e)
 
 
 def unregister_sync_task(sync_id: int | None, task_id: str) -> None:
-    """Stop tracking a task once it has completed."""
+    """Stop tracking a task in the revocation set once it has completed.
+
+    The reverse mapping is intentionally *not* deleted: the API resolves
+    ``task_id → sync_id`` to authorize status polling, and that must keep
+    working after the task finished (the Celery result stays available for
+    the result backend TTL). The reverse key expires on its own TTL.
+    """
     if sync_id is None or not task_id:
         return
     try:
-        _client().srem(_key(sync_id), task_id)
+        client = _client()
+        client.srem(_key(sync_id), task_id)
     except Exception as e:
         logger.warning("Failed to unregister task %s for sync %s: %s", task_id, sync_id, e)
+
+
+def get_sync_id_for_task(task_id: str) -> int | None:
+    """Look up the sync_id for a given task_id (reverse lookup, sync client)."""
+    if not task_id:
+        return None
+    try:
+        result = _client().get(_reverse_key(task_id))
+        if result:
+            return int(result)
+    except Exception as e:
+        logger.warning("Failed to look up sync_id for task %s: %s", task_id, e)
+    return None
+
+
+async def get_sync_id_for_task_async(task_id: str) -> int | None:
+    """Async variant of :func:`get_sync_id_for_task` for FastAPI handlers."""
+    if not task_id:
+        return None
+    try:
+        result = await ValkeyService.get_instance().get(_reverse_key(task_id))
+        if result:
+            return int(result)
+    except Exception as e:
+        logger.warning("Failed to look up sync_id for task %s: %s", task_id, e)
+    return None
 
 
 def _revoke_sync(sync_id: int) -> None:

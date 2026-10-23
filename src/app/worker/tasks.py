@@ -106,6 +106,9 @@ def sync_playlists_task(
     schedule_id: int | None = None,
     target_playlist_name: str | None = None,
     dispatch_token: str | None = None,
+    execution_id: str | None = None,
+    user_id: str | None = None,
+    sync_id: int | None = None,
 ):
     """Fetch source playlist once, then dispatch per-target sync tasks.
 
@@ -113,6 +116,8 @@ def sync_playlists_task(
     acquired by the scheduler. The lock is handed to this run's per-target
     children (see ``_release_dispatch_lock_on_postrun``); this task only
     releases it when it never spawned any children.
+
+    ``sync_id`` is the pre-created ScheduledPlaylistSync record ID (for idempotency).
     """
     if not target_ids:
         target_ids = [DEFAULT_TARGET]
@@ -122,8 +127,12 @@ def sync_playlists_task(
     # lock when it never spawned children.
     self.spawned_targets = False
 
-    if schedule_id is not None:
-        register_sync_task(schedule_id, self.request.id)
+    # The id the task is tracked under. API-triggered runs know the sync
+    # record upfront (ad-hoc: pre-created by the handler, scheduled: the
+    # schedule id); scheduler-triggered runs only know the schedule id.
+    registry_id = sync_id or schedule_id
+    if registry_id is not None:
+        register_sync_task(registry_id, self.request.id)
 
     resource_id = str(schedule_id) if schedule_id else None
     log_event_sync(
@@ -133,26 +142,27 @@ def sync_playlists_task(
         summary=(
             f"Sync started for {source} playlist — {playlist_url} ({len(target_ids)} target(s))"
         ),
+        actor_user_id=user_id,
     )
 
-    sync_id: int | None = None
     started_at: str | None = None
-    execution_id = uuid.uuid4().hex
+    execution_id = execution_id or uuid.uuid4().hex
 
     with task_scope(
-        # sync_id is not known until the fetch succeeds (line ~93); carry the
-        # schedule_id here so early logs have some correlation, then update.
+        # sync_id is known upfront for API-triggered syncs (created in API handler for idempotency)
+        # For scheduler-triggered syncs, sync_id is None and we fall back to schedule_id
         task_id=self.request.id,
         task_name=self.name,
-        sync_id=schedule_id,
+        sync_id=sync_id or schedule_id,
         target_id=",".join(target_ids),
     ):
         t0 = time.monotonic()
         logger.info(
-            "Sync started: source=%s url=%s targets=%d",
+            "Sync started: source=%s url=%s targets=%d sync_id=%s",
             source,
             playlist_url,
             len(target_ids),
+            sync_id,
         )
 
         try:
@@ -172,6 +182,9 @@ def sync_playlists_task(
                 schedule_id,
                 target_ids,
                 playlist_title=title,
+                execution_id=execution_id,
+                user_id=user_id,
+                sync_id=sync_id,
             )
             sync_id = result["sync_id"]
             update_log_context(sync_id=sync_id)
@@ -190,8 +203,8 @@ def sync_playlists_task(
                     sync_id,
                     time.monotonic() - t0,
                 )
-                if schedule_id is not None:
-                    unregister_sync_task(schedule_id, self.request.id)
+                if registry_id is not None:
+                    unregister_sync_task(registry_id, self.request.id)
                 return {"status": "SUCCESS", "stats": {"matched": 0, "failed": 0}}
 
             self.spawned_targets = True
@@ -205,13 +218,14 @@ def sync_playlists_task(
                     playlist_url=playlist_url,
                     resource_id=resource_id,
                     execution_id=execution_id,
+                    user_id=user_id,
                     schedule_id=schedule_id,
                     dispatch_token=dispatch_token,
                 )
                 register_sync_task(sync_id, child.id)
 
-            if schedule_id is not None:
-                unregister_sync_task(schedule_id, self.request.id)
+            if registry_id is not None:
+                unregister_sync_task(registry_id, self.request.id)
             logger.info(
                 "Dispatched %d target task(s) for sync %d in %.2fs",
                 len(target_ids),
@@ -220,8 +234,8 @@ def sync_playlists_task(
             )
             return {"status": "DISPATCHED", "sync_id": sync_id}
         except SyncScheduleMissingError as e:
-            if schedule_id is not None:
-                unregister_sync_task(schedule_id, self.request.id)
+            if registry_id is not None:
+                unregister_sync_task(registry_id, self.request.id)
             set_fetch_phase(
                 schedule_id,
                 "failed",
@@ -239,10 +253,11 @@ def sync_playlists_task(
                 resource_id=resource_id,
                 summary=f"Sync validation failed: {e} — {playlist_url}",
                 details={"error": str(e), "playlist_url": playlist_url},
+                actor_user_id=user_id,
             )
             logger.error("Sync validation error (non-retryable): %s — %s", e, playlist_url)
-            if schedule_id is not None:
-                unregister_sync_task(schedule_id, self.request.id)
+            if registry_id is not None:
+                unregister_sync_task(registry_id, self.request.id)
             set_fetch_phase(
                 schedule_id,
                 "failed",
@@ -258,6 +273,7 @@ def sync_playlists_task(
                 resource_id=resource_id,
                 summary=f"Sync failed: {e} — {playlist_url}",
                 details={"error": str(e), "playlist_url": playlist_url},
+                actor_user_id=user_id,
             )
             attempt = self.request.retries + 1
             if self.request.retries >= self.max_retries:
@@ -275,8 +291,8 @@ def sync_playlists_task(
                     completed_at=datetime.now(UTC).isoformat(),
                     execution_id=execution_id,
                 )
-                if schedule_id is not None:
-                    unregister_sync_task(schedule_id, self.request.id)
+                if registry_id is not None:
+                    unregister_sync_task(registry_id, self.request.id)
                 raise
             logger.warning(
                 "Sync failed (attempt %d/%d), retrying in ~%ds: %s — %s",
@@ -331,6 +347,7 @@ def sync_target_task(
     playlist_url: str = "",
     resource_id: str | None = None,
     execution_id: str | None = None,
+    user_id: str | None = None,
     schedule_id: int | None = None,
     dispatch_token: str | None = None,
 ):
@@ -365,6 +382,7 @@ def sync_target_task(
         source_url=playlist_url,
         source=source,
         execution_id=execution_id,
+        user_id=user_id,
     )
     pipeline = SyncPipeline(ctx)
 
@@ -397,6 +415,7 @@ def sync_target_task(
                     f"{stats.get('failed', 0)} failed"
                 ),
                 details=stats,
+                actor_user_id=user_id,
             )
             logger.info(
                 "Target sync completed: sync_id=%d target=%s matched=%d failed=%d (%.2fs)",
@@ -421,6 +440,7 @@ def sync_target_task(
                 resource_id=resource_id,
                 summary=f"Sync failed for {target_id}: target connection failed: {e}",
                 details={"error": str(e), "target_id": target_id},
+                actor_user_id=user_id,
             )
             logger.error(
                 "Target sync failed: sync_id=%d target=%s: %s",
@@ -458,6 +478,7 @@ def sync_target_task(
                 resource_id=resource_id,
                 summary=f"Sync failed for {target_id}: {e} — {playlist_url}",
                 details={"error": str(e), "target_id": target_id},
+                actor_user_id=user_id,
             )
             attempt = self.request.retries + 1
             if self.request.retries >= self.max_retries:
@@ -493,9 +514,13 @@ def match_track_task(
     sync_id: int,
     target_id: str = DEFAULT_TARGET,
     item_id: str | None = None,
+    user_id: str | None = None,
 ):
     """Match a single track (for manual re-match from the UI)."""
-    ctx = SyncContext(sync_id=sync_id, target_id=target_id)
+    # Register the task so the API can resolve task_id → sync_id when the UI
+    # polls the task status.
+    register_sync_task(sync_id, self.request.id)
+    ctx = SyncContext(sync_id=sync_id, target_id=target_id, user_id=user_id)
     matcher = TrackMatcher(ctx)
 
     with task_scope(
@@ -521,6 +546,10 @@ def match_track_task(
                 exc_info=True,
             )
             raise
+        finally:
+            # Leave the revocation set, but keep the reverse mapping so the UI
+            # can still resolve the task status.
+            unregister_sync_task(sync_id, self.request.id)
         logger.info("Match result: matched=%s item=%s", result.matched, item_id or "")
         return dataclasses.asdict(result)
 

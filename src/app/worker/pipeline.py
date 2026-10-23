@@ -49,15 +49,29 @@ class SyncPipeline:
         schedule_id: int | None,
         target_ids: list[str],
         playlist_title: str = "",
+        execution_id: str | None = None,
+        user_id: str | None = None,
+        sync_id: int | None = None,
     ) -> dict[str, Any]:
         """Run Phase 1 (FetchPhase) and return track data.
 
         Called once per sync invocation, shared across all targets.
+
+        Args:
+            source_url: URL of the source playlist
+            source: Source platform (youtube_music, deezer, etc.)
+            schedule_id: Optional schedule ID for scheduled syncs
+            target_ids: List of target platform IDs
+            playlist_title: Name for the playlist
+            execution_id: Idempotency key (UUID), auto-generated if not provided
+            user_id: Plex user ID for multi-user isolation
+            sync_id: Pre-created ScheduledPlaylistSync record ID (for idempotency)
         """
         ctx = SyncContext(
-            sync_id=0,
+            sync_id=sync_id or 0,
             target_id=target_ids[0],
             playlist_title=playlist_title,
+            user_id=user_id,
         )
         phase = FetchPhase()
         result = phase.execute(
@@ -67,6 +81,9 @@ class SyncPipeline:
                 "source": source,
                 "schedule_id": schedule_id,
                 "target_ids": target_ids,
+                "execution_id": execution_id,
+                "user_id": user_id,
+                "sync_id": sync_id,
             },
         )
         if not result.success:

@@ -25,6 +25,12 @@ INTERVAL_DELTAS: dict[str, timedelta] = {
     "weekly": timedelta(weeks=1),
 }
 
+# Marker used for one-off (ad-hoc) syncs. It is deliberately not a member of
+# ScheduleIntervalEnum: recurring schedules can never carry it. The idempotency
+# unique index is scoped to rows with this marker so a client key stays scoped
+# to the request that created it.
+AD_HOC_INTERVAL = "once"
+
 # Config keys that contain sensitive credentials and should be encrypted at rest
 SENSITIVE_CONFIG_KEYS: frozenset[str] = frozenset(
     {
@@ -32,5 +38,8 @@ SENSITIVE_CONFIG_KEYS: frozenset[str] = frozenset(
         "jellyfin_api_key",
         "owner_plex_token",
         "ytmusic_auth",
+        "secret_key",
+        "database_username",
+        "database_password",
     }
 )

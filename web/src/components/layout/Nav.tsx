@@ -1,7 +1,9 @@
 import {
   Cog,
   Compass,
+  Globe,
   LayoutDashboard,
+  Lock,
   LogOut,
   type LucideIcon,
   Menu,
@@ -11,6 +13,7 @@ import {
   Radio,
   ScrollText,
   Server,
+  Settings,
   SlidersHorizontal,
   X,
 } from "lucide-react";
@@ -58,6 +61,10 @@ export const links: NavLink[] = [
       { path: "/settings/sources", label: "Sources", icon: Radio },
       { path: "/settings/targets", label: "Targets", icon: Server },
       { path: "/settings/matching", label: "Match Rules", icon: SlidersHorizontal },
+      { path: "/settings/network", label: "Network", icon: Globe },
+      { path: "/settings/infrastructure", label: "Infrastructure", icon: Settings },
+      { path: "/settings/security", label: "Security", icon: Lock },
+      { path: "/settings/server", label: "Server", icon: Server },
     ],
   },
 ];

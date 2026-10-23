@@ -17,22 +17,31 @@ router = APIRouter(prefix="/api/v1/audit", tags=["audit"])
 
 @router.get("/logs", response_model=AuditLogListResponse)
 async def list_audit_logs(
-    limit: int = Query(50, ge=1, le=200, description="Number of logs to return"),
+    limit: int = Query(50, ge=1, le=500, description="Number of logs to return"),
     offset: int = Query(0, ge=0, description="Number of logs to skip"),
     event_type: str | None = Query(None, description="Filter by event type"),
     _user: dict[str, Any] = Depends(get_current_user),  # noqa: B008
 ):
     """List audit log entries with optional filtering and pagination."""
-    from sqlalchemy import desc, func, select
+    from sqlalchemy import desc, func, or_, select
+
+    # Entries attributed to a user are private to that user. Entries without
+    # an actor (legacy rows written before attribution existed, and system
+    # events) stay visible to everyone so the audit trail is never silently
+    # truncated.
+    actor_filter = or_(
+        AuditLog.actor_user_id == _user["plex_user_id"],
+        AuditLog.actor_user_id.is_(None),
+    )
 
     try:
         async with AsyncSessionLocal() as session:
-            stmt = select(AuditLog).order_by(desc(AuditLog.created_at))
+            stmt = select(AuditLog).where(actor_filter).order_by(desc(AuditLog.created_at))
 
             if event_type:
                 stmt = stmt.where(AuditLog.event_type == event_type)
 
-            count_stmt = select(func.count()).select_from(AuditLog)
+            count_stmt = select(func.count()).select_from(AuditLog).where(actor_filter)
             if event_type:
                 count_stmt = count_stmt.where(AuditLog.event_type == event_type)
 

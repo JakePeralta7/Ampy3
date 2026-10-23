@@ -19,7 +19,7 @@ src/                  # Python backend (FastAPI + Celery)
     services/         # Service layer with lazy singletons (crypto, config_fingerprint inside)
     worker/           # Celery worker: tasks, pipeline, matcher, context, session
     db.py             # SQLAlchemy engines (async for FastAPI, sync for Celery), init_db
-    settings.py       # Pydantic BaseSettings — all config from env vars
+    settings.py       # Pydantic BaseSettings — deployment env vars only, all config from database
     constants.py      # Platform IDs, SENSITIVE_CONFIG_KEYS, interval mapping
 web/                  # React SPA (Vite + Tailwind + Biome)
   src/
@@ -50,8 +50,8 @@ ruff format src/ tests/
 # Run all tests (PYTHONPATH=src is required)
 PYTHONPATH=src pytest
 
-# Start locally without Docker (PYTHONPATH=src; skips the production gate only
-# because the APP_ENV env var is unset — see Gotchas)
+# Start locally without Docker. All config is database-backed via setup wizard.
+# First run: app redirects to /setup to configure system + targets.
 PYTHONPATH=src uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
@@ -108,13 +108,12 @@ Alembic migrations run automatically at API startup via `src/app/db.py:init_db()
 - **Source registry**: Music sources (YouTube Music, Deezer) register in `src/app/core/sources/`.
 - **Shared source clients**: `src/app/core/clients/` holds one cached client per platform (`YouTubeMusicClient`, `DeezerClient`) used by **both** the sync sources and the Explore providers. Caching lives inside the client — Valkey keys `{source}:{method}:{...}`; playlist fetches use `SOURCE_PLAYLIST_CACHE_TTL_SECONDS`, Explore content `EXPLORE_CACHE_TTL_SECONDS`. YT home keys are annotated with a session fingerprint, so a re-auth never serves the previous session's personalised feed.
 - **Secrets at rest**: sensitive `config` keys (`plex_token`, `jellyfin_api_key`, `ytmusic_auth`, `owner_plex_token`) are Fernet-encrypted. Read them via `decrypt_token()` in `src/app/services/crypto.py`; never treat stored ciphertext as a token. Encrypted values are never returned to the UI — only `*_set` booleans.
-- **Settings**: All config is in `src/app/settings.py` as a Pydantic `BaseSettings` singleton. Env vars are the source of truth; `.env.example` documents them (compose also auto-interpolates a repo `.env`, and pydantic-settings loads a CWD `.env` when running locally). User-editable settings (`plex_host`, `plex_token`, `ytmusic_auth`, `yt_dlp_timeout`, …) persist in the `config` table and merge over env defaults via `settings.load_overrides()`.
+- **Settings**: Deployment-only env vars (`DATABASE_USERNAME`, `DATABASE_PASSWORD`) are read at startup to construct the database URL. All user-editable config (`secret_key`, `plex_host`, `ytmusic_auth`, etc.) is encrypted in the `config` table. Setup wizard is the only configuration mechanism for users.
 - **CORS**: When `REQUIRE_AUTH=true`, only `APP_URL` is allowed. Otherwise `*` (no credentials).
 - **Docs site**: MkDocs + Material + mkdocstrings under `docs/` (built to `site/`, wired via `.readthedocs.yaml`). `dev` building needs the `docs` extra (`pip install -e ".[docs]"` then `mkdocs serve`). `docs/development/architecture.md` has deeper backend context than this file.
 - **SPA serving**: `src/main.py` mounts `web/dist/` as static and serves `index.html` for non-API routes. Build the frontend before running the API if you want the UI.
-- **Frontend dev server**: Vite on `:5173` proxies `/api` to `:8000`. No API key or auth needed in dev.
+- **Frontend dev server**: Vite on `:5173` proxies `/api` to `:8000`. No API key or auth needed in dev. App redirects to setup wizard if not configured.
 - **pnpm only**: The frontend uses pnpm (`packageManager` pinned in `web/package.json`, consumed by Corepack/CI). Do not add `package-lock.json` — it is git-ignored; install with `pnpm install --frozen-lockfile`.
-- **Logging**: JSON-lines by default (`LOG_FORMAT=json`, `python-json-logger`) — logs appear as single-line JSON in `docker compose logs`. Set `LOG_FORMAT=console` for human-readable output.
 - **pytest asyncio_mode**: Set to `"auto"` in `pyproject.toml` — no need for `@pytest.mark.asyncio`.
 - **No conftest.py**: Tests rely on individual monkeypatching; there's no shared test fixture file.
 
@@ -128,8 +127,11 @@ Alembic migrations run automatically at API startup via `src/app/db.py:init_db()
 
 ## Gotchas
 
-- **Fail-closed startup**: the app refuses to start when `APP_ENV=production` (the *env var*, checked in `main.py`'s lifespan) or `REQUIRE_AUTH=true` without a `SECRET_KEY` of ≥32 chars — never fall back to disabling auth. `SECRET_KEY` keys both session signing and at-rest token encryption. The `Dockerfile` bakes `ENV APP_ENV=production` (Dockerfile:61), so any standalone container run already hits this gate; the dev overlay overrides it with `APP_ENV=development`. Bare local runs (env var unset) skip the gate even though `settings.app_env` defaults to `"production"`.
-- **`DATABASE_URL` is configured directly** (compose interpolates `POSTGRES_PASSWORD` into it inline; `settings.database_url` reads the env var). Keep `POSTGRES_PASSWORD` to letters, digits, `-`, `_` — URL-reserved characters (`/`, `?`, `@`) silently break the connection. The `alembic.ini` placeholder URL is overridden at runtime — never edit it directly. Compose requires `POSTGRES_PASSWORD` (env or `.env`); the postgres port is not published to the host.
+- **Fail-closed startup**: the app refuses to start when `APP_ENV=production` without a `SECRET_KEY` of ≥32 chars, or when `REQUIRE_AUTH=true` without one. `SECRET_KEY` keys both session signing and at-rest token encryption. In development (`APP_ENV=development`), the app starts without `SECRET_KEY` and redirects to the setup wizard on first request.
+- **No .env file**: All configuration is database-backed. Only two deployment env vars are required: `DATABASE_USERNAME` and `DATABASE_PASSWORD` (read at startup to construct the database URL). All other config (secret_key, plex_host, require_auth, etc.) is set via the setup wizard and stored encrypted in the `config` table.
+- **Audit attribution**: `AuditLog.actor_user_id` is set from the session middleware (the `local` stub when `REQUIRE_AUTH=false`) and explicitly by the worker (`actor_user_id=user_id`, the sync owner). The audit list shows the caller's own entries plus rows without an actor (legacy rows written before attribution existed).
+- **Task → sync lookup**: `src/app/services/sync_tasks.py` keeps the reverse key `task_id → sync_id` after a task finishes (it only expires) so `/api/v1/syncs/status/{task_id}` keeps working; the revocation set entry is removed. FastAPI handlers use the async Valkey client (`get_sync_id_for_task_async`) — never the blocking one.
+- **Database connection**: `DATABASE_USERNAME` and `DATABASE_PASSWORD` env vars are required; they are read at startup to construct the database URL. Host (`postgres`) and port (`5432`) are hardcoded in Python. To use different credentials, set these env vars when running compose or in your shell environment. The `alembic.ini` placeholder URL is overridden at runtime — never edit it directly.
 - **Token decryption fails loudly**: `decrypt_token` raises `DecryptionError` for non-Fernet or foreign-key material — e.g. after rotating `SECRET_KEY` or running with config written by a different key. Never migrate stored values to plaintext; re-encrypt them under the current key instead.
 - **`put_settings` no-churn**: Fernet is non-deterministic, so `api/settings.py` skips re-encrypting an unchanged plaintext token. Writing any config row changes the **config fingerprint** (`config_fingerprint.py` — SHA-256 over the whole `config` table), which invalidates cached target instances; gratuitous writes churn targets.
 - **YouTube Music authentication** is configured entirely through the **Sources** settings page. The pasted ytmusicapi browser/auth JSON is stored encrypted in the `config` table under `ytmusic_auth` (never returned to the UI — only `ytmusic_auth_set` is). No `cookies/` mount or `YT_DLP_COOKIES` env is used anymore; the YouTube Music source and Explore provider both consume it via `src/app/services/ytauth.py`, which normalises it into the flat headers dict `ytmusicapi` expects (no temp file on disk).

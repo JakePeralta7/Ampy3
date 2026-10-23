@@ -22,6 +22,7 @@ from src.app.db import AsyncSessionLocal
 from src.app.models import Config
 from src.app.services.audit import log_event
 from src.app.services.crypto import decrypt_token, encrypt_token, get_session_signing_key
+from src.app.services.valkey import RATE_LIMIT_SCRIPT, ValkeyService
 from src.app.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -167,9 +168,61 @@ class PlexResourcesResponse(BaseModel):
 
 @router.get("/plex/login")
 async def plex_login(request: Request):
-    """Begin Plex OAuth: create a PIN and redirect the user to plex.tv."""
+    """Begin Plex OAuth: create a PIN and redirect the user to plex.tv.
+
+    Rate-limited to prevent PIN enumeration attacks: max 10 PIN requests per IP per 5 minutes.
+    """
     if not settings.require_auth:
         return RedirectResponse("/")
+
+    # Rate-limit PIN generation attempts per client IP
+    # Only trust X-Forwarded-For when behind a configured reverse proxy
+    # AND the request comes from a trusted proxy IP. Without BEHIND_PROXY
+    # every client behind the proxy shares the proxy's IP — and therefore
+    # one rate-limit bucket.
+    client_ip = request.client.host if request.client else "unknown"
+    if settings.behind_proxy and request.client:
+        # Verify the request comes from a trusted proxy
+        from ipaddress import ip_address, ip_network
+
+        def _is_trusted_proxy(ip: str) -> bool:
+            for cidr in settings.trusted_proxies:
+                try:
+                    if ip_address(ip) in ip_network(cidr):
+                        return True
+                except ValueError:
+                    continue
+            return False
+
+        if _is_trusted_proxy(request.client.host):
+            forwarded_for = request.headers.get("X-Forwarded-For")
+            if forwarded_for:
+                # Take the first IP in the chain (original client)
+                client_ip = forwarded_for.split(",")[0].strip()
+    rate_limit_key = f"ampy3:pin-attempts:{client_ip}"
+    rate_limit_window = 300  # 5 minutes
+    max_attempts = 10
+
+    try:
+        # Async client: this runs in the event loop, a blocking call would
+        # stall the whole worker. INCR + EXPIRE run as one Lua script so the
+        # counter can never end up without a TTL.
+        valkey_client = ValkeyService.get_instance()
+        attempt_count = await valkey_client.eval(
+            RATE_LIMIT_SCRIPT, 1, rate_limit_key, rate_limit_window
+        )
+
+        if attempt_count > max_attempts:
+            logger.warning(
+                f"PIN generation rate limit exceeded for IP {client_ip}: {attempt_count} attempts"
+            )
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Too many PIN requests. Try again in 5 minutes."},
+            )
+    except Exception as e:
+        logger.warning(f"Rate limit check failed: {e}")
+        # Fail open: if rate limiting fails, allow the request to proceed
 
     client_id = await _get_client_id()
 

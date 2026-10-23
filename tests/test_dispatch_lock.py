@@ -1,6 +1,7 @@
 """Dispatch lock ownership and release semantics (review fix 2 follow-up)."""
 
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 from src.app.services import scheduler as scheduler_service
 from src.app.services.scheduler import (
@@ -187,12 +188,15 @@ async def test_trigger_sync_now_passes_owner_token_to_dispatch(monkeypatch):
     calls = []
 
     class FakeTask:
+        id = "task-1"
+
         @staticmethod
         def delay(**kwargs):
             calls.append(kwargs)
-            return None
+            return FakeTask()
 
     monkeypatch.setattr(scheduler_service, "sync_playlists_task", FakeTask)
+    monkeypatch.setattr(scheduler_service, "register_sync_task_async", AsyncMock())
     valkey = FakeValkey()
     _patch_valkey(monkeypatch, valkey)
 
@@ -202,12 +206,17 @@ async def test_trigger_sync_now_passes_owner_token_to_dispatch(monkeypatch):
         source="youtube_music",
         target_ids=["Plex"],
         target_playlist_name="Mix",
+        user_id="user-1",
     )
     result = await scheduler_service.SchedulerService.trigger_sync_now(sync)
-    assert result is None  # FakeTask.delay returns None
+    assert result is not None
     assert calls and calls[0]["schedule_id"] == 7
     assert calls[0]["dispatch_token"]
+    # The owner is forwarded so the worker can attribute its audit events.
+    assert calls[0]["user_id"] == "user-1"
     assert valkey.store["ampy3:dispatch_counter:7"] == f"{calls[0]['dispatch_token']}:1"
+    # The task→sync mapping is written before the client can poll for it.
+    scheduler_service.register_sync_task_async.assert_awaited_once_with(7, "task-1")
 
 
 def test_postrun_parent_releases_when_never_spawned(monkeypatch):

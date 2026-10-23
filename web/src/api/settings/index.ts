@@ -5,20 +5,51 @@
 import { apiGet, apiPost, apiPut } from "../client";
 
 export interface AppSettings {
+  // Credentials (Sources & Targets)
   plex_host: string;
   plex_token_set: boolean;
   jellyfin_server_url: string;
   jellyfin_api_key_set: boolean;
   jellyfin_user_id: string;
   ytmusic_auth_set: boolean;
+
+  // Infrastructure
   yt_dlp_timeout: number;
+  celery_broker_url: string;
+  celery_worker_concurrency: number;
+  celery_log_level: string;
+  log_format: string;
+  source_playlist_cache_ttl_seconds: number;
+  explore_cache_ttl_seconds: number;
+  session_ttl_hours: number;
+
+  // Network
+  behind_proxy: boolean;
+  trusted_proxies: string[];
+
+  // Security & Server
+  require_auth: boolean;
+  app_url: string;
+  plex_client_id: string;
+  secret_key_set: boolean;
 }
 
 export type SettingsUpdate = Partial<AppSettings> & {
   plex_token?: string;
   jellyfin_api_key?: string;
   ytmusic_auth?: string;
+  trusted_proxies?: string[];
 };
+
+export interface SetupRequest {
+  secret_key: string;
+  require_auth: boolean;
+}
+
+export interface SetupResponse {
+  success: boolean;
+  message: string;
+}
 
 export interface SourceInfo {
   id: string;
@@ -56,6 +87,8 @@ export const settingsAPI = {
   getSettings: () => apiGet<AppSettings>("/v1/settings/"),
 
   updateSettings: (input: SettingsUpdate) => apiPut<AppSettings>("/v1/settings/", input),
+
+  setup: (input: SetupRequest) => apiPost<SetupResponse>("/v1/settings/setup", input),
 
   getConfiguredTargets: () => apiGet<string[]>("/v1/targets/configured"),
 

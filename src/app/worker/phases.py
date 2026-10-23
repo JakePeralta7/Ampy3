@@ -16,7 +16,7 @@ from typing import Any
 from sqlalchemy import delete, select, text
 from sqlalchemy.orm import selectinload
 
-from src.app.constants import INTERVAL_DELTAS
+from src.app.constants import AD_HOC_INTERVAL, INTERVAL_DELTAS
 from src.app.core.models import TrackMetadata
 from src.app.core.services.matcher import MatchEngine, get_active_rules_sync
 from src.app.core.sources.registry import SourceRegistry
@@ -75,12 +75,14 @@ class FetchPhase(SyncPhase):
         source_id: str = input_data["source"]
         schedule_id: int | None = input_data.get("schedule_id")
         target_ids: list[str] = input_data.get("target_ids", [ctx.target_id])
+        sync_id: int | None = input_data.get("sync_id")
 
         logger.info(
-            "Fetching %s playlist: %s (schedule_id=%s)",
+            "Fetching %s playlist: %s (schedule_id=%s, sync_id=%s)",
             source_id,
             source_url,
             schedule_id,
+            sync_id,
         )
 
         source_cls = SourceRegistry.get(source_id)
@@ -120,6 +122,9 @@ class FetchPhase(SyncPhase):
                 playlist_title,
                 track_rows,
                 target_ids,
+                execution_id=input_data.get("execution_id"),
+                user_id=input_data.get("user_id"),
+                sync_id=sync_id,
             )
 
         logger.info(
@@ -147,9 +152,17 @@ class FetchPhase(SyncPhase):
         playlist_title: str,
         track_rows: list[dict[str, Any]],
         target_ids: list[str],
+        execution_id: str | None = None,
+        user_id: str | None = None,
+        sync_id: int | None = None,
     ) -> int:
         """Save source tracks to DB and return the sync record ID."""
-        if schedule_id is not None:
+        if sync_id is not None:
+            # Idempotency: use pre-created sync record (created in API handler)
+            sync_record = db.get(ScheduledPlaylistSync, sync_id)
+            if not sync_record:
+                raise SyncScheduleMissingError(sync_id)
+        elif schedule_id is not None:
             sync_record = (
                 db.execute(
                     select(ScheduledPlaylistSync).where(ScheduledPlaylistSync.id == schedule_id)
@@ -160,16 +173,17 @@ class FetchPhase(SyncPhase):
             if not sync_record:
                 raise SyncScheduleMissingError(schedule_id)
         else:
-            # Manual (ad-hoc) runs always get their own record. Never reuse an
-            # existing scheduled row matched by URL — that would clobber the
-            # schedule's stats and shift next_sync_at on every manual run.
+            # Manual (ad-hoc) runs without pre-created sync record (should not happen
+            # with current flow, but kept for backward compatibility)
             sync_record = ScheduledPlaylistSync(
                 source=source,
                 source_url=playlist_url,
                 target_playlist_name=playlist_title,
-                schedule_interval="once",
+                schedule_interval=AD_HOC_INTERVAL,
                 is_active=False,
                 next_sync_at=datetime.now(UTC),
+                execution_id=execution_id,
+                user_id=user_id,
             )
             db.add(sync_record)
             db.flush()

@@ -22,6 +22,7 @@ from src.app.constants import INTERVAL_DELTAS
 from src.app.db import AsyncSessionLocal
 from src.app.models import ScheduledPlaylistSync, SyncRun
 from src.app.services.base import ServiceBase
+from src.app.services.sync_tasks import register_sync_task, register_sync_task_async
 from src.app.services.valkey import ValkeyService
 from src.app.settings import settings
 from src.app.worker.tasks import sync_playlists_task
@@ -194,10 +195,14 @@ def _dispatch_targets(
     source: str,
     target_ids: list[str],
     target_playlist_name: str,
+    user_id: str | None = None,
 ) -> None:
     """Dispatch a single sync_playlists_task with all targets.
 
     Module-level function for APScheduler 4.x serialization with SQLAlchemyDataStore.
+
+    ``user_id`` is the owner of the schedule. It is forwarded to the worker so
+    audit events raised during the run are attributed to that user.
     """
     token = _try_acquire_dispatch_lock(sync_id, len(target_ids))
     if token is None:
@@ -218,14 +223,20 @@ def _dispatch_targets(
         )
         return
 
-    sync_playlists_task.delay(
+    task = sync_playlists_task.delay(
         playlist_url=source_url,
         source=source,
         target_ids=target_ids,
         schedule_id=sync_id,
         target_playlist_name=target_playlist_name,
         dispatch_token=token,
+        user_id=user_id,
     )
+
+    # Register task → sync now. The worker registers the mapping too, but only
+    # once it picks the task up; a client that polls the task status right
+    # after the dispatch would otherwise get a 404.
+    register_sync_task(sync_id, task.id)
 
 
 class SchedulerService(ServiceBase):
@@ -382,6 +393,7 @@ class SchedulerService(ServiceBase):
                     "source": sync.source,
                     "target_ids": target_ids,
                     "target_playlist_name": sync.target_playlist_name,
+                    "user_id": sync.user_id,
                 },
             )
 
@@ -411,14 +423,20 @@ class SchedulerService(ServiceBase):
                 sync.id,
             )
             return None
-        return sync_playlists_task.delay(
+        task = sync_playlists_task.delay(
             playlist_url=sync.source_url,
             source=sync.source,
             target_ids=sync.target_ids,
             schedule_id=sync.id,
             target_playlist_name=sync.target_playlist_name,
             dispatch_token=token,
+            user_id=sync.user_id,
         )
+        # Register task → sync now. The worker registers the mapping too, but
+        # only once it picks the task up; a client that polls the task status
+        # right away would otherwise get a 404.
+        await register_sync_task_async(sync.id, task.id)
+        return task
 
     @staticmethod
     def _get_trigger(schedule_interval: str, next_sync_at: datetime) -> IntervalTrigger:

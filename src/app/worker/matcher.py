@@ -105,6 +105,7 @@ class TrackMatcher:
                     f" matched to '{match.get('title', '')}'"
                     f" in sync {self.ctx.sync_id}"
                 ),
+                actor_user_id=self.ctx.user_id,
             )
 
             logger.info(

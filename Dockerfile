@@ -51,6 +51,7 @@ COPY --from=builder /install /usr/local
 # Copy source code and alembic directly from host (avoids builder cache issues)
 COPY src/ ./src
 COPY alembic/ ./alembic
+COPY docker/ ./docker
 COPY pyproject.toml ./
 
 # Install the package in editable mode so code changes are reflected
@@ -67,7 +68,7 @@ FROM base AS web
 
 COPY --from=web-builder /app/web/dist /app/web/dist
 EXPOSE 8000
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+ENTRYPOINT ["python", "/app/docker/entrypoint.py"]
 
 # --- Worker image (no frontend) ---
 FROM base AS worker

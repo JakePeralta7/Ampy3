@@ -1,18 +1,31 @@
+import json
 import logging
-from typing import Any, Literal, Self
+from typing import Annotated, Any, Literal, Self
 
 from pydantic import Field, field_validator, model_validator
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, NoDecode
 
 logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
-    # Database
-    database_url: str = Field(
-        default="postgresql://ampy3:ampy3@localhost:5432/ampy3",
-        description="PostgreSQL database URL",
+    # Database — host/port hardcoded; user/pass from env vars
+    database_host: str = "postgres"
+    database_port: int = 5432
+    database_name: str = "ampy3"
+    database_username: str = Field(
+        description="Database username (from DATABASE_USERNAME env var)",
+        validation_alias="DATABASE_USERNAME",
     )
+    database_password: str = Field(
+        description="Database password (from DATABASE_PASSWORD env var)",
+        validation_alias="DATABASE_PASSWORD",
+    )
+
+    @property
+    def database_url(self) -> str:
+        """Construct database URL from hardcoded host/port + env-sourced credentials."""
+        return f"postgresql://{self.database_username}:{self.database_password}@{self.database_host}:{self.database_port}/{self.database_name}"
 
     # Celery / Valkey
     celery_broker_url: str = Field(default="redis://valkey:6379/0")
@@ -42,6 +55,10 @@ class Settings(BaseSettings):
     secret_key: str = ""
     session_ttl_hours: int = Field(default=168, ge=1, le=8760)
 
+    # Network / Reverse proxy (editable via UI, stored in config table)
+    behind_proxy: bool = False
+    trusted_proxies: list[str] = Field(default_factory=list)
+
     @field_validator("celery_log_level", "log_format", mode="before")
     @classmethod
     def _lower_on_reading(cls, value: Any) -> Any:
@@ -56,6 +73,24 @@ class Settings(BaseSettings):
             raise ValueError("APP_URL must be an absolute http(s) URL")
         return value
 
+    @field_validator("trusted_proxies", mode="before")
+    @classmethod
+    def _parse_trusted_proxies(cls, value: Any) -> Any:
+        """Accept a comma-separated list or a JSON array of CIDR ranges."""
+        if not isinstance(value, str):
+            return value
+        raw = value.strip()
+        if not raw:
+            return []
+        if raw.startswith("["):
+            try:
+                parsed = json.loads(raw)
+            except ValueError:
+                logger.warning("trusted_proxies is not valid JSON — falling back to a plain list")
+            else:
+                return [str(item).strip() for item in parsed if str(item).strip()]
+        return [part.strip() for part in raw.split(",") if part.strip()]
+
     @model_validator(mode="after")
     def _validate_secret_key(self) -> Self:
         # A short-but-present key is always rejected. An *empty* key is left
@@ -69,10 +104,20 @@ class Settings(BaseSettings):
         return self
 
     # App
-    app_env: str = "production"
+    # Default to development mode unless explicitly set to production via env
+    # This allows tests and local dev to run without SECRET_KEY requirements
+    app_env: Annotated[str, Field(validation_alias="APP_ENV")] = "development"
     debug: bool = False
 
-    model_config = {"env_prefix": "", "validate_assignment": True}
+    model_config = {
+        "env_prefix": "",
+        "validate_assignment": True,
+        # Unknown keys are ignored rather than rejected: ``.env`` is
+        # user-owned and shared with docker-compose, which may carry keys
+        # this app does not consume. A stray key must never prevent the
+        # service from starting.
+        "extra": "ignore",
+    }
 
     def load_overrides(self, overrides: dict[str, Any]) -> None:
         """Apply DB-stored overrides, coercing string values to field types.

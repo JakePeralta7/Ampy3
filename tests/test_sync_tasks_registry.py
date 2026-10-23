@@ -10,6 +10,7 @@ class FakeValkey:
         self.sets = {}
         self.expires = {}
         self.deleted = []
+        self.strings = {}
 
     def sadd(self, key, value):
         self.sets.setdefault(key, set()).add(value)
@@ -26,9 +27,19 @@ class FakeValkey:
     def smembers(self, key):
         return set(self.sets.get(key, set()))
 
+    def set(self, key, value, ex=None):
+        self.strings[key] = value
+        if ex is not None:
+            self.expires[key] = ex
+        return True
+
+    def get(self, key):
+        return self.strings.get(key)
+
     def delete(self, key):
         self.deleted.append(key)
         self.sets.pop(key, None)
+        self.strings.pop(key, None)
         return 1
 
 
@@ -54,6 +65,46 @@ def test_register_task_is_noop_without_sync_or_task_id(fake_valkey):
     sync_tasks.register_sync_task(None, "task-a")
     sync_tasks.register_sync_task(42, "")
     assert fake_valkey.sets == {}
+
+
+def test_register_task_stores_the_reverse_mapping(fake_valkey):
+    sync_tasks.register_sync_task(42, "task-a")
+
+    assert fake_valkey.strings["ampy3:task-to-sync:task-a"] == "42"
+    assert sync_tasks.get_sync_id_for_task("task-a") == 42
+
+
+def test_unregister_keeps_the_reverse_mapping(fake_valkey):
+    """The API resolves task_id → sync_id to authorize status polling.
+
+    That must keep working once the task finished, so the reverse key is
+    only expired, never deleted.
+    """
+    sync_tasks.register_sync_task(42, "task-a")
+    sync_tasks.unregister_sync_task(42, "task-a")
+
+    assert "ampy3:task-to-sync:task-a" not in fake_valkey.deleted
+    assert fake_valkey.strings["ampy3:task-to-sync:task-a"] == "42"
+    assert sync_tasks.get_sync_id_for_task("task-a") == 42
+
+
+async def test_async_reverse_lookup_uses_the_async_client(monkeypatch, fake_valkey):
+    """The API must not use the blocking Valkey client."""
+    fake_valkey.strings["ampy3:task-to-sync:task-a"] = "42"
+
+    class FakeAsyncValkey:
+        async def get(self, key):
+            return fake_valkey.strings.get(key)
+
+    class FakeService:
+        @classmethod
+        def get_instance(cls):
+            return FakeAsyncValkey()
+
+    monkeypatch.setattr(sync_tasks, "ValkeyService", FakeService)
+
+    assert await sync_tasks.get_sync_id_for_task_async("task-a") == 42
+    assert await sync_tasks.get_sync_id_for_task_async("unknown") is None
 
 
 def test_revoke_terminates_tracked_tasks(fake_valkey, monkeypatch):

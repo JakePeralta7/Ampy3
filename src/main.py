@@ -1,7 +1,6 @@
 """Main entry point for the Ampy3 API."""
 
 import logging
-import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -54,14 +53,15 @@ async def _load_settings_overrides() -> None:
         settings.load_overrides(overrides)
 
 
-# ── Lifespan (replaces deprecated on_event) ─────────────────────────────
+def enforce_startup_gate() -> None:
+    """Fail closed when the app is not configured with a usable SECRET_KEY.
 
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Fail closed: production requires a SECRET_KEY so token encryption at
-    # rest is never keyed from a fixed, well-known value.
-    if os.environ.get("APP_ENV") == "production" and (
+    ``SECRET_KEY`` keys both the session signing and the at-rest token
+    encryption, so an empty (or too short) key would silently encrypt
+    credentials with a well-known value. Production deployments must always
+    provide one; ``REQUIRE_AUTH=true`` requires it in every environment.
+    """
+    if settings.app_env == "production" and (
         not settings.secret_key or len(settings.secret_key) < 32
     ):
         raise RuntimeError(
@@ -69,12 +69,21 @@ async def lifespan(app: FastAPI):
             'Generate one with: python -c "import secrets; print(secrets.token_hex(32))"'
         )
 
-    # Fail closed: REQUIRE_AUTH=true without SECRET_KEY is a hard error
     if settings.require_auth and (not settings.secret_key or len(settings.secret_key) < 32):
         raise RuntimeError(
             "REQUIRE_AUTH=true requires SECRET_KEY (at least 32 characters). "
             'Generate one with: python -c "import secrets; print(secrets.token_hex(32))"'
         )
+
+
+# ── Lifespan (replaces deprecated on_event) ─────────────────────────────
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Fail closed: production requires a SECRET_KEY so token encryption at
+    # rest is never keyed from a fixed, well-known value.
+    enforce_startup_gate()
 
     logger.info("Starting Ampy3 API...")
 
@@ -212,8 +221,14 @@ async def session_middleware(request: Request, call_next):
     request.state.user = None
 
     if not settings.require_auth:
-        set_audit_actor(None)
-        return await call_next(request)
+        # Mirror the stub user returned by ``get_current_user`` so audit
+        # entries raised in no-auth mode are attributed to the same identity
+        # the API acts as.
+        set_audit_actor({"plex_user_id": "local"})
+        try:
+            return await call_next(request)
+        finally:
+            set_audit_actor(None)
 
     path = request.url.path
 

@@ -13,6 +13,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -89,6 +90,7 @@ class ScheduledPlaylistSync(TimestampMixin, Base):
     user_id: Mapped[str] = mapped_column(
         String(64), ForeignKey("user_sessions.plex_user_id"), nullable=False, index=True
     )
+    execution_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     source: Mapped[str] = mapped_column(
         String(50), default=PlaylistSourceEnum.YOUTUBE_MUSIC, nullable=False
     )
@@ -116,6 +118,21 @@ class ScheduledPlaylistSync(TimestampMixin, Base):
         back_populates="sync", cascade="all, delete-orphan", order_by="SyncRun.created_at.desc()"
     )
     user: Mapped[UserSession] = relationship(back_populates="scheduled_syncs")
+
+    __table_args__ = (
+        # Mirrors migration 008: the uniqueness only applies to ad-hoc rows
+        # that actually carry an idempotency key. Scheduled syncs store the
+        # key on the schedule row itself, so their scope is the row (one key
+        # per schedule) and they are deliberately not covered here — otherwise
+        # the same client key could not be reused for a second schedule.
+        Index(
+            "uq_sync_execution_per_user",
+            "user_id",
+            "execution_id",
+            unique=True,
+            postgresql_where=text("execution_id IS NOT NULL AND schedule_interval = 'once'"),
+        ),
+    )
 
     def __repr__(self) -> str:
         return f"<ScheduledPlaylistSync(id={self.id}, playlist={self.target_playlist_name})>"

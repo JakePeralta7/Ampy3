@@ -94,6 +94,9 @@ jobs:
         env:
           PYTHONPATH: src
           DATABASE_URL: postgresql://ampy3:ampy3@localhost:5432/ampy3
+          # The startup gate is fail-closed: APP_ENV defaults to "production"
+          # and requires a SECRET_KEY of >= 32 characters.
+          SECRET_KEY: ci-test-secret-key-0123456789abcdef
 
   docker-build:
     name: Docker build

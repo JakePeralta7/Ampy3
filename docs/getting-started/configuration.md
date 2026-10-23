@@ -1,6 +1,6 @@
 # Configuration
 
-Most Ampy3 configuration is read from **environment variables** via the Pydantic `Settings` singleton in `src/app/settings.py`. The exception is **runtime configuration** (target credentials and YouTube Music auth), which is managed through the web UI and persisted in the database — see the **Settings → Sources / Targets** pages.
+Most Ampy3 configuration is read from **environment variables** via the Pydantic `Settings` singleton in `src/app/settings.py`. The exception is **runtime configuration** (target credentials, YouTube Music auth, and network/proxy settings), which is managed through the web UI and persisted in the database — see the **Settings** pages (Sources, Targets, and Network).
 
 ## Quick reference
 
@@ -87,6 +87,53 @@ DEBUG=false
 ```
 
 `DEBUG=true` enables verbose error responses from FastAPI — useful in development, **never** in production.
+
+## Section: Reverse proxy
+
+When Ampy3 is served through a reverse proxy, every request reaches the app from the proxy's IP. The Plex PIN endpoint rate-limits by client IP (10 attempts per IP per 5 minutes), so without proper configuration every client behind the proxy shares a single bucket and one user can lock out everyone else.
+
+**Proxy settings are now managed in the web UI**: Settings → Network.
+
+To enable proxy header reading:
+
+1. Go to **Settings → Network** in the web UI
+2. Check "Behind a reverse proxy"
+3. Enter your proxy's CIDR ranges (e.g., `10.0.0.0/8`, `192.168.0.0/16`)
+4. Click "Save settings"
+5. **Restart the container** for the changes to take effect
+
+The app will then read `X-Forwarded-For` headers only from requests originating from the trusted proxy IPs, allowing the rate limiter to work correctly.
+
+### Example configurations
+
+**Docker Compose with a local nginx proxy:**
+
+```bash
+# Add to .env or docker-compose.yml environment
+APP_BIND=0.0.0.0
+```
+
+Then in Settings → Network:
+- Enable "Behind a reverse proxy"
+- Add `172.17.0.1/32` (or your docker bridge IP) and `127.0.0.1/32`
+
+**Behind Cloudflare:**
+
+Enable proxy mode and add Cloudflare's IP ranges:
+
+```
+104.16.0.0/13
+104.24.0.0/14
+172.64.0.0/13
+```
+
+(See [Cloudflare IP ranges](https://developers.cloudflare.com/fundamentals/get-started/reference/network-ports/#ip-addresses) for the current list.)
+
+### Security considerations
+
+- Leave the proxy setting **disabled** (the default) when the app is directly reachable from the internet — enabling proxy header reading without a proper IP allow-list is equivalent to letting any client spoof their IP and bypass the rate limiter.
+- Always configure `TRUSTED_PROXIES` when enabling proxy mode — an empty list means the header is not trusted.
+- The app validates that requests come from a trusted proxy before reading `X-Forwarded-For`. This prevents spoofing attacks.
 
 ## Local development overrides
 

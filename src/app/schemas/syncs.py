@@ -21,14 +21,23 @@ class SyncTriggerRequest(BaseModel):
         default=None,
         description="Link result to an existing scheduled sync record",
     )
+    execution_id: str | None = Field(
+        default=None,
+        max_length=64,
+        description=(
+            "Idempotency key (UUID). If provided with same user, "
+            "returns existing sync (200 OK). Omit to auto-generate."
+        ),
+    )
 
 
 class SyncTriggerResponse(BaseModel):
     """Response after triggering a sync."""
 
     message: str
-    task_id: str
-    status_url: str
+    task_id: str | None = None  # None if returning existing sync (idempotent)
+    status_url: str | None = None  # None if returning existing sync
+    sync_id: int | None = None  # Set when returning existing sync
 
 
 class SyncTracksResponse(BaseModel):

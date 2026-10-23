@@ -1,4 +1,5 @@
 import { Navigate, type RouteObject, useRoutes } from "react-router-dom";
+import { CheckSetup } from "./components/auth/CheckSetup";
 import { ProtectedRoute } from "./components/auth/ProtectedRoute";
 import { RequireServer } from "./components/auth/RequireServer";
 import { ExploreLayout } from "./components/Explore/ExploreLayout";
@@ -7,32 +8,34 @@ import { AuditLogPage } from "./pages/AuditLog";
 import { ExploreDeezerPage } from "./pages/ExploreDeezerPage";
 import { ExploreYTMusicPage } from "./pages/ExploreYTMusicPage";
 import { HomePage } from "./pages/Home";
+import { InfrastructureSettingsPage } from "./pages/InfrastructureSettings";
 import { LoginPage } from "./pages/Login";
 import { MatchRulesPage } from "./pages/MatchRules";
-import { PlexSetupPage } from "./pages/PlexSetup";
+import { NetworkSettingsPage } from "./pages/NetworkSettings";
 import { RuleProgramPage } from "./pages/RuleProgram";
+import { SecuritySettingsPage } from "./pages/SecuritySettings";
+import { ServerSettingsPage } from "./pages/ServerSettings";
+import { UnifiedSetupPage } from "./pages/UnifiedSetup";
 import { SourcesPage } from "./pages/Sources";
 import { SyncsPage } from "./pages/Syncs";
 import { TargetsPage } from "./pages/Targets";
 
 const protectedServer = (element: React.ReactNode) => (
-  <ProtectedRoute>
-    <RequireServer>{element}</RequireServer>
-  </ProtectedRoute>
+  <CheckSetup>
+    <ProtectedRoute>
+      <RequireServer>{element}</RequireServer>
+    </ProtectedRoute>
+  </CheckSetup>
 );
 
 export const routes: RouteObject[] = [
   {
-    path: "/login",
-    element: <LoginPage />,
+    path: "/setup",
+    element: <UnifiedSetupPage />,
   },
   {
-    path: "/plex-setup",
-    element: (
-      <ProtectedRoute>
-        <PlexSetupPage />
-      </ProtectedRoute>
-    ),
+    path: "/login",
+    element: <LoginPage />,
   },
   {
     path: "/",
@@ -58,9 +61,11 @@ export const routes: RouteObject[] = [
   {
     path: "/settings",
     element: (
-      <ProtectedRoute>
-        <SettingsLayout />
-      </ProtectedRoute>
+      <CheckSetup>
+        <ProtectedRoute>
+          <SettingsLayout />
+        </ProtectedRoute>
+      </CheckSetup>
     ),
     children: [
       { index: true, element: <Navigate to="sources" replace /> },
@@ -68,6 +73,10 @@ export const routes: RouteObject[] = [
       { path: "targets", element: <TargetsPage /> },
       { path: "matching", element: <MatchRulesPage /> },
       { path: "matching/:ruleId", element: <RuleProgramPage /> },
+      { path: "network", element: <NetworkSettingsPage /> },
+      { path: "infrastructure", element: <InfrastructureSettingsPage /> },
+      { path: "security", element: <SecuritySettingsPage /> },
+      { path: "server", element: <ServerSettingsPage /> },
     ],
   },
 ];

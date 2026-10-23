@@ -20,6 +20,7 @@ from src.app.core.matching import (
 )
 from src.app.core.targets.base import BaseTarget
 from src.app.core.targets.factory import TargetFactory, target_factory
+from src.app.core.targets.plex_errors import PlexErrorInfo, categorize_plex_error
 from src.app.core.targets.registry import TargetRegistry
 from src.app.core.targets.search import SearchStrategy, TitleArtistAlbumSearch
 from src.app.core.urls import (
@@ -50,6 +51,28 @@ def _normalize_search_query(query: str) -> str:
     query = re.sub(r"\.{2,}", " ", query)
     query = query.replace(",", " ")
     return normalize(query, strip_quotes=True, collapse_whitespace=True)
+
+
+def _log_plex_error(operation: str, error: Exception) -> PlexErrorInfo:
+    """Log a failed Plex API call with its category and retry guidance.
+
+    ``plex_errors`` classifies the failure, so an operator can tell a dead
+    token from a flaky server without digging through the raw exception.
+    Transient failures are logged at WARNING (a retry may still succeed),
+    permanent ones at ERROR. The return value lets callers branch on the
+    category without re-classifying the exception.
+    """
+    info = categorize_plex_error(error)
+    logger.log(
+        logging.WARNING if info.is_transient else logging.ERROR,
+        "Plex %s failed [%s, %s, max %d retries]: %s",
+        operation,
+        info.error_type,
+        "transient" if info.is_transient else "permanent",
+        info.max_retries,
+        info.message,
+    )
+    return info
 
 
 class PlexTarget(BaseTarget):
@@ -148,7 +171,7 @@ class PlexTarget(BaseTarget):
                 )
             return sections
         except httpx.HTTPStatusError as e:
-            logger.error(f"HTTP error getting sections: {e}")
+            _log_plex_error("get_sections", e)
             return []
         except ET.ParseError as e:
             logger.error(f"XML parse error in get_sections: {e}")
@@ -180,10 +203,10 @@ class PlexTarget(BaseTarget):
             logger.debug(f"Found {len(results)} playlists matching query: {query or '*'}")
             return results
         except httpx.HTTPStatusError as e:
-            logger.error(f"HTTP error searching playlists: {e}")
+            _log_plex_error("search_playlists", e)
             return []
         except httpx.RequestError as e:
-            logger.error(f"Request error searching playlists (timeout/connection): {e}")
+            _log_plex_error("search_playlists", e)
             return []
         except ET.ParseError as e:
             logger.error(f"XML parse error in search_playlists: {e}")
@@ -203,7 +226,7 @@ class PlexTarget(BaseTarget):
             logger.warning("Failed to parse playlist details XML for %s", playlist_id)
             return None
         except httpx.HTTPStatusError as e:
-            logger.warning("HTTP error getting playlist %s: %s", playlist_id, e)
+            _log_plex_error(f"get_playlist_details({playlist_id})", e)
             return None
 
     async def create_playlist(
@@ -268,7 +291,7 @@ class PlexTarget(BaseTarget):
 
             return playlist_id
         except httpx.HTTPStatusError as e:
-            logger.error(f"HTTP error creating playlist: {e}")
+            _log_plex_error("create_playlist", e)
             return None
         except ET.ParseError as e:
             logger.error(f"XML parse error in create_playlist: {e}")
@@ -398,7 +421,7 @@ class PlexTarget(BaseTarget):
             logger.info(f"Successfully deleted playlist {playlist_id}")
             return True
         except httpx.HTTPStatusError as e:
-            logger.error(f"HTTP error deleting playlist {playlist_id}: {e}")
+            _log_plex_error(f"delete_playlist({playlist_id})", e)
             return False
 
     async def get_items_in_playlist(self, playlist_id: str) -> list[dict[str, Any]]:
@@ -459,7 +482,7 @@ class PlexTarget(BaseTarget):
             logger.debug(f"Playlist {playlist_id}: Total items retrieved: {len(items)}")
             return items
         except httpx.HTTPStatusError as e:
-            logger.error(f"HTTP error getting items in playlist {playlist_id}: {e}")
+            _log_plex_error(f"get_items_in_playlist({playlist_id})", e)
             return []
 
     # ── Playlist lookup ──────────────────────────────────────────
@@ -508,7 +531,7 @@ class PlexTarget(BaseTarget):
             logger.debug(f"No playlist found with source_id: {source_id}")
             return None
         except httpx.HTTPStatusError as e:
-            logger.error(f"HTTP error getting library playlist: {e}")
+            _log_plex_error("get_playlist_by_source_id", e)
             return None
         except ET.ParseError as e:
             logger.error(f"XML parse error in get_playlist_by_source_id: {e}")
@@ -552,12 +575,7 @@ class PlexTarget(BaseTarget):
                     playlist_id,
                 )
             except httpx.HTTPStatusError as e:
-                logger.warning(
-                    "Failed to add item %d to playlist %s: %s",
-                    i + 1,
-                    playlist_id,
-                    e,
-                )
+                _log_plex_error(f"add_items_to_playlist({playlist_id})", e)
 
         return added_count
 
@@ -585,12 +603,7 @@ class PlexTarget(BaseTarget):
                     playlist_id,
                 )
             except httpx.HTTPStatusError as e:
-                logger.warning(
-                    "Failed to remove item %d from playlist %s: %s",
-                    i + 1,
-                    playlist_id,
-                    e,
-                )
+                _log_plex_error(f"remove_items_from_playlist({playlist_id})", e)
 
         return removed_count
 
@@ -756,7 +769,7 @@ class PlexTarget(BaseTarget):
                     return []
             return []
         except httpx.HTTPStatusError as e:
-            logger.warning(f"HTTP error searching library: {e}")
+            _log_plex_error("search_library", e)
             return []
         except ET.ParseError as e:
             logger.error(f"XML parse error in _search_by_title_artist_album: {e}")
@@ -785,7 +798,7 @@ class PlexTarget(BaseTarget):
                 logger.debug(f"Found {len(results)} artists matching genre '{genre}'")
             return results
         except httpx.HTTPStatusError as e:
-            logger.warning(f"HTTP error searching by genre: {e}")
+            _log_plex_error("search_by_genre", e)
             return []
         except ET.ParseError as e:
             logger.error(f"XML parse error in _search_by_genre: {e}")
@@ -821,9 +834,18 @@ class PlexTarget(BaseTarget):
     # ── Connection test ─────────────────────────────────────────
 
     async def test_connection(self) -> None:
-        """Verify connectivity with the Plex server."""
-        resp = await self.client.get("/library/sections")
-        resp.raise_for_status()
+        """Verify connectivity with the Plex server.
+
+        Failures are re-raised with the categorized reason so the caller (and
+        the user running the connection test) sees *why* the call failed —
+        a rejected token reads very differently from an unreachable server.
+        """
+        try:
+            resp = await self.client.get("/library/sections")
+            resp.raise_for_status()
+        except (httpx.HTTPStatusError, httpx.RequestError) as e:
+            info = categorize_plex_error(e)
+            raise RuntimeError(f"Plex connection failed ({info.error_type}): {info.message}") from e
 
     # ── Lifecycle ────────────────────────────────────────────────
 

@@ -31,6 +31,10 @@ services:
       postgres:
         condition: service_healthy
 
+  worker:
+    environment:
+      - APP_ENV=development
+
   frontend:
     image: node:26-alpine
     working_dir: /app/web
