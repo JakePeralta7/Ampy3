@@ -92,9 +92,15 @@ async def get_plex_server_url() -> str | None:
         return row.value if row else None
 
 
-def _cookie_secure() -> bool:
-    """Cookies must always use the Secure flag when auth is required."""
-    return settings.require_auth or settings.app_env == "production"
+def _cookie_secure(request: Request | None = None) -> bool:
+    """Cookies must use the Secure flag in production or when behind a proxy with HTTPS."""
+    if settings.app_env == "production":
+        return True
+    if settings.behind_proxy and request:
+        # Check X-Forwarded-Proto header to determine if we're on HTTPS
+        forwarded_proto = request.headers.get("x-forwarded-proto", "")
+        return forwarded_proto == "https"
+    return False
 
 
 async def _matches_resource_identity(
@@ -171,9 +177,14 @@ async def plex_login(request: Request):
     """Begin Plex OAuth: create a PIN and redirect the user to plex.tv.
 
     Rate-limited to prevent PIN enumeration attacks: max 10 PIN requests per IP per 5 minutes.
+
+    Accepts `?setup=true` query parameter to indicate this is part of initial setup.
     """
     if not settings.require_auth:
         return RedirectResponse("/")
+
+    # Check if this is a setup flow
+    setup_mode = request.query_params.get("setup") == "true"
 
     # Rate-limit PIN generation attempts per client IP
     # Only trust X-Forwarded-For when behind a configured reverse proxy
@@ -259,10 +270,21 @@ async def plex_login(request: Request):
         f"{pin_id}:{pin_code}",
         max_age=300,
         httponly=True,
-        secure=_cookie_secure(),
+        secure=_cookie_secure(request),
         samesite="lax",
         path="/",
     )
+    # Store setup mode in a cookie to preserve it through the OAuth flow
+    if setup_mode:
+        resp.set_cookie(
+            "plex_setup_mode",
+            "true",
+            max_age=300,
+            httponly=True,
+            secure=_cookie_secure(request),
+            samesite="lax",
+            path="/",
+        )
     return resp
 
 
@@ -274,6 +296,9 @@ async def plex_callback(
     if not settings.require_auth:
         return RedirectResponse("/")
 
+    # Check if this is a setup flow
+    setup_mode = request.cookies.get("plex_setup_mode") == "true"
+
     # ── 1. Retrieve the PIN credentials from the temporary cookie ──────
     pin_data = request.cookies.get("plex_pin_data") if request else None
     if not pin_data:
@@ -282,6 +307,7 @@ async def plex_callback(
     def _fail(reason: str) -> RedirectResponse:
         resp = RedirectResponse(f"/login?error={reason}")
         resp.delete_cookie("plex_pin_data", path="/")
+        resp.delete_cookie("plex_setup_mode", path="/")
         return resp
 
     try:
@@ -383,18 +409,22 @@ async def plex_callback(
         ttl_hours=settings.session_ttl_hours,
     )
 
-    resp = RedirectResponse("/")
+    # Determine redirect target
+    redirect_target = "/setup?step=target" if setup_mode else "/"
+
+    resp = RedirectResponse(redirect_target)
     resp.set_cookie(
         SESSION_COOKIE,
         cookie_value,
         max_age=settings.session_ttl_hours * 3600,
         httponly=True,
-        secure=_cookie_secure(),
+        secure=_cookie_secure(request),
         samesite="lax",
         path="/",
     )
-    # Clear the temporary PIN cookie
+    # Clear the temporary cookies
     resp.delete_cookie("plex_pin_data", path="/")
+    resp.delete_cookie("plex_setup_mode", path="/")
 
     logger.info("User logged in: %s (%s)", username, plex_user_id)
     await log_event(

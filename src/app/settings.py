@@ -93,14 +93,22 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _validate_secret_key(self) -> Self:
-        # A short-but-present key is always rejected. An *empty* key is left
-        # to the startup gate in main.py (REQUIRE_AUTH=false is fine; failing
-        # closed at boot covers REQUIRE_AUTH=true), per the test contract.
-        if self.require_auth and self.secret_key and len(self.secret_key) < 32:
-            raise ValueError(
-                "REQUIRE_AUTH=true requires SECRET_KEY to be set to at least 32 characters. "
-                'Generate one with: python -c "import secrets; print(secrets.token_hex(32))"'
-            )
+        # A present-but-too-short key is always rejected. An *empty* key is
+        # allowed here: the working key may still come from the config table,
+        # which is only read after import, and a fresh production install must
+        # be able to boot into the setup wizard to store one. Presence is
+        # enforced by the startup gates once DB settings are loaded.
+        if self.secret_key and len(self.secret_key) < 32:
+            if self.app_env == "production":
+                raise ValueError(
+                    "APP_ENV=production requires SECRET_KEY to be at least 32 characters. "
+                    'Generate one with: python -c "import secrets; print(secrets.token_hex(32))"'
+                )
+            if self.require_auth:
+                raise ValueError(
+                    "REQUIRE_AUTH=true requires SECRET_KEY to be at least 32 characters. "
+                    'Generate one with: python -c "import secrets; print(secrets.token_hex(32))"'
+                )
         return self
 
     # App
@@ -131,13 +139,23 @@ class Settings(BaseSettings):
         decrypted here before being applied to the settings object.
         """
         from src.app.constants import SENSITIVE_CONFIG_KEYS
-        from src.app.services.crypto import DecryptionError, decrypt_token
+        from src.app.services.crypto import DecryptionError, decrypt_boot_token, decrypt_token
 
-        for key, value in overrides.items():
+        # Apply the secret key first so dependent values (and the startup
+        # gate) see the working key; config row order is not guaranteed.
+        items = sorted(overrides.items(), key=lambda item: item[0] != "secret_key")
+
+        for key, value in items:
             if key in self.model_fields:
                 if key in SENSITIVE_CONFIG_KEYS:
                     try:
-                        value = decrypt_token(value)
+                        # The secret key itself is wrapped with the boot
+                        # (deployment) key; everything else uses the working
+                        # key it holds.
+                        if key == "secret_key":
+                            value = decrypt_boot_token(value)
+                        else:
+                            value = decrypt_token(value)
                     except DecryptionError:
                         logger.warning(
                             "Failed to decrypt config key '%s' — falling back to env default. "

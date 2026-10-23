@@ -1,6 +1,6 @@
-import { AlertCircle, CheckCircle2, Loader, Lock } from "lucide-react";
+import { AlertCircle, CheckCircle2, Key, Loader, Lock, RotateCcw } from "lucide-react";
 import { useEffect, useState } from "react";
-import { settingsAPI, type AppSettings, type SettingsUpdate } from "../api/settings";
+import { type AppSettings, settingsAPI } from "../api/settings";
 import { Button } from "../components/ui/Button";
 import { getErrorMessage } from "../lib/utils";
 
@@ -10,11 +10,11 @@ export function SecuritySettingsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [rotating, setRotating] = useState(false);
+  const [rotateSuccess, setRotateSuccess] = useState<string | null>(null);
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{ require_auth: boolean }>({
     require_auth: true,
-    app_url: "",
-    plex_client_id: "",
   });
 
   useEffect(() => {
@@ -24,8 +24,6 @@ export function SecuritySettingsPage() {
         setSettings(data);
         setFormData({
           require_auth: data.require_auth,
-          app_url: data.app_url,
-          plex_client_id: data.plex_client_id,
         });
       } catch (err) {
         setError(getErrorMessage(err));
@@ -37,10 +35,7 @@ export function SecuritySettingsPage() {
     loadSettings();
   }, []);
 
-  const handleInputChange = (
-    field: keyof typeof formData,
-    value: string | boolean
-  ) => {
+  const handleInputChange = (field: "require_auth", value: boolean) => {
     setFormData((prev) => ({
       ...prev,
       [field]: value,
@@ -54,10 +49,8 @@ export function SecuritySettingsPage() {
     setSaving(true);
 
     try {
-      const updateData: SettingsUpdate = {
+      const updateData = {
         require_auth: formData.require_auth,
-        app_url: formData.app_url,
-        plex_client_id: formData.plex_client_id,
       };
 
       await settingsAPI.updateSettings(updateData);
@@ -67,6 +60,40 @@ export function SecuritySettingsPage() {
       setError(getErrorMessage(err));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleRotateSecretKey = async () => {
+    setError(null);
+    setRotateSuccess(null);
+    setRotating(true);
+
+    try {
+      const data = await settingsAPI.rotateSecretKey({});
+
+      if (data.new_secret_key) {
+        setRotateSuccess(data.new_secret_key);
+      } else {
+        setSuccess(true);
+        setTimeout(() => setSuccess(false), 3000);
+      }
+
+      // Refresh settings to update secret_key_set status
+      const freshSettings = await settingsAPI.getSettings();
+      setSettings(freshSettings);
+    } catch (err) {
+      setError(getErrorMessage(err, "Failed to rotate secret key"));
+    } finally {
+      setRotating(false);
+    }
+  };
+
+  const handleCopyNewKey = () => {
+    if (rotateSuccess) {
+      navigator.clipboard.writeText(rotateSuccess);
+      setRotateSuccess(null);
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 3000);
     }
   };
 
@@ -105,6 +132,28 @@ export function SecuritySettingsPage() {
           </div>
         )}
 
+        {rotateSuccess && (
+          <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-3">
+            <div className="flex items-center gap-3">
+              <Key className="h-5 w-5 text-blue-600 shrink-0" />
+              <div className="flex-1">
+                <p className="font-medium text-blue-800">New Secret Key Generated</p>
+                <p className="text-sm text-blue-700">
+                  Copy this key immediately — it will not be shown again.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <code className="flex-1 bg-blue-100 px-3 py-2 rounded text-sm font-mono break-all text-blue-900">
+                {rotateSuccess}
+              </code>
+              <Button onClick={handleCopyNewKey} variant="secondary" size="sm">
+                Copy
+              </Button>
+            </div>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Secret Key Status */}
           <div className="bg-bg-surface rounded-lg border border-border p-6">
@@ -120,24 +169,42 @@ export function SecuritySettingsPage() {
               ) : (
                 <>
                   <AlertCircle className="h-5 w-5 text-yellow-600" />
-                  <span className="text-sm text-fg-muted">
-                    Secret key is not configured
-                  </span>
+                  <span className="text-sm text-fg-muted">Secret key is not configured</span>
                 </>
               )}
             </div>
             <p className="text-xs text-fg-muted mt-3">
-              The secret key is used to encrypt sensitive credentials at rest and sign session cookies.
-              It cannot be viewed or changed via this interface.
+              The secret key is used to encrypt sensitive credentials at rest and sign session
+              cookies. It cannot be viewed or changed via this interface.
             </p>
+            <div className="mt-4 pt-4 border-t border-border">
+              <Button
+                type="button"
+                onClick={handleRotateSecretKey}
+                disabled={saving || rotating}
+                variant="secondary"
+                icon={<RotateCcw size={14} />}
+                className="gap-2"
+              >
+                {rotating ? (
+                  <>
+                    <Loader className="h-4 w-4 animate-spin" />
+                    Rotating...
+                  </>
+                ) : (
+                  "Rotate Secret Key"
+                )}
+              </Button>
+              <p className="text-xs text-fg-muted ml-2">
+                Generates a new secret key and re-encrypts all sensitive config.
+              </p>
+            </div>
           </div>
 
           {/* Require Auth */}
           <div className="bg-bg-surface rounded-lg border border-border p-6">
             <div className="flex items-center justify-between mb-3">
-              <label className="text-sm font-medium text-fg">
-                Require Authentication
-              </label>
+              <label className="text-sm font-medium text-fg">Require Authentication</label>
               <div className="flex items-center gap-3">
                 <input
                   type="checkbox"
@@ -146,7 +213,13 @@ export function SecuritySettingsPage() {
                   className="rounded border-border cursor-pointer w-4 h-4"
                   disabled={saving}
                 />
-                <span className={formData.require_auth ? "text-green-600 text-sm font-medium" : "text-fg-muted text-sm"}>
+                <span
+                  className={
+                    formData.require_auth
+                      ? "text-green-600 text-sm font-medium"
+                      : "text-fg-muted text-sm"
+                  }
+                >
                   {formData.require_auth ? "Enabled" : "Disabled"}
                 </span>
               </div>
@@ -159,42 +232,6 @@ export function SecuritySettingsPage() {
                 ⚠️ Authentication is disabled. The application is publicly accessible without login.
               </p>
             )}
-          </div>
-
-          {/* App URL */}
-          <div className="bg-bg-surface rounded-lg border border-border p-6">
-            <label className="block text-sm font-medium text-fg mb-2">
-              App URL
-            </label>
-            <input
-              type="url"
-              value={formData.app_url}
-              onChange={(e) => handleInputChange("app_url", e.target.value)}
-              placeholder="https://ampy3.example.com"
-              className="w-full px-3 py-2 border border-border rounded-md bg-bg text-fg text-sm"
-              disabled={saving}
-            />
-            <p className="text-xs text-fg-muted mt-2">
-              Public URL where this application is accessible
-            </p>
-          </div>
-
-          {/* Plex Client ID */}
-          <div className="bg-bg-surface rounded-lg border border-border p-6">
-            <label className="block text-sm font-medium text-fg mb-2">
-              Plex Client ID
-            </label>
-            <input
-              type="text"
-              value={formData.plex_client_id}
-              onChange={(e) => handleInputChange("plex_client_id", e.target.value)}
-              placeholder="ampy3-client"
-              className="w-full px-3 py-2 border border-border rounded-md bg-bg text-fg text-sm"
-              disabled={saving}
-            />
-            <p className="text-xs text-fg-muted mt-2">
-              Unique identifier for this Plex application
-            </p>
           </div>
 
           <div className="flex gap-3 pt-4">

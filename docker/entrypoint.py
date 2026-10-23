@@ -17,21 +17,50 @@ except ImportError:
 
 def build_database_url() -> str:
     """Construct DATABASE_URL from environment variables.
-    
+
     DATABASE_USERNAME and DATABASE_PASSWORD are required.
     Database host and port are hardcoded.
     """
     username = os.environ.get("DATABASE_USERNAME")
     password = os.environ.get("DATABASE_PASSWORD")
-    
+
     if not username or not password:
         raise ValueError("DATABASE_USERNAME and DATABASE_PASSWORD env vars are required")
-    
+
     host = "postgres"
     port = "5432"
     db = "ampy3"
-    
-    return f"postgresql://{username}:{password}@{host}:{port}/{db}"
+
+    # Percent-encode credentials so reserved characters do not break the URL.
+    # ``quote`` (not ``quote_plus``) is required for URL userinfo: ``+`` is a
+    # literal plus, not a space.
+    from urllib.parse import quote
+
+    encoded_username = quote(username, safe="")
+    encoded_password = quote(password, safe="")
+
+    return f"postgresql://{encoded_username}:{encoded_password}@{host}:{port}/{db}"
+
+
+def parse_database_url(database_url: str) -> tuple[str, str, str, int, str]:
+    """Split a PostgreSQL URL into (user, password, host, port, db).
+
+    ``urllib.parse`` does not percent-decode the userinfo components, so they
+    are unquoted explicitly here.
+    """
+    from urllib.parse import unquote, urlparse
+
+    parsed = urlparse(database_url)
+    if parsed.scheme != "postgresql":
+        raise ValueError(f"Invalid DATABASE_URL scheme: {database_url}")
+
+    return (
+        unquote(parsed.username or ""),
+        unquote(parsed.password or ""),
+        parsed.hostname or "postgres",
+        parsed.port or 5432,
+        parsed.path.lstrip("/") or "ampy3",
+    )
 
 
 def wait_for_database(max_retries: int = 30, retry_delay: int = 1) -> bool:
@@ -45,18 +74,12 @@ def wait_for_database(max_retries: int = 30, retry_delay: int = 1) -> bool:
         print(f"ERROR: {e}", file=sys.stderr)
         return False
 
-    # Parse connection string: postgresql://user:password@host:port/database
-    parts = database_url.replace("postgresql://", "").split("@")
-    if len(parts) != 2:
-        print(f"ERROR: Invalid DATABASE_URL format: {database_url}", file=sys.stderr)
+    # Parse connection string using urllib.parse for robustness
+    try:
+        user, password, host, port, db = parse_database_url(database_url)
+    except ValueError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
         return False
-
-    user_pass, host_db = parts
-    user, password = user_pass.split(":", 1) if ":" in user_pass else (user_pass, "")
-    host, port, db = (host_db + ":5432").split(":")[0], "5432", host_db.split("/")[-1]
-
-    if ":" in host_db.split("/")[0]:
-        host, port = host_db.split("/")[0].rsplit(":", 1)
 
     print(f"Waiting for PostgreSQL at {host}:{port}...", file=sys.stderr)
 
@@ -71,7 +94,7 @@ def wait_for_database(max_retries: int = 30, retry_delay: int = 1) -> bool:
                 import subprocess
 
                 subprocess.run(
-                    ["pg_isready", "-h", host, "-p", port, "-U", user],
+                    ["pg_isready", "-h", host, "-p", str(port), "-U", user],
                     check=True,
                     capture_output=True,
                 )
@@ -97,18 +120,17 @@ def get_proxy_config() -> tuple[bool, list[str]]:
     """
     try:
         database_url = build_database_url()
-        
+
         if not psycopg:
             print("WARNING: psycopg not available, skipping proxy config", file=sys.stderr)
             return False, []
 
-        # Parse connection string
-        parts = database_url.replace("postgresql://", "").split("@")
-        user_pass, host_db = parts
-        user, password = user_pass.split(":", 1) if ":" in user_pass else (user_pass, "")
-        host = host_db.split(":")[0]
-        port = host_db.split(":")[1].split("/")[0] if ":" in host_db.split("/")[0] else "5432"
-        db = host_db.split("/")[-1]
+        # Parse connection string using urllib.parse for robustness
+        try:
+            user, password, host, port, db = parse_database_url(database_url)
+        except ValueError as e:
+            print(f"WARNING: {e}", file=sys.stderr)
+            return False, []
 
         conn = psycopg.connect(user=user, password=password, host=host, port=port, dbname=db)
         cursor = conn.cursor()
@@ -179,17 +201,16 @@ def check_setup_required() -> bool:
     """Check if initial setup is needed (secret_key not in config table)."""
     try:
         database_url = build_database_url()
-        
+
         if not psycopg:
             return True
 
-        # Parse connection string
-        parts = database_url.replace("postgresql://", "").split("@")
-        user_pass, host_db = parts
-        user, password = user_pass.split(":", 1) if ":" in user_pass else (user_pass, "")
-        host = host_db.split(":")[0]
-        port = host_db.split(":")[1].split("/")[0] if ":" in host_db.split("/")[0] else "5432"
-        db = host_db.split("/")[-1]
+        # Parse connection string using urllib.parse for robustness
+        try:
+            user, password, host, port, db = parse_database_url(database_url)
+        except ValueError as e:
+            print(f"WARNING: {e}", file=sys.stderr)
+            return True
 
         conn = psycopg.connect(user=user, password=password, host=host, port=port, dbname=db)
         cursor = conn.cursor()

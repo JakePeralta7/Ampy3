@@ -1,11 +1,11 @@
 import { AlertCircle, CheckCircle2, Database, Loader } from "lucide-react";
 import { useEffect, useState } from "react";
-import { settingsAPI, type AppSettings, type SettingsUpdate } from "../api/settings";
+import { type AppSettings, type SettingsUpdate, settingsAPI } from "../api/settings";
 import { Button } from "../components/ui/Button";
 import { getErrorMessage } from "../lib/utils";
 
 export function ServerSettingsPage() {
-  const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [_settings, setSettings] = useState<AppSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,10 +35,7 @@ export function ServerSettingsPage() {
     loadSettings();
   }, []);
 
-  const handleInputChange = (
-    field: keyof typeof formData,
-    value: string
-  ) => {
+  const handleInputChange = (field: keyof typeof formData, value: string) => {
     setFormData((prev) => ({
       ...prev,
       [field]: value,
@@ -109,9 +106,7 @@ export function ServerSettingsPage() {
             <h3 className="font-semibold text-fg mb-4">Application</h3>
 
             <div className="mb-4">
-              <label className="block text-sm font-medium text-fg mb-2">
-                App URL
-              </label>
+              <label className="block text-sm font-medium text-fg mb-2">App URL</label>
               <input
                 type="url"
                 value={formData.app_url}
@@ -126,9 +121,7 @@ export function ServerSettingsPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-fg mb-2">
-                Plex Client ID
-              </label>
+              <label className="block text-sm font-medium text-fg mb-2">Plex Client ID</label>
               <input
                 type="text"
                 value={formData.plex_client_id}
@@ -147,7 +140,8 @@ export function ServerSettingsPage() {
           <div className="bg-bg-surface rounded-lg border border-border p-6">
             <h3 className="font-semibold text-fg mb-4">Database</h3>
             <p className="text-sm text-fg-muted bg-bg-muted p-3 rounded">
-              ℹ️ Database connection is configured at deployment time via environment variables (DATABASE_USERNAME, DATABASE_PASSWORD) and cannot be changed in the UI.
+              ℹ️ Database connection is configured at deployment time via environment variables
+              (DATABASE_USERNAME, DATABASE_PASSWORD) and cannot be changed in the UI.
             </p>
           </div>
 

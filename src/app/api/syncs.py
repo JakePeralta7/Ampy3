@@ -239,10 +239,12 @@ async def _discard_unenqueued_sync(
     try:
         async with AsyncSessionLocal() as session:
             if schedule_id is None:
+                # Ad-hoc sync: delete the record we created
                 record = await session.get(ScheduledPlaylistSync, sync_id)
                 if record is not None:
                     await session.delete(record)
             else:
+                # Scheduled sync: restore the previous execution_id
                 record = await session.get(ScheduledPlaylistSync, schedule_id)
                 if record is not None:
                     record.execution_id = previous_execution_id

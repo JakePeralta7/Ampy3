@@ -149,6 +149,7 @@ async def test_ws_authenticate_allows_local_user_when_auth_disabled(monkeypatch)
 
 async def test_ws_authenticate_rejects_missing_session(monkeypatch):
     """With REQUIRE_AUTH=true a missing/invalid session is rejected."""
+    monkeypatch.setattr(ws_api.settings, "secret_key", "a" * 32)
     monkeypatch.setattr(ws_api.settings, "require_auth", True)
     monkeypatch.setattr(ws_api, "verify_session", AsyncMock(return_value=None))
 
@@ -157,6 +158,7 @@ async def test_ws_authenticate_rejects_missing_session(monkeypatch):
 
 async def test_ws_authenticate_rejects_broken_session(monkeypatch):
     """A raising session verifier must not authenticate the connection."""
+    monkeypatch.setattr(ws_api.settings, "secret_key", "a" * 32)
     monkeypatch.setattr(ws_api.settings, "require_auth", True)
     monkeypatch.setattr(ws_api, "verify_session", AsyncMock(side_effect=ValueError("bad cookie")))
 
@@ -165,6 +167,7 @@ async def test_ws_authenticate_rejects_broken_session(monkeypatch):
 
 async def test_ws_authenticate_returns_session_user(monkeypatch):
     """A valid session yields the session user."""
+    monkeypatch.setattr(ws_api.settings, "secret_key", "a" * 32)
     monkeypatch.setattr(ws_api.settings, "require_auth", True)
     monkeypatch.setattr(
         ws_api,
@@ -183,6 +186,7 @@ async def test_ws_syncs_closes_unauthorized_connection(monkeypatch):
     The socket is accepted first: a close frame can only be delivered after
     the handshake, otherwise the client only sees a bare HTTP 403.
     """
+    monkeypatch.setattr(ws_api.settings, "secret_key", "a" * 32)
     monkeypatch.setattr(ws_api.settings, "require_auth", True)
     monkeypatch.setattr(ws_api, "verify_session", AsyncMock(return_value=None))
 
@@ -208,6 +212,7 @@ async def test_ws_syncs_connects_without_auth_when_disabled(monkeypatch):
 
 async def test_ws_pipeline_rejects_non_owner(monkeypatch):
     """Only the owner of a sync may subscribe to its pipeline channel."""
+    monkeypatch.setattr(ws_api.settings, "secret_key", "a" * 32)
     monkeypatch.setattr(ws_api.settings, "require_auth", True)
     monkeypatch.setattr(
         ws_api, "verify_session", AsyncMock(return_value={"plex_user_id": "user-2"})
@@ -227,6 +232,7 @@ async def test_ws_pipeline_rejects_non_owner(monkeypatch):
 
 async def test_ws_pipeline_rejects_invalid_sync_id(monkeypatch):
     """A non-numeric sync id is rejected before touching the database."""
+    monkeypatch.setattr(ws_api.settings, "secret_key", "a" * 32)
     monkeypatch.setattr(ws_api.settings, "require_auth", True)
     monkeypatch.setattr(
         ws_api, "verify_session", AsyncMock(return_value={"plex_user_id": "user-1"})
@@ -241,6 +247,7 @@ async def test_ws_pipeline_rejects_invalid_sync_id(monkeypatch):
 
 async def test_ws_pipeline_allows_owner(monkeypatch):
     """The owner of a sync may subscribe to its pipeline channel."""
+    monkeypatch.setattr(ws_api.settings, "secret_key", "a" * 32)
     monkeypatch.setattr(ws_api.settings, "require_auth", True)
     monkeypatch.setattr(
         ws_api, "verify_session", AsyncMock(return_value={"plex_user_id": "user-1"})
@@ -423,21 +430,55 @@ def test_unknown_settings_keys_are_ignored():
 def test_production_without_secret_key_fails_the_startup_gate(monkeypatch):
     """APP_ENV=production without a SECRET_KEY must refuse to boot."""
     from src import main
+    from src.app.settings import Settings
 
-    monkeypatch.setattr(main.settings, "app_env", "production")
-    monkeypatch.setattr(main.settings, "secret_key", "")
+    # Construction is allowed: the key may still come from the config table.
+    test_settings = Settings(
+        _env_file=None,
+        app_env="production",
+        require_auth=False,
+        secret_key="",
+        database_username="test",
+        database_password="test",
+    )
+    monkeypatch.setattr(main, "settings", test_settings)
 
-    with pytest.raises(RuntimeError, match="SECRET_KEY"):
+    with pytest.raises(RuntimeError, match="APP_ENV=production requires SECRET_KEY"):
         main.enforce_startup_gate()
+
+
+def test_production_allows_unconfigured_first_boot(monkeypatch):
+    """A fresh production install may boot into the setup wizard."""
+    from src import main
+    from src.app.settings import Settings
+
+    test_settings = Settings(
+        _env_file=None,
+        app_env="production",
+        require_auth=False,
+        secret_key="",
+        database_username="test",
+        database_password="test",
+    )
+    monkeypatch.setattr(main, "settings", test_settings)
+
+    main.enforce_startup_gate(allow_unconfigured=True)
 
 
 def test_production_with_secret_key_passes_the_startup_gate(monkeypatch):
     """A properly configured production instance starts."""
     from src import main
+    from src.app.settings import Settings
 
-    monkeypatch.setattr(main.settings, "app_env", "production")
-    monkeypatch.setattr(main.settings, "require_auth", False)
-    monkeypatch.setattr(main.settings, "secret_key", "k" * 32)
+    test_settings = Settings(
+        _env_file=None,
+        app_env="production",
+        require_auth=False,
+        secret_key="k" * 32,
+        database_username="test",
+        database_password="test",
+    )
+    monkeypatch.setattr(main, "settings", test_settings)
 
     main.enforce_startup_gate()
 
@@ -445,13 +486,21 @@ def test_production_with_secret_key_passes_the_startup_gate(monkeypatch):
 def test_require_auth_without_secret_key_fails_the_startup_gate(monkeypatch):
     """REQUIRE_AUTH=true always requires a SECRET_KEY."""
     from src import main
+    from src.app.settings import Settings
 
-    monkeypatch.setattr(main.settings, "app_env", "development")
-    monkeypatch.setattr(main.settings, "require_auth", True)
-    monkeypatch.setattr(main.settings, "secret_key", "")
+    # Construction is allowed: the key may still come from the config table.
+    test_settings = Settings(
+        _env_file=None,
+        app_env="development",
+        require_auth=True,
+        secret_key="",
+        database_username="test",
+        database_password="test",
+    )
+    monkeypatch.setattr(main, "settings", test_settings)
 
-    with pytest.raises(RuntimeError, match="SECRET_KEY"):
-        main.enforce_startup_gate()
+    with pytest.raises(RuntimeError, match="REQUIRE_AUTH=true requires SECRET_KEY"):
+        main.enforce_startup_gate(allow_unconfigured=True)
 
 
 def test_require_auth_gate_rejects_short_key():
@@ -530,6 +579,7 @@ class FakePlexClient:
 @pytest.fixture
 def plex_login_env(monkeypatch):
     """Patch out everything plex_login touches except the rate limiter."""
+    monkeypatch.setattr(auth_router.settings, "secret_key", "a" * 32)
     monkeypatch.setattr(auth_router.settings, "require_auth", True)
     monkeypatch.setattr(auth_router, "_get_client_id", AsyncMock(return_value="client-id"))
     monkeypatch.setattr(auth_router.httpx, "AsyncClient", FakePlexClient)

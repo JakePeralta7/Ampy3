@@ -35,7 +35,9 @@ export function NetworkSettingsPage() {
               <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
               <div>
                 <div className="font-medium">Restart required</div>
-                <p className="text-sm">Changes to proxy settings require restarting the container to take effect.</p>
+                <p className="text-sm">
+                  Changes to proxy settings require restarting the container to take effect.
+                </p>
               </div>
             </div>
           </Alert>
@@ -54,9 +56,9 @@ export function NetworkSettingsPage() {
                 </span>
               </label>
               <p className="text-xs text-fg-muted ml-7">
-                Enable when Ampy3 runs behind a reverse proxy. Allows the app to read X-Forwarded-For
-                headers to identify the real client IP for rate limiting. Only trust this header when
-                the request originates from a trusted proxy IP.
+                Enable when Ampy3 runs behind a reverse proxy. Allows the app to read
+                X-Forwarded-For headers to identify the real client IP for rate limiting. Only trust
+                this header when the request originates from a trusted proxy IP.
               </p>
             </div>
 
@@ -83,7 +85,8 @@ export function NetworkSettingsPage() {
                 />
                 <p className="text-xs text-fg-muted">
                   Enter one CIDR range per line. Only requests from these IP ranges will have their
-                  X-Forwarded-For headers trusted. Examples: 10.0.0.0/8, 192.168.1.0/24, 172.17.0.1/32
+                  X-Forwarded-For headers trusted. Examples: 10.0.0.0/8, 192.168.1.0/24,
+                  172.17.0.1/32
                 </p>
 
                 {values.behind_proxy && values.trusted_proxies.length === 0 && (
@@ -92,7 +95,11 @@ export function NetworkSettingsPage() {
                       <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
                       <div>
                         <div className="font-medium">Warning: No trusted proxies configured</div>
-                        <p className="text-sm">Enabling 'Behind reverse proxy' without configuring trusted IP ranges means the proxy headers will not be trusted, and rate limiting will not work properly for proxied clients.</p>
+                        <p className="text-sm">
+                          Enabling 'Behind reverse proxy' without configuring trusted IP ranges
+                          means the proxy headers will not be trusted, and rate limiting will not
+                          work properly for proxied clients.
+                        </p>
                       </div>
                     </div>
                   </Alert>
@@ -110,9 +117,7 @@ export function NetworkSettingsPage() {
             >
               {saving ? "Saving..." : "Save settings"}
             </Button>
-            {!hasChanges && (
-              <span className="text-xs text-fg-muted">No changes to save</span>
-            )}
+            {!hasChanges && <span className="text-xs text-fg-muted">No changes to save</span>}
           </div>
         </Card>
 
@@ -120,18 +125,18 @@ export function NetworkSettingsPage() {
           <h3 className="text-sm font-semibold text-fg">About reverse proxies</h3>
           <div className="text-xs text-fg-muted space-y-2">
             <p>
-              A reverse proxy (nginx, Traefik, Cloudflare) sits in front of Ampy3 and forwards requests
-              to it. When properly configured, the proxy adds X-Forwarded-For headers to indicate the
-              real client IP.
+              A reverse proxy (nginx, Traefik, Cloudflare) sits in front of Ampy3 and forwards
+              requests to it. When properly configured, the proxy adds X-Forwarded-For headers to
+              indicate the real client IP.
             </p>
             <p>
               Without proper configuration, all clients appear to come from the proxy's IP, causing
               rate-limit buckets to become useless (one bucket per proxy, not per client).
             </p>
             <p>
-              <strong>Security:</strong> Only enable proxy headers if your app is NOT directly reachable
-              from the internet. Otherwise, attackers can spoof X-Forwarded-For headers to bypass rate
-              limits and security checks.
+              <strong>Security:</strong> Only enable proxy headers if your app is NOT directly
+              reachable from the internet. Otherwise, attackers can spoof X-Forwarded-For headers to
+              bypass rate limits and security checks.
             </p>
             <p>
               See{" "}

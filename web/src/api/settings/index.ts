@@ -51,6 +51,12 @@ export interface SetupResponse {
   message: string;
 }
 
+export interface SecretKeyRotateResponse {
+  success: boolean;
+  message: string;
+  new_secret_key: string | null;
+}
+
 export interface SourceInfo {
   id: string;
   name: string;
@@ -89,6 +95,9 @@ export const settingsAPI = {
   updateSettings: (input: SettingsUpdate) => apiPut<AppSettings>("/v1/settings/", input),
 
   setup: (input: SetupRequest) => apiPost<SetupResponse>("/v1/settings/setup", input),
+
+  rotateSecretKey: (input: { new_secret_key?: string } = {}) =>
+    apiPost<SecretKeyRotateResponse>("/v1/settings/rotate-secret-key", input),
 
   getConfiguredTargets: () => apiGet<string[]>("/v1/targets/configured"),
 

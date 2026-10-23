@@ -1,6 +1,6 @@
 """Settings request/response schemas."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class SettingsUpdate(BaseModel):
@@ -13,14 +13,16 @@ class SettingsUpdate(BaseModel):
     ytmusic_auth: str | None = None
 
     # Infrastructure
-    yt_dlp_timeout: int | None = None
+    yt_dlp_timeout: int | None = Field(default=None, ge=1)
     celery_broker_url: str | None = None
-    celery_worker_concurrency: int | None = None
-    celery_log_level: str | None = None
-    log_format: str | None = None
-    source_playlist_cache_ttl_seconds: int | None = None
-    explore_cache_ttl_seconds: int | None = None
-    session_ttl_hours: int | None = None
+    celery_worker_concurrency: int | None = Field(default=None, ge=1, le=100)
+    celery_log_level: str | None = Field(
+        default=None, pattern="^(debug|info|warning|error|critical)$"
+    )
+    log_format: str | None = Field(default=None, pattern="^(json|console)$")
+    source_playlist_cache_ttl_seconds: int | None = Field(default=None, ge=1)
+    explore_cache_ttl_seconds: int | None = Field(default=None, ge=1)
+    session_ttl_hours: int | None = Field(default=None, ge=1, le=8760)
 
     # Network
     behind_proxy: bool | None = None

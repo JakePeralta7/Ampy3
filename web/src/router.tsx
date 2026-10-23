@@ -15,10 +15,10 @@ import { NetworkSettingsPage } from "./pages/NetworkSettings";
 import { RuleProgramPage } from "./pages/RuleProgram";
 import { SecuritySettingsPage } from "./pages/SecuritySettings";
 import { ServerSettingsPage } from "./pages/ServerSettings";
-import { UnifiedSetupPage } from "./pages/UnifiedSetup";
 import { SourcesPage } from "./pages/Sources";
 import { SyncsPage } from "./pages/Syncs";
 import { TargetsPage } from "./pages/Targets";
+import { UnifiedSetupPage } from "./pages/UnifiedSetup";
 
 const protectedServer = (element: React.ReactNode) => (
   <CheckSetup>

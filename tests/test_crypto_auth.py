@@ -54,10 +54,32 @@ class TestCrypto:
         import src.app.services.crypto as crypto_mod
 
         monkeypatch.setattr(crypto_mod, "_FERNET", None)
-        monkeypatch.setattr(crypto_mod, "_derive_key", lambda p: b"x" * 32)
+        monkeypatch.setattr(crypto_mod, "_derive_key", lambda p, secret_key=None: b"x" * 32)
 
         with pytest.raises(DecryptionError):
             decrypt_token(encrypted)
+
+    def test_boot_key_wrapping_survives_working_key_rotation(self, monkeypatch):
+        """The secret_key row stays decryptable after the working key rotates."""
+        import src.app.services.crypto as crypto_mod
+
+        monkeypatch.setattr(crypto_mod, "_BOOT_SECRET_KEY", None)
+        monkeypatch.setattr(crypto_mod, "_FERNET", None)
+        monkeypatch.setattr(crypto_mod.settings, "secret_key", "boot" * 8)
+
+        wrapped = crypto_mod.encrypt_boot_token("db-working-secret")
+        assert wrapped is not None
+
+        # Simulate rotating the working key and clearing the working caches.
+        monkeypatch.setattr(crypto_mod.settings, "secret_key", "rotated" * 8)
+        crypto_mod.reset_crypto_caches()
+
+        assert crypto_mod.decrypt_boot_token(wrapped) == "db-working-secret"
+        with pytest.raises(DecryptionError):
+            decrypt_token(wrapped)
+
+        # Leave the module caches clean for other tests.
+        crypto_mod.reset_crypto_caches()
 
     def test_session_signing_key_derivation(self):
         """Session signing key is derived consistently."""

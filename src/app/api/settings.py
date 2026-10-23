@@ -13,7 +13,15 @@ from src.app.db import AsyncSessionLocal
 from src.app.models import Config
 from src.app.schemas.settings import SettingsOut, SettingsUpdate
 from src.app.services.audit import log_event
-from src.app.services.crypto import DecryptionError, decrypt_token, encrypt_token
+from src.app.services.crypto import (
+    DecryptionError,
+    decrypt_boot_token,
+    decrypt_token,
+    encrypt_boot_token,
+    encrypt_token,
+    encrypt_token_with_key,
+    reset_crypto_caches,
+)
 from src.app.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -65,19 +73,34 @@ def _decrypt_plaintext(value: str) -> str:
 
 
 def _build_settings_out(overrides: dict[str, str]) -> SettingsOut:
+    import json
+
     from src.app.settings import settings
 
     def _parse_trusted_proxies(value: str) -> list[str]:
-        """Parse comma-separated CIDR list from config table."""
+        """Parse comma-separated CIDR list or JSON array from config table."""
         if not value or not value.strip():
             return []
-        return [ip.strip() for ip in value.split(",") if ip.strip()]
+        raw = value.strip()
+        if raw.startswith("["):
+            try:
+                parsed = json.loads(raw)
+            except ValueError:
+                logger.warning("trusted_proxies is not valid JSON — falling back to a plain list")
+            else:
+                return [str(item).strip() for item in parsed if str(item).strip()]
+        return [part.strip() for part in raw.split(",") if part.strip()]
 
     behind_proxy_str = overrides.get("behind_proxy", str(settings.behind_proxy).lower())
     behind_proxy = behind_proxy_str.lower() in ("true", "1", "yes")
 
     trusted_proxies_str = overrides.get("trusted_proxies", "")
     trusted_proxies = _parse_trusted_proxies(trusted_proxies_str)
+
+    sp_cache_default = str(settings.source_playlist_cache_ttl_seconds)
+    ex_cache_default = str(settings.explore_cache_ttl_seconds)
+    req_auth_default = str(settings.require_auth)
+    req_auth_val = overrides.get("require_auth", req_auth_default).lower()
 
     return SettingsOut(
         plex_host=overrides.get("plex_host", settings.plex_host),
@@ -94,15 +117,13 @@ def _build_settings_out(overrides: dict[str, str]) -> SettingsOut:
         celery_log_level=overrides.get("celery_log_level", settings.celery_log_level),
         log_format=overrides.get("log_format", settings.log_format),
         source_playlist_cache_ttl_seconds=int(
-            overrides.get("source_playlist_cache_ttl_seconds", str(settings.source_playlist_cache_ttl_seconds))
+            overrides.get("source_playlist_cache_ttl_seconds", sp_cache_default)
         ),
-        explore_cache_ttl_seconds=int(
-            overrides.get("explore_cache_ttl_seconds", str(settings.explore_cache_ttl_seconds))
-        ),
+        explore_cache_ttl_seconds=int(overrides.get("explore_cache_ttl_seconds", ex_cache_default)),
         session_ttl_hours=int(overrides.get("session_ttl_hours", str(settings.session_ttl_hours))),
         behind_proxy=behind_proxy,
         trusted_proxies=trusted_proxies,
-        require_auth=overrides.get("require_auth", str(settings.require_auth)).lower() in ("true", "1", "yes"),
+        require_auth=req_auth_val in ("true", "1", "yes"),
         app_url=overrides.get("app_url", settings.app_url),
         plex_client_id=overrides.get("plex_client_id", settings.plex_client_id),
         secret_key_set=bool(overrides.get("secret_key", settings.secret_key)),
@@ -151,9 +172,10 @@ async def setup_initial_config(body: SetupRequest):
         if existing and existing.value:
             raise HTTPException(status_code=409, detail="Setup already completed")
 
-        # Store initial config
+        # Store initial config. The secret is wrapped with the boot key so it
+        # can be recovered on the next start, before the working key is known.
         config_keys = {
-            "secret_key": encrypt_token(body.secret_key) or body.secret_key,
+            "secret_key": encrypt_boot_token(body.secret_key) or body.secret_key,
             "require_auth": str(body.require_auth).lower(),
         }
 
@@ -170,11 +192,132 @@ async def setup_initial_config(body: SetupRequest):
 
         await session.commit()
 
+    # Update in-memory settings object so subsequent requests see the new values
+    settings.secret_key = body.secret_key
+    settings.require_auth = body.require_auth
+    reset_crypto_caches()
+
     return SetupResponse(success=True, message="Setup completed. Please log in.")
 
 
 # ── Settings Endpoints ──────────────────────────────────────────────────
 
+
+class SecretKeyRotateRequest(BaseModel):
+    """Request to rotate the secret key."""
+
+    new_secret_key: str | None = None  # If not provided, auto-generate
+
+
+class SecretKeyRotateResponse(BaseModel):
+    """Response after rotating the secret key."""
+
+    success: bool
+    message: str
+    new_secret_key: str | None = None  # Only returned when auto-generated
+
+
+@router.post("/rotate-secret-key", response_model=SecretKeyRotateResponse)
+async def rotate_secret_key(
+    body: SecretKeyRotateRequest,
+    _user: dict[str, Any] = Depends(get_current_user),  # noqa: B008
+):
+    """Rotate the secret key and re-encrypt all sensitive config values.
+
+    If new_secret_key is not provided, a secure random key is generated.
+    The new key must be at least 32 characters.
+    """
+    from sqlalchemy import select
+
+    # Generate or validate new secret key
+    if body.new_secret_key is not None:
+        new_secret_key = body.new_secret_key
+        if len(new_secret_key) < 32:
+            raise HTTPException(
+                status_code=400,
+                detail="Secret key must be at least 32 characters",
+            )
+        auto_generated = False
+    else:
+        # Generate a 64-character hex string (32 random bytes)
+        import secrets
+
+        new_secret_key = secrets.token_hex(32)
+        auto_generated = True
+
+    async with AsyncSessionLocal() as session:
+        # Get all sensitive config keys that need re-encryption
+        stmt = select(Config).where(Config.key.in_(SENSITIVE_CONFIG_KEYS))
+        result = await session.execute(stmt)
+        rows = result.scalars().all()
+
+        # Decrypt all current values with the OLD (working) key. The
+        # ``secret_key`` row is boot-wrapped, so it uses the boot key.
+        decrypted_values: dict[str, str] = {}
+        for row in rows:
+            if row.value:
+                try:
+                    if row.key == "secret_key":
+                        decrypted_values[row.key] = decrypt_boot_token(row.value)
+                    else:
+                        decrypted_values[row.key] = decrypt_token(row.value)
+                except DecryptionError:
+                    # If decryption fails (e.g., different key), keep as-is.
+                    # This shouldn't happen in normal operation.
+                    logger.warning(f"Failed to decrypt {row.key} during secret key rotation")
+                    decrypted_values[row.key] = ""
+
+        # Encrypt every value with the NEW key. The ``secret_key`` row is
+        # special: it is wrapped with the boot (deployment) key so the next
+        # startup can recover it before the working key is known.
+        for key, plaintext in decrypted_values.items():
+            if not plaintext or key == "secret_key":
+                continue
+            encrypted = encrypt_token_with_key(plaintext, new_secret_key) or plaintext
+            row = next((r for r in rows if r.key == key), None)
+            if row:
+                row.value = encrypted
+                row.updated_at = datetime.now(UTC)
+            else:
+                session.add(Config(key=key, value=encrypted, updated_at=datetime.now(UTC)))
+
+        # Update the secret_key row itself
+        stmt = select(Config).where(Config.key == "secret_key")
+        result = await session.execute(stmt)
+        secret_row = result.scalar_one_or_none()
+
+        new_secret_key_encrypted = encrypt_boot_token(new_secret_key) or new_secret_key
+
+        if secret_row:
+            secret_row.value = new_secret_key_encrypted
+            secret_row.updated_at = datetime.now(UTC)
+        else:
+            session.add(
+                Config(
+                    key="secret_key",
+                    value=new_secret_key_encrypted,
+                    updated_at=datetime.now(UTC),
+                )
+            )
+
+        await session.commit()
+
+    # Switch the working key only after the new ciphertexts are committed.
+    settings.secret_key = new_secret_key
+    reset_crypto_caches()
+
+    await log_event(
+        event_type="settings.secret_key_rotated",
+        summary="Secret key rotated and sensitive config re-encrypted",
+        resource_type="settings",
+        details={"auto_generated": auto_generated},
+    )
+
+    return SecretKeyRotateResponse(
+        success=True,
+        message="Secret key rotated successfully. All sensitive config re-encrypted.",
+        new_secret_key=new_secret_key if auto_generated else None,
+    )
 
 
 @router.get("/", response_model=SettingsOut)
@@ -211,6 +354,14 @@ async def put_settings(
 
     if not incoming:
         raise HTTPException(status_code=400, detail="No settings provided")
+
+    # The secret key must not be changed in place: every other sensitive value
+    # is encrypted with it, so a plain write would make them undecryptable.
+    if "secret_key" in incoming:
+        raise HTTPException(
+            status_code=400,
+            detail="Use /api/v1/settings/rotate-secret-key to change the secret key",
+        )
 
     # Encrypt sensitive tokens before storage
     sensitive_keys_to_encrypt = SENSITIVE_CONFIG_KEYS

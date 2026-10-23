@@ -15,17 +15,53 @@ from src.app.settings import settings
 
 _FERNET: Fernet | None = None
 _SESSION_KEY: bytes | None = None
+# The key the process booted with. The ``secret_key`` config row is wrapped
+# with this key (the deployment SECRET_KEY), not with the DB-stored working
+# key: at boot the row must be decryptable before the working key is known.
+# Captured at import, which happens before DB overrides are applied.
+_BOOT_SECRET_KEY: str | None = settings.secret_key
 
 
-def _derive_key(purpose: bytes) -> bytes:
-    """Derive a 32-byte key from SECRET_KEY using HKDF with domain separation."""
+def reset_crypto_caches() -> None:
+    """Clear cached Fernet and session signing keys so they are re-derived
+    when the SECRET_KEY changes (e.g., after rotation).
+
+    The boot key is deliberately preserved: it wraps the ``secret_key`` row
+    and must stay stable across working-key rotations.
+    """
+    global _FERNET, _SESSION_KEY
+    _FERNET = None
+    _SESSION_KEY = None
+
+
+def _derive_key(purpose: bytes, secret_key: str | None = None) -> bytes:
+    """Derive a 32-byte key from SECRET_KEY using HKDF with domain separation.
+
+    Pass ``secret_key`` to derive from an explicit key instead of the
+    current working key.
+    """
     hkdf = HKDF(
         algorithm=hashes.SHA256(),
         length=32,
         salt=None,
         info=purpose,
     )
-    return hkdf.derive(settings.secret_key.encode())
+    key_material = settings.secret_key if secret_key is None else secret_key
+    return hkdf.derive(key_material.encode())
+
+
+def _fernet_for(secret_key: str) -> Fernet:
+    """Build a Fernet cipher for an explicit secret key."""
+    key = _derive_key(b"fernet-token-encryption", secret_key)
+    return Fernet(base64.urlsafe_b64encode(key))
+
+
+def _get_boot_fernet() -> Fernet:
+    """Get the cipher for the key this process booted with."""
+    global _BOOT_SECRET_KEY
+    if _BOOT_SECRET_KEY is None:
+        _BOOT_SECRET_KEY = settings.secret_key
+    return _fernet_for(_BOOT_SECRET_KEY)
 
 
 def _get_fernet() -> Fernet:
@@ -35,8 +71,7 @@ def _get_fernet() -> Fernet:
     """
     global _FERNET
     if _FERNET is None:
-        key = _derive_key(b"fernet-token-encryption")
-        _FERNET = Fernet(base64.urlsafe_b64encode(key))
+        _FERNET = _fernet_for(settings.secret_key)
     return _FERNET
 
 
@@ -71,7 +106,31 @@ def decrypt_token(encrypted: str) -> str:
     """
     if not encrypted:
         return encrypted
-    fernet = _get_fernet()
+    return _decrypt_with(_get_fernet(), encrypted)
+
+
+def encrypt_token_with_key(token: str | None, secret_key: str) -> str | None:
+    """Encrypt a token with an explicit key (used while rotating the key)."""
+    if not token:
+        return token
+    return _fernet_for(secret_key).encrypt(token.encode()).decode()
+
+
+def encrypt_boot_token(token: str | None) -> str | None:
+    """Encrypt a token with the boot key (wraps the ``secret_key`` row)."""
+    if not token:
+        return token
+    return _get_boot_fernet().encrypt(token.encode()).decode()
+
+
+def decrypt_boot_token(encrypted: str) -> str:
+    """Decrypt a token wrapped with the boot key (the ``secret_key`` row)."""
+    if not encrypted:
+        return encrypted
+    return _decrypt_with(_get_boot_fernet(), encrypted)
+
+
+def _decrypt_with(fernet: Fernet, encrypted: str) -> str:
     try:
         return fernet.decrypt(encrypted.encode()).decode()
     except InvalidToken:

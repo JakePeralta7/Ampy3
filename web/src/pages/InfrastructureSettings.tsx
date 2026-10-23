@@ -1,11 +1,11 @@
 import { AlertCircle, CheckCircle2, Loader } from "lucide-react";
 import { useEffect, useState } from "react";
-import { settingsAPI, type AppSettings, type SettingsUpdate } from "../api/settings";
+import { type AppSettings, type SettingsUpdate, settingsAPI } from "../api/settings";
 import { Button } from "../components/ui/Button";
 import { getErrorMessage } from "../lib/utils";
 
 export function InfrastructureSettingsPage() {
-  const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [_settings, setSettings] = useState<AppSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,10 +47,7 @@ export function InfrastructureSettingsPage() {
     loadSettings();
   }, []);
 
-  const handleInputChange = (
-    field: keyof typeof formData,
-    value: string | number
-  ) => {
+  const handleInputChange = (field: keyof typeof formData, value: string | number) => {
     setFormData((prev) => ({
       ...prev,
       [field]: value,
@@ -98,9 +95,7 @@ export function InfrastructureSettingsPage() {
       <div className="max-w-3xl mx-auto px-8 py-6">
         <div className="mb-8">
           <h2 className="text-2xl font-bold text-fg">Infrastructure</h2>
-          <p className="text-fg-muted mt-1">
-            Configure Celery workers, caching, and logging
-          </p>
+          <p className="text-fg-muted mt-1">Configure Celery workers, caching, and logging</p>
         </div>
 
         {error && (
@@ -117,12 +112,13 @@ export function InfrastructureSettingsPage() {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="bg-bg-surface rounded-lg border border-border p-6 space-y-6">
+        <form
+          onSubmit={handleSubmit}
+          className="bg-bg-surface rounded-lg border border-border p-6 space-y-6"
+        >
           {/* Celery Broker URL */}
           <div>
-            <label className="block text-sm font-medium text-fg mb-2">
-              Celery Broker URL
-            </label>
+            <label className="block text-sm font-medium text-fg mb-2">Celery Broker URL</label>
             <input
               type="text"
               value={formData.celery_broker_url}
@@ -138,28 +134,24 @@ export function InfrastructureSettingsPage() {
 
           {/* Worker Concurrency */}
           <div>
-            <label className="block text-sm font-medium text-fg mb-2">
-              Worker Concurrency
-            </label>
+            <label className="block text-sm font-medium text-fg mb-2">Worker Concurrency</label>
             <input
               type="number"
               min="1"
               max="100"
               value={formData.celery_worker_concurrency}
-              onChange={(e) => handleInputChange("celery_worker_concurrency", parseInt(e.target.value))}
+              onChange={(e) =>
+                handleInputChange("celery_worker_concurrency", parseInt(e.target.value, 10))
+              }
               className="w-full px-3 py-2 border border-border rounded-md bg-bg text-fg text-sm"
               disabled={saving}
             />
-            <p className="text-xs text-fg-muted mt-1">
-              Number of concurrent workers
-            </p>
+            <p className="text-xs text-fg-muted mt-1">Number of concurrent workers</p>
           </div>
 
           {/* Log Level */}
           <div>
-            <label className="block text-sm font-medium text-fg mb-2">
-              Celery Log Level
-            </label>
+            <label className="block text-sm font-medium text-fg mb-2">Celery Log Level</label>
             <select
               value={formData.celery_log_level}
               onChange={(e) => handleInputChange("celery_log_level", e.target.value)}
@@ -172,16 +164,12 @@ export function InfrastructureSettingsPage() {
               <option value="error">Error</option>
               <option value="critical">Critical</option>
             </select>
-            <p className="text-xs text-fg-muted mt-1">
-              Minimum log level for Celery workers
-            </p>
+            <p className="text-xs text-fg-muted mt-1">Minimum log level for Celery workers</p>
           </div>
 
           {/* Log Format */}
           <div>
-            <label className="block text-sm font-medium text-fg mb-2">
-              Log Format
-            </label>
+            <label className="block text-sm font-medium text-fg mb-2">Log Format</label>
             <select
               value={formData.log_format}
               onChange={(e) => handleInputChange("log_format", e.target.value)}
@@ -191,9 +179,7 @@ export function InfrastructureSettingsPage() {
               <option value="json">JSON (structured)</option>
               <option value="console">Console (human-readable)</option>
             </select>
-            <p className="text-xs text-fg-muted mt-1">
-              Output format for application logs
-            </p>
+            <p className="text-xs text-fg-muted mt-1">Output format for application logs</p>
           </div>
 
           {/* Source Playlist Cache TTL */}
@@ -205,7 +191,9 @@ export function InfrastructureSettingsPage() {
               type="number"
               min="1"
               value={formData.source_playlist_cache_ttl_seconds}
-              onChange={(e) => handleInputChange("source_playlist_cache_ttl_seconds", parseInt(e.target.value))}
+              onChange={(e) =>
+                handleInputChange("source_playlist_cache_ttl_seconds", parseInt(e.target.value, 10))
+              }
               className="w-full px-3 py-2 border border-border rounded-md bg-bg text-fg text-sm"
               disabled={saving}
             />
@@ -216,14 +204,14 @@ export function InfrastructureSettingsPage() {
 
           {/* Explore Cache TTL */}
           <div>
-            <label className="block text-sm font-medium text-fg mb-2">
-              Explore Cache TTL
-            </label>
+            <label className="block text-sm font-medium text-fg mb-2">Explore Cache TTL</label>
             <input
               type="number"
               min="1"
               value={formData.explore_cache_ttl_seconds}
-              onChange={(e) => handleInputChange("explore_cache_ttl_seconds", parseInt(e.target.value))}
+              onChange={(e) =>
+                handleInputChange("explore_cache_ttl_seconds", parseInt(e.target.value, 10))
+              }
               className="w-full px-3 py-2 border border-border rounded-md bg-bg text-fg text-sm"
               disabled={saving}
             />
@@ -234,14 +222,12 @@ export function InfrastructureSettingsPage() {
 
           {/* YT-DLP Timeout */}
           <div>
-            <label className="block text-sm font-medium text-fg mb-2">
-              YT-DLP Timeout
-            </label>
+            <label className="block text-sm font-medium text-fg mb-2">YT-DLP Timeout</label>
             <input
               type="number"
               min="1"
               value={formData.yt_dlp_timeout}
-              onChange={(e) => handleInputChange("yt_dlp_timeout", parseInt(e.target.value))}
+              onChange={(e) => handleInputChange("yt_dlp_timeout", parseInt(e.target.value, 10))}
               className="w-full px-3 py-2 border border-border rounded-md bg-bg text-fg text-sm"
               disabled={saving}
             />
@@ -252,20 +238,16 @@ export function InfrastructureSettingsPage() {
 
           {/* Session TTL */}
           <div>
-            <label className="block text-sm font-medium text-fg mb-2">
-              Session TTL
-            </label>
+            <label className="block text-sm font-medium text-fg mb-2">Session TTL</label>
             <input
               type="number"
               min="1"
               value={formData.session_ttl_hours}
-              onChange={(e) => handleInputChange("session_ttl_hours", parseInt(e.target.value))}
+              onChange={(e) => handleInputChange("session_ttl_hours", parseInt(e.target.value, 10))}
               className="w-full px-3 py-2 border border-border rounded-md bg-bg text-fg text-sm"
               disabled={saving}
             />
-            <p className="text-xs text-fg-muted mt-1">
-              User session timeout in hours
-            </p>
+            <p className="text-xs text-fg-muted mt-1">User session timeout in hours</p>
           </div>
 
           <div className="flex gap-3 pt-4 border-t border-border">

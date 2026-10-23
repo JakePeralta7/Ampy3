@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import { settingsAPI } from "../api/settings";
 import { getErrorMessage } from "../lib/utils";
 
-export interface UseNetworkSettingsReturn {
+export type UseNetworkSettingsReturn = {
   values: {
     behind_proxy: boolean;
     trusted_proxies: string[];
@@ -15,14 +15,23 @@ export interface UseNetworkSettingsReturn {
   loading: boolean;
   saving: boolean;
   hasChanges: boolean;
-  setField: (key: string, val: any) => void;
+  setField: {
+    (key: "behind_proxy", val: boolean): void;
+    (key: "trusted_proxies", val: string[]): void;
+  };
   save: () => Promise<void>;
   lastUpdated: Date | null;
-}
+};
 
 export function useNetworkSettings(): UseNetworkSettingsReturn {
-  const [values, setValues] = useState<{ behind_proxy: boolean; trusted_proxies: string[] }>({ behind_proxy: false, trusted_proxies: [] });
-  const [original, setOriginal] = useState<{ behind_proxy: boolean; trusted_proxies: string[] }>({ behind_proxy: false, trusted_proxies: [] });
+  const [values, setValues] = useState<{ behind_proxy: boolean; trusted_proxies: string[] }>({
+    behind_proxy: false,
+    trusted_proxies: [],
+  });
+  const [original, setOriginal] = useState<{ behind_proxy: boolean; trusted_proxies: string[] }>({
+    behind_proxy: false,
+    trusted_proxies: [],
+  });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -48,9 +57,12 @@ export function useNetworkSettings(): UseNetworkSettingsReturn {
     fetchSettings();
   }, []);
 
-  const setField = useCallback((key: string, val: any) => {
-    setValues((prev) => ({ ...prev, [key]: val }));
-  }, []);
+  const setField = useCallback(
+    (key: "behind_proxy" | "trusted_proxies", val: boolean | string[]) => {
+      setValues((prev) => ({ ...prev, [key]: val }));
+    },
+    [],
+  );
 
   const save = useCallback(async () => {
     setSaving(true);

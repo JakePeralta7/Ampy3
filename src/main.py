@@ -31,11 +31,13 @@ PUBLIC_PATHS = {
 SESSION_COOKIE = "ampy3_session"
 
 
-async def _load_settings_overrides() -> None:
+async def _load_settings_overrides() -> dict[str, str]:
     """Load user-editable settings from the config table and apply them.
 
     This merges DB-stored values over environment defaults. Sensitive keys
-    are decrypted before being applied to the settings object.
+    are decrypted before being applied to the settings object. Returns the raw
+    (still-encrypted) overrides so callers can tell whether the instance has
+    already been set up.
     """
     from src.app.db import AsyncSessionLocal
     from src.app.models import Config
@@ -52,26 +54,44 @@ async def _load_settings_overrides() -> None:
     if overrides:
         settings.load_overrides(overrides)
 
+    return overrides
 
-def enforce_startup_gate() -> None:
+
+def enforce_startup_gate(*, allow_unconfigured: bool = False) -> None:
     """Fail closed when the app is not configured with a usable SECRET_KEY.
 
     ``SECRET_KEY`` keys both the session signing and the at-rest token
     encryption, so an empty (or too short) key would silently encrypt
-    credentials with a well-known value. Production deployments must always
-    provide one; ``REQUIRE_AUTH=true`` requires it in every environment.
+    credentials with a well-known value.
+
+    The check runs *after* DB-stored settings are applied because the working
+    key lives in the ``config`` table. A fresh install has no key yet: set
+    ``allow_unconfigured=True`` so it can boot into the setup wizard. A
+    configured instance with an unusable key still fails hard.
     """
-    if settings.app_env == "production" and (
-        not settings.secret_key or len(settings.secret_key) < 32
-    ):
+    has_key = bool(settings.secret_key)
+    has_usable_key = has_key and len(settings.secret_key) >= 32
+
+    if has_usable_key:
+        return
+
+    if has_key:
         raise RuntimeError(
-            "APP_ENV=production requires SECRET_KEY (at least 32 characters). "
+            "SECRET_KEY must be at least 32 characters. "
             'Generate one with: python -c "import secrets; print(secrets.token_hex(32))"'
         )
 
-    if settings.require_auth and (not settings.secret_key or len(settings.secret_key) < 32):
+    # No key at all: REQUIRE_AUTH can never work, and a production install
+    # that has already been configured must not serve without its key.
+    if settings.require_auth:
         raise RuntimeError(
             "REQUIRE_AUTH=true requires SECRET_KEY (at least 32 characters). "
+            'Generate one with: python -c "import secrets; print(secrets.token_hex(32))"'
+        )
+
+    if settings.app_env == "production" and not allow_unconfigured:
+        raise RuntimeError(
+            "APP_ENV=production requires SECRET_KEY (at least 32 characters). "
             'Generate one with: python -c "import secrets; print(secrets.token_hex(32))"'
         )
 
@@ -81,28 +101,33 @@ def enforce_startup_gate() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Fail closed: production requires a SECRET_KEY so token encryption at
-    # rest is never keyed from a fixed, well-known value.
-    enforce_startup_gate()
-
     logger.info("Starting Ampy3 API...")
-
-    if not settings.require_auth:
-        logger.warning(
-            "REQUIRE_AUTH=false — the API is running WITHOUT authentication. "
-            "Do not expose this instance to untrusted networks."
-        )
 
     # Initialize database. Fail hard: an unreachable schema means every
     # request would 500 — refusing to start surfaces the problem immediately.
     await init_db()
     logger.info("Database initialized successfully.")
 
-    # Load DB-stored settings overrides (decrypts sensitive keys)
+    # Load DB-stored settings overrides (decrypts sensitive keys) *before*
+    # the secret-key gate: the working key normally lives in the config table.
     try:
-        await _load_settings_overrides()
+        overrides = await _load_settings_overrides()
+        configured = "secret_key" in overrides
     except Exception as e:
+        # Unknown config state: fail closed rather than assume a fresh install.
         logger.warning("Could not load settings overrides: %s", e)
+        configured = True
+
+    # Fail closed: production requires a SECRET_KEY so token encryption at
+    # rest is never keyed from a fixed, well-known value. A fresh install
+    # (no secret_key row yet) may boot so the setup wizard can store one.
+    enforce_startup_gate(allow_unconfigured=not configured)
+
+    if not settings.require_auth:
+        logger.warning(
+            "REQUIRE_AUTH=false — the API is running WITHOUT authentication. "
+            "Do not expose this instance to untrusted networks."
+        )
 
     # Purge expired sessions on startup
     try:
