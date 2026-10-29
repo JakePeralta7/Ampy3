@@ -32,7 +32,6 @@ class ConstantNode(NodeHandlerBase):
         return {"out": self._config.get("value", "")}
 
 
-@register_node("match_output")
-class MatchOutputNode(NodeHandlerBase):
-    async def execute(self, track: TrackMetadata, inputs: NodeInputs) -> NodeOutputs:
-        return {"out": inputs.get("in")}
+# ``match_output`` lives in nodes/matching.py — do not register it here as
+# well; a duplicate registration silently overwrites the handler and logs a
+# warning on every process start.
