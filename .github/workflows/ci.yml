@@ -98,9 +98,6 @@ jobs:
           DATABASE_HOST: localhost
           DATABASE_PORT: 5432
           DATABASE_NAME: ampy3
-          # The startup gate is fail-closed: APP_ENV defaults to "production"
-          # and requires a SECRET_KEY of >= 32 characters.
-          SECRET_KEY: ci-test-secret-key-0123456789abcdef
 
   docker-build:
     name: Docker build
@@ -142,4 +139,3 @@ jobs:
         env:
           DATABASE_USERNAME: ampy3
           DATABASE_PASSWORD: ci-smoke-test-password-123
-          SECRET_KEY: ci-smoke-secret-key-0123456789abcdef
