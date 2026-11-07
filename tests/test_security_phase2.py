@@ -35,7 +35,9 @@ class TestIdempotencyBasic:
         from sqlalchemy import inspect
 
         mapper = inspect(ScheduledPlaylistSync)
-        indexes = {i.name: i for i in mapper.mapped_table.indexes}
+        # SQLAlchemy 2.1+: use persist_selectable instead of mapped_table
+        table = mapper.persist_selectable
+        indexes = {i.name: i for i in table.indexes}
         assert "uq_sync_execution_per_user" in indexes
 
         index = indexes["uq_sync_execution_per_user"]
@@ -96,7 +98,8 @@ class TestIdempotencyBasic:
         from sqlalchemy import inspect
 
         mapper = inspect(ScheduledPlaylistSync)
-        indexes = {i.name: i for i in mapper.mapped_table.indexes}
+        table = mapper.persist_selectable
+        indexes = {i.name: i for i in table.indexes}
         index = indexes["uq_sync_execution_per_user"]
 
         # user_id is part of the index, so the same execution_id may exist
