@@ -18,11 +18,8 @@ from src.app.models import Config
 from src.app.schemas.settings import SettingsOut
 from src.app.services.crypto import (
     DecryptionError,
-    decrypt_boot_token,
     decrypt_token,
-    encrypt_boot_token,
     encrypt_token,
-    encrypt_token_with_key,
     reset_crypto_caches,
 )
 from src.app.settings import settings
@@ -171,10 +168,9 @@ class SettingsService:
             if existing and existing.value:
                 return False, "Setup already completed"
 
-            # Store initial config. The secret is wrapped with the boot key so it
-            # can be recovered on the next start, before the working key is known.
+            # Store initial config. secret_key is stored plaintext (it IS the master key).
             config_keys = {
-                "secret_key": encrypt_boot_token(secret_key) or secret_key,
+                "secret_key": secret_key,
                 "require_auth": str(require_auth).lower(),
             }
 
@@ -195,6 +191,10 @@ class SettingsService:
         settings.secret_key = secret_key
         settings.require_auth = require_auth
         reset_crypto_caches()
+
+        # Publish "app:configured" signal so worker can start
+        from src.app.services import get_valkey_client
+        await get_valkey_client().publish("app:configured", "1")
 
         return True, "Setup completed. Please log in."
 
@@ -294,6 +294,9 @@ class SettingsService:
         """Rotate the secret key and re-encrypt all sensitive config values.
 
         Returns (success, message, new_secret_key_if_auto_generated).
+
+        This uses the new secret_key to re-encrypt all tokens. The new key
+        becomes the primary encryption key.
         """
         # Generate or validate new secret key
         if new_secret_key is not None:
@@ -311,29 +314,24 @@ class SettingsService:
             result = await session.execute(stmt)
             rows = result.scalars().all()
 
-            # Decrypt all current values with the OLD (working) key. The
-            # ``secret_key`` row is boot-wrapped, so it uses the boot key.
+            # Decrypt all current values with the OLD working key
             decrypted_values: dict[str, str] = {}
             for row in rows:
                 if row.value:
                     try:
-                        if row.key == "secret_key":
-                            decrypted_values[row.key] = decrypt_boot_token(row.value)
-                        else:
-                            decrypted_values[row.key] = decrypt_token(row.value)
+                        decrypted_values[row.key] = decrypt_token(row.value)
                     except DecryptionError:
-                        # If decryption fails (e.g., different key), keep as-is.
-                        # This shouldn't happen in normal operation.
                         logger.warning("Failed to decrypt %s during secret key rotation", row.key)
                         decrypted_values[row.key] = ""
 
-            # Encrypt every value with the NEW key. The ``secret_key`` row is
-            # special: it is wrapped with the boot (deployment) key so the next
-            # startup can recover it before the working key is known.
+            # Switch the working key in memory, then re-encrypt all values
+            settings.secret_key = new_secret_key
+            reset_crypto_caches()
+
             for key, plaintext in decrypted_values.items():
-                if not plaintext or key == "secret_key":
+                if not plaintext:
                     continue
-                encrypted = encrypt_token_with_key(plaintext, new_secret_key) or plaintext
+                encrypted = encrypt_token(plaintext)
                 row = next((r for r in rows if r.key == key), None)
                 if row:
                     row.value = encrypted
@@ -341,29 +339,26 @@ class SettingsService:
                 else:
                     session.add(Config(key=key, value=encrypted, updated_at=datetime.now(UTC)))
 
-            # Update the secret_key row itself
+            # Update the secret_key row itself (stored plaintext)
             stmt = select(Config).where(Config.key == "secret_key")
             result = await session.execute(stmt)
             secret_row = result.scalar_one_or_none()
 
-            new_secret_key_encrypted = encrypt_boot_token(new_secret_key) or new_secret_key
-
             if secret_row:
-                secret_row.value = new_secret_key_encrypted
+                secret_row.value = new_secret_key
                 secret_row.updated_at = datetime.now(UTC)
             else:
                 session.add(
                     Config(
                         key="secret_key",
-                        value=new_secret_key_encrypted,
+                        value=new_secret_key,
                         updated_at=datetime.now(UTC),
                     )
                 )
 
             await session.commit()
 
-        # Switch the working key only after the new ciphertexts are committed.
-        settings.secret_key = new_secret_key
+        # Ensure crypto caches are reset with the new key
         reset_crypto_caches()
 
         return (

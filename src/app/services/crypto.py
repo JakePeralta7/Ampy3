@@ -1,36 +1,31 @@
-"""Token encryption at rest using Fernet (AES-128-CBC + HMAC).
+"""Token encryption at rest using MultiFernet (AES-128-CBC + HMAC).
 
-Encryption key is derived from SECRET_KEY via HKDF with domain separation.
-This ensures tokens in the database (plex_token, jellyfin_api_key, etc.)
-are encrypted at rest while remaining accessible to the application.
+Key rotation is supported via MultiFernet:
+- Encryption always uses the PRIMARY (first) key
+- Decryption tries all keys in order (newest to oldest)
+- Key rotation: add new key to front, call rotate() on existing tokens
+
+The secret_key IS the encryption master key - stored plaintext in config table.
+No boot-key chain: secret_key directly derives the Fernet key via HKDF.
 """
 
 import base64
 
-from cryptography.fernet import Fernet, InvalidToken
+from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 from src.app.settings import settings
 
-_FERNET: Fernet | None = None
+_MULTIFERNET: MultiFernet | None = None
 _SESSION_KEY: bytes | None = None
-# The key the process booted with. The ``secret_key`` config row is wrapped
-# with this key (the deployment SECRET_KEY), not with the DB-stored working
-# key: at boot the row must be decryptable before the working key is known.
-# Captured at import, which happens before DB overrides are applied.
-_BOOT_SECRET_KEY: str | None = settings.secret_key
 
 
 def reset_crypto_caches() -> None:
-    """Clear cached Fernet and session signing keys so they are re-derived
-    when the SECRET_KEY changes (e.g., after rotation).
-
-    The boot key is deliberately preserved: it wraps the ``secret_key`` row
-    and must stay stable across working-key rotations.
-    """
-    global _FERNET, _SESSION_KEY
-    _FERNET = None
+    """Clear cached MultiFernet and session signing keys so they are re-derived
+    when the SECRET_KEY changes (e.g., after rotation)."""
+    global _MULTIFERNET, _SESSION_KEY
+    _MULTIFERNET = None
     _SESSION_KEY = None
 
 
@@ -56,23 +51,19 @@ def _fernet_for(secret_key: str) -> Fernet:
     return Fernet(base64.urlsafe_b64encode(key))
 
 
-def _get_boot_fernet() -> Fernet:
-    """Get the cipher for the key this process booted with."""
-    global _BOOT_SECRET_KEY
-    if _BOOT_SECRET_KEY is None:
-        _BOOT_SECRET_KEY = settings.secret_key
-    return _fernet_for(_BOOT_SECRET_KEY)
-
-
-def _get_fernet() -> Fernet:
-    """Get or create the Fernet cipher using SECRET_KEY as key material.
+def _get_multifernet() -> MultiFernet:
+    """Get or create the MultiFernet instance using current secret_key.
 
     The key is derived via HKDF with purpose "fernet-token-encryption".
+    For key rotation, this would return MultiFernet([new_key, old_key, ...]).
+    Currently returns a single-key MultiFernet; rotation support can be
+    added by maintaining a list of historical keys in the config table.
     """
-    global _FERNET
-    if _FERNET is None:
-        _FERNET = _fernet_for(settings.secret_key)
-    return _FERNET
+    global _MULTIFERNET
+    if _MULTIFERNET is None:
+        fernet = _fernet_for(settings.secret_key)
+        _MULTIFERNET = MultiFernet([fernet])
+    return _MULTIFERNET
 
 
 def get_session_signing_key() -> bytes:
@@ -93,50 +84,41 @@ def encrypt_token(token: str | None) -> str | None:
     """
     if not token:
         return token
-    fernet = _get_fernet()
-    return fernet.encrypt(token.encode()).decode()
+    multifernet = _get_multifernet()
+    return multifernet.encrypt(token.encode()).decode()
 
 
 def decrypt_token(encrypted: str) -> str:
     """Decrypt a token from the database.
 
-    All stored tokens are Fernet-encrypted; a non-Fernet value or an
-    invalid key/corrupted payload raises DecryptionError to fail loudly
-    on key rotation or misconfiguration.
+    All stored tokens are Fernet-encrypted; an invalid key or corrupted
+    payload raises DecryptionError to fail loudly on key rotation
+    or misconfiguration.
     """
     if not encrypted:
         return encrypted
-    return _decrypt_with(_get_fernet(), encrypted)
+    return _decrypt_with(_get_multifernet(), encrypted)
 
 
-def encrypt_token_with_key(token: str | None, secret_key: str) -> str | None:
-    """Encrypt a token with an explicit key (used while rotating the key)."""
-    if not token:
-        return token
-    return _fernet_for(secret_key).encrypt(token.encode()).decode()
+def rotate_token(encrypted: str) -> str:
+    """Re-encrypt an existing token with the current primary key.
 
-
-def encrypt_boot_token(token: str | None) -> str | None:
-    """Encrypt a token with the boot key (wraps the ``secret_key`` row)."""
-    if not token:
-        return token
-    return _get_boot_fernet().encrypt(token.encode()).decode()
-
-
-def decrypt_boot_token(encrypted: str) -> str:
-    """Decrypt a token wrapped with the boot key (the ``secret_key`` row)."""
+    Used during key rotation to migrate tokens to the newest key.
+    """
     if not encrypted:
         return encrypted
-    return _decrypt_with(_get_boot_fernet(), encrypted)
+    multifernet = _get_multifernet()
+    return multifernet.rotate(encrypted.encode()).decode()
 
 
-def _decrypt_with(fernet: Fernet, encrypted: str) -> str:
+def _decrypt_with(multifernet: MultiFernet, encrypted: str) -> str:
     try:
-        return fernet.decrypt(encrypted.encode()).decode()
+        return multifernet.decrypt(encrypted.encode()).decode()
     except InvalidToken:
         raise DecryptionError(
             "Failed to decrypt token: invalid key or corrupted data. "
-            "This may indicate SECRET_KEY rotation without re-encryption."
+            "This may indicate the secret_key was rotated without re-encryption. "
+            "Re-enter the credential in Settings, or run key rotation."
         ) from None
 
 

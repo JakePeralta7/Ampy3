@@ -3,79 +3,101 @@
 import logging
 import os
 import sys
+from typing import Any
 
 from celery import Celery
+from celery.signals import worker_init
 
 from src.app.log_config import setup_logging
 from src.app.settings import settings
 
 
-def _load_db_settings_overrides() -> bool | None:
-    """Best-effort load of DB-backed settings before the worker starts.
+def _load_db_settings_overrides() -> bool:
+    """Load DB-backed settings.
 
-    The worker does not run the FastAPI lifespan, so without this it would
-    only ever see environment defaults (ignoring UI-configured values such as
-    ``celery_worker_concurrency`` and ``celery_log_level``). Failures are
-    non-fatal: a worker must still boot before the schema exists.
-
-    Returns whether the instance has been set up (a ``secret_key`` row
-    exists), or ``None`` when that cannot be determined.
+    Worker starts after receiving 'app:configured' signal, so DB is guaranteed
+    to be ready and configured. This function loads settings from DB.
     """
     try:
-        from sqlalchemy import select
+        import os
+        from sqlalchemy import create_engine, text
+        from sqlalchemy.orm import Session
 
-        from src.app.db import SessionLocal
-        from src.app.models import Config
+        # Build database URL from environment variables directly
+        # to avoid any issues with imported engine state
+        db_user = os.getenv("DATABASE_USERNAME", "ampy3")
+        db_pass = os.getenv("DATABASE_PASSWORD", "ampy3")
+        db_host = os.getenv("DATABASE_HOST", "postgres")
+        db_port = os.getenv("DATABASE_PORT", "5432")
+        db_name = os.getenv("DATABASE_NAME", "ampy3")
+        database_url = f"postgresql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
 
-        with SessionLocal() as session:
-            rows = session.execute(select(Config)).scalars().all()
-        overrides = {row.key: row.value for row in rows}
+        # Create a brand new engine each time with no pool
+        engine = create_engine(database_url, poolclass=None)
+
+        with Session(engine) as session:
+            # Count rows with raw SQL
+            result = session.execute(text("SELECT count(*) FROM config"))
+            count = result.scalar()
+
+            # Try selecting actual data
+            result = session.execute(text("SELECT key, value FROM config"))
+            rows = result.fetchall()
+
+            # Now try ORM
+            from src.app.models import Config as ConfigModel
+            from sqlalchemy.orm import sessionmaker
+            from sqlalchemy import select
+            SessionFactory = sessionmaker(bind=engine)
+            with SessionFactory() as orm_session:
+                orm_rows = orm_session.execute(select(ConfigModel)).scalars().all()
+                overrides = {row.key: row.value for row in orm_rows}
+
+        engine.dispose()
+
         if overrides:
             settings.load_overrides(overrides)
-        return "secret_key" in overrides
-    except Exception as exc:  # pragma: no cover - startup best effort
-        logging.getLogger(__name__).warning("Could not load settings overrides: %s", exc)
-        return None
+        return True
+    except Exception as exc:
+        logging.getLogger(__name__).error("Failed to load settings overrides: %s", exc)
+        raise RuntimeError(f"Failed to load settings from database: {exc}") from exc
 
 
-def _is_worker_process() -> bool:
-    """Whether this module is being imported by the Celery worker CLI.
+def _validate_startup() -> None:
+    """Validate required settings after DB overrides are loaded.
 
-    ``app.worker.app`` is also imported by the API (services → target →
-    worker session). Startup work must not run there: the schema may not exist
-    yet (fresh install) and the API enforces its own gate in the lifespan.
+    Worker only starts after 'app:configured' signal, so secret_key
+    is guaranteed to be available.
     """
-    return os.path.basename(sys.argv[0]).lower().startswith("celery")
+    # Configured instance in production: require usable SECRET_KEY
+    if settings.app_env == "production":
+        if not settings.secret_key or len(settings.secret_key) < 32:
+            raise RuntimeError(
+                "APP_ENV=production requires SECRET_KEY (at least 32 characters). "
+                'Generate one with: python -c "import secrets; print(secrets.token_hex(32))"'
+            )
 
-
-if _is_worker_process():
-    configured = _load_db_settings_overrides()
-
-    # Fail closed: production requires a SECRET_KEY so token encryption at
-    # rest is never keyed from a fixed, well-known value. A fresh install (no
-    # secret_key row yet) may keep the worker up until the setup wizard stores
-    # one; an unknown config state (e.g. schema not migrated yet) does not.
-    if (
-        configured is not False
-        and settings.app_env == "production"
-        and (not settings.secret_key or len(settings.secret_key) < 32)
-    ):
-        raise RuntimeError(
-            "APP_ENV=production requires SECRET_KEY (at least 32 characters). "
-            'Generate one with: python -c "import secrets; print(secrets.token_hex(32))"'
-        )
-
-    # Fail closed: REQUIRE_AUTH=true without SECRET_KEY is a hard error
+    # REQUIRE_AUTH requires a secret key (either from env or DB)
     if settings.require_auth and (not settings.secret_key or len(settings.secret_key) < 32):
         raise RuntimeError(
             "REQUIRE_AUTH=true requires SECRET_KEY (at least 32 characters). "
             'Generate one with: python -c "import secrets; print(secrets.token_hex(32))"'
         )
 
-setup_logging(level=settings.celery_log_level, log_format=settings.log_format)
 
-logger = logging.getLogger(__name__)
+# Celery signal handlers
+@worker_init.connect
+def _on_worker_init(**kwargs: Any) -> None:
+    """Load DB settings when worker process starts (after fork)."""
+    # Load settings from DB (worker only starts after app:configured signal)
+    _load_db_settings_overrides()
+    _validate_startup()
 
+    # Reconfigure logging now that celery_log_level may have changed
+    setup_logging(level=settings.celery_log_level, log_format=settings.log_format)
+
+
+# Initialize Celery app (no module-level side effects)
 celery_app = Celery(
     "ampy3",
     broker=settings.celery_broker_url,

@@ -32,13 +32,14 @@ INTERVAL_DELTAS: dict[str, timedelta] = {
 AD_HOC_INTERVAL = "once"
 
 # Config keys that contain sensitive credentials and should be encrypted at rest
+# NOTE: secret_key is intentionally NOT encrypted - it's the key used to encrypt everything else.
+# Storing it encrypted would create a chicken-and-egg decryption problem.
 SENSITIVE_CONFIG_KEYS: frozenset[str] = frozenset(
     {
         "plex_token",
         "jellyfin_api_key",
         "owner_plex_token",
         "ytmusic_auth",
-        "secret_key",
         "database_username",
         "database_password",
     }

@@ -123,6 +123,15 @@ async def lifespan(app: FastAPI):
     # (no secret_key row yet) may boot so the setup wizard can store one.
     enforce_startup_gate(allow_unconfigured=not configured)
 
+    # Publish "app:configured" signal so worker knows it can start
+    if configured:
+        try:
+            from src.app.services import get_valkey_client
+            await get_valkey_client().publish("app:configured", "1")
+            logger.info("Published app:configured signal to Valkey")
+        except Exception as e:
+            logger.warning("Failed to publish app:configured signal: %s", e)
+
     if not settings.require_auth:
         logger.warning(
             "REQUIRE_AUTH=false — the API is running WITHOUT authentication. "

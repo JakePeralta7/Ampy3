@@ -139,7 +139,7 @@ class Settings(BaseSettings):
         decrypted here before being applied to the settings object.
         """
         from src.app.constants import SENSITIVE_CONFIG_KEYS
-        from src.app.services.crypto import DecryptionError, decrypt_boot_token, decrypt_token
+        from src.app.services.crypto import DecryptionError, decrypt_token, reset_crypto_caches
 
         # Apply the secret key first so dependent values (and the startup
         # gate) see the working key; config row order is not guaranteed.
@@ -149,13 +149,7 @@ class Settings(BaseSettings):
             if key in self.model_fields:
                 if key in SENSITIVE_CONFIG_KEYS:
                     try:
-                        # The secret key itself is wrapped with the boot
-                        # (deployment) key; everything else uses the working
-                        # key it holds.
-                        if key == "secret_key":
-                            value = decrypt_boot_token(value)
-                        else:
-                            value = decrypt_token(value)
+                        value = decrypt_token(value)
                     except DecryptionError:
                         logger.warning(
                             "Failed to decrypt config key '%s' — falling back to env default. "
@@ -164,6 +158,11 @@ class Settings(BaseSettings):
                         )
                         continue
                 setattr(self, key, value)
+
+        # Reset crypto caches now that secret_key (and potentially other keys)
+        # have been updated from the database. This ensures Fernet ciphers
+        # are re-derived with the current working key.
+        reset_crypto_caches()
 
 
 settings = Settings()

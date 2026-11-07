@@ -35,13 +35,14 @@ services:
     environment:
       - DATABASE_USERNAME=${DATABASE_USERNAME}
       - DATABASE_PASSWORD=${DATABASE_PASSWORD}
+      - SECRET_KEY=${SECRET_KEY}
 
   worker:
     image: ghcr.io/jakeperalta7/ampy3-worker:latest
     build:
       context: .
       target: worker
-    command: sh -c "celery -A app.worker.app worker"
+    entrypoint: ["docker/worker-entrypoint.sh"]
     restart: unless-stopped
     depends_on:
       valkey:
@@ -51,6 +52,9 @@ services:
     environment:
       - DATABASE_USERNAME=${DATABASE_USERNAME}
       - DATABASE_PASSWORD=${DATABASE_PASSWORD}
+      - SECRET_KEY=${SECRET_KEY}
+      - VALKEY_HOST=valkey
+      - VALKEY_PORT=6379
 
   valkey:
     image: valkey/valkey:latest

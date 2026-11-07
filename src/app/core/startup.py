@@ -119,7 +119,9 @@ def enforce_startup_gate(
 def validate_worker_startup(configured: bool | None, settings_obj: Any | None = None) -> None:
     """Validate worker-specific startup requirements after loading config.
 
-    The worker only starts when the instance is properly configured.
+    Fresh install (configured=False) may boot to allow setup wizard.
+    Unknown DB state (configured=None) allows boot for schema migration.
+    Only configured instances (True) with missing keys in production fail closed.
     """
     s = settings_obj or default_settings
 
@@ -134,22 +136,16 @@ def validate_worker_startup(configured: bool | None, settings_obj: Any | None = 
             "config table and reconfigure via the setup wizard."
         )
 
-    # Worker must only start when the app is configured (secret_key present).
-    if configured is not True:
-        raise RuntimeError(
-            "Ampy3 is not configured yet. Complete setup via the web UI first "
-            "(set SECRET_KEY and other settings), then start the worker."
-        )
+    # Production requires a usable SECRET_KEY when instance is configured (True).
+    # Fresh install (False) and unknown state (None) may boot to allow setup wizard.
+    if configured is True and s.app_env == "production":
+        if not s.secret_key or len(s.secret_key) < 32:
+            raise RuntimeError(
+                "APP_ENV=production requires SECRET_KEY (at least 32 characters). "
+                'Generate one with: python -c "import secrets; print(secrets.token_hex(32))"'
+            )
 
-    # Fail closed: production requires a SECRET_KEY so token encryption at
-    # rest is never keyed from a fixed, well-known value.
-    if s.app_env == "production" and (not s.secret_key or len(s.secret_key) < 32):
-        raise RuntimeError(
-            "APP_ENV=production requires SECRET_KEY (at least 32 characters). "
-            'Generate one with: python -c "import secrets; print(secrets.token_hex(32))"'
-        )
-
-    # Fail closed: REQUIRE_AUTH=true without SECRET_KEY is a hard error
+    # REQUIRE_AUTH requires a secret key (either from env or DB)
     if s.require_auth and (not s.secret_key or len(s.secret_key) < 32):
         raise RuntimeError(
             "REQUIRE_AUTH=true requires SECRET_KEY (at least 32 characters). "
@@ -158,7 +154,7 @@ def validate_worker_startup(configured: bool | None, settings_obj: Any | None = 
 
     # If other sensitive values failed to decrypt while the instance is
     # configured, the worker cannot safely process syncs that need those tokens.
-    if failed:
+    if configured is True and failed:
         raise RuntimeError(
             "Failed to decrypt one or more sensitive config values: "
             f"{', '.join(sorted(failed))}. "

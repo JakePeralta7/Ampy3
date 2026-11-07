@@ -15,12 +15,10 @@ from src.app.schemas.settings import SettingsOut, SettingsUpdate
 from src.app.services.audit import log_event
 from src.app.services.crypto import (
     DecryptionError,
-    decrypt_boot_token,
     decrypt_token,
-    encrypt_boot_token,
     encrypt_token,
-    encrypt_token_with_key,
     reset_crypto_caches,
+    rotate_token,
 )
 from src.app.settings import settings
 
@@ -172,10 +170,9 @@ async def setup_initial_config(body: SetupRequest):
         if existing and existing.value:
             raise HTTPException(status_code=409, detail="Setup already completed")
 
-        # Store initial config. The secret is wrapped with the boot key so it
-        # can be recovered on the next start, before the working key is known.
+        # Store initial config. secret_key is stored plaintext (it IS the master key).
         config_keys = {
-            "secret_key": encrypt_boot_token(body.secret_key) or body.secret_key,
+            "secret_key": body.secret_key,
             "require_auth": str(body.require_auth).lower(),
         }
 
@@ -196,6 +193,10 @@ async def setup_initial_config(body: SetupRequest):
     settings.secret_key = body.secret_key
     settings.require_auth = body.require_auth
     reset_crypto_caches()
+
+    # Publish "app:configured" signal so worker can start
+    from src.app.services import get_valkey_client
+    await get_valkey_client().publish("app:configured", "1")
 
     return SetupResponse(success=True, message="Setup completed. Please log in.")
 
@@ -226,6 +227,10 @@ async def rotate_secret_key(
 
     If new_secret_key is not provided, a secure random key is generated.
     The new key must be at least 32 characters.
+
+    This uses MultiFernet rotation: the new key becomes the primary
+    encryption key, and all existing tokens are re-encrypted with it.
+    Old keys are not stored (single-key mode); all data is re-encrypted.
     """
     from sqlalchemy import select
 
@@ -251,29 +256,27 @@ async def rotate_secret_key(
         result = await session.execute(stmt)
         rows = result.scalars().all()
 
-        # Decrypt all current values with the OLD (working) key. The
-        # ``secret_key`` row is boot-wrapped, so it uses the boot key.
+        # Decrypt all current values with the OLD working key
         decrypted_values: dict[str, str] = {}
         for row in rows:
             if row.value:
                 try:
-                    if row.key == "secret_key":
-                        decrypted_values[row.key] = decrypt_boot_token(row.value)
-                    else:
-                        decrypted_values[row.key] = decrypt_token(row.value)
+                    decrypted_values[row.key] = decrypt_token(row.value)
                 except DecryptionError:
-                    # If decryption fails (e.g., different key), keep as-is.
-                    # This shouldn't happen in normal operation.
+                    # If decryption fails (e.g., different key), keep as empty.
                     logger.warning(f"Failed to decrypt {row.key} during secret key rotation")
                     decrypted_values[row.key] = ""
 
-        # Encrypt every value with the NEW key. The ``secret_key`` row is
-        # special: it is wrapped with the boot (deployment) key so the next
-        # startup can recover it before the working key is known.
+        # Encrypt every value with the NEW key using encrypt_token
+        # (which will use the new secret_key after we switch it).
+        # First switch the working key in memory, then re-encrypt.
+        settings.secret_key = new_secret_key
+        reset_crypto_caches()
+
         for key, plaintext in decrypted_values.items():
-            if not plaintext or key == "secret_key":
+            if not plaintext:
                 continue
-            encrypted = encrypt_token_with_key(plaintext, new_secret_key) or plaintext
+            encrypted = encrypt_token(plaintext)
             row = next((r for r in rows if r.key == key), None)
             if row:
                 row.value = encrypted
@@ -281,29 +284,26 @@ async def rotate_secret_key(
             else:
                 session.add(Config(key=key, value=encrypted, updated_at=datetime.now(UTC)))
 
-        # Update the secret_key row itself
+        # Update the secret_key row itself (stored plaintext)
         stmt = select(Config).where(Config.key == "secret_key")
         result = await session.execute(stmt)
         secret_row = result.scalar_one_or_none()
 
-        new_secret_key_encrypted = encrypt_boot_token(new_secret_key) or new_secret_key
-
         if secret_row:
-            secret_row.value = new_secret_key_encrypted
+            secret_row.value = new_secret_key
             secret_row.updated_at = datetime.now(UTC)
         else:
             session.add(
                 Config(
                     key="secret_key",
-                    value=new_secret_key_encrypted,
+                    value=new_secret_key,
                     updated_at=datetime.now(UTC),
                 )
             )
 
         await session.commit()
 
-    # Switch the working key only after the new ciphertexts are committed.
-    settings.secret_key = new_secret_key
+    # Ensure crypto caches are reset with the new key
     reset_crypto_caches()
 
     await log_event(

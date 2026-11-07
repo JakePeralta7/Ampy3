@@ -1,4 +1,4 @@
-"""Tests for crypto (Fernet token encryption) and auth (session tokens)."""
+"""Tests for crypto (MultiFernet token encryption) and auth (session tokens)."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -15,10 +15,10 @@ from src.app.auth.tokens import (
 )
 from src.app.services.crypto import (
     DecryptionError,
-    _get_fernet,
     decrypt_token,
     encrypt_token,
     get_session_signing_key,
+    rotate_token,
 )
 
 
@@ -50,36 +50,28 @@ class TestCrypto:
         token = "my-secret-token"
         encrypted = encrypt_token(token)
 
-        # Simulate key rotation: wipe the cached Fernet and derive a different key
+        # Simulate key rotation: wipe the cached MultiFernet and derive a different key
         import src.app.services.crypto as crypto_mod
 
-        monkeypatch.setattr(crypto_mod, "_FERNET", None)
+        monkeypatch.setattr(crypto_mod, "_MULTIFERNET", None)
         monkeypatch.setattr(crypto_mod, "_derive_key", lambda p, secret_key=None: b"x" * 32)
 
         with pytest.raises(DecryptionError):
             decrypt_token(encrypted)
 
-    def test_boot_key_wrapping_survives_working_key_rotation(self, monkeypatch):
-        """The secret_key row stays decryptable after the working key rotates."""
-        import src.app.services.crypto as crypto_mod
+    def test_token_rotation(self):
+        """rotate_token re-encrypts with current primary key."""
+        token = "my-secret-token"
+        encrypted = encrypt_token(token)
+        assert encrypted != token
 
-        monkeypatch.setattr(crypto_mod, "_BOOT_SECRET_KEY", None)
-        monkeypatch.setattr(crypto_mod, "_FERNET", None)
-        monkeypatch.setattr(crypto_mod.settings, "secret_key", "boot" * 8)
+        # Rotate the token
+        rotated = rotate_token(encrypted)
+        assert rotated != encrypted
 
-        wrapped = crypto_mod.encrypt_boot_token("db-working-secret")
-        assert wrapped is not None
-
-        # Simulate rotating the working key and clearing the working caches.
-        monkeypatch.setattr(crypto_mod.settings, "secret_key", "rotated" * 8)
-        crypto_mod.reset_crypto_caches()
-
-        assert crypto_mod.decrypt_boot_token(wrapped) == "db-working-secret"
-        with pytest.raises(DecryptionError):
-            decrypt_token(wrapped)
-
-        # Leave the module caches clean for other tests.
-        crypto_mod.reset_crypto_caches()
+        # Rotated token should still decrypt to original
+        decrypted = decrypt_token(rotated)
+        assert decrypted == token
 
     def test_session_signing_key_derivation(self):
         """Session signing key is derived consistently."""
