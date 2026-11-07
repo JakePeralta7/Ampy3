@@ -26,29 +26,34 @@ src/
 ## Component Types
 
 ### Page Components
+
 - Located in `src/pages/`
 - Represent top-level routes in the application
 - Example: `Settings.tsx` for the `/settings` route
 - Can contain sub-components and manage page-level state
 
 ### Feature Components
+
 - Located in `src/features/<domain>/` (e.g., `src/features/playlists/`)
 - Implement specific features or domain logic
 - Grouped by domain: `explore/`, `playlists/`, `rules/`
 - Example: `PlaylistDetails` lives in `features/playlists/`
 
 ### Common/Shared Components
+
 - Located in `src/components/ui/`
 - Used across multiple features
 - Should be stateless or have minimal state
 - Examples: Buttons, modals, form inputs, cards
 
 ### Layout Components
+
 - Located in `src/components/layout/`
 - Provide consistent structure and styling across pages
 - Examples: Header, footer, sidebar, navigation
 
 ### Auth Components
+
 - Located in `src/components/auth/`
 - Route guards and auth-related wrappers
 - Examples: `ProtectedRoute`, `RequireServer`
@@ -84,6 +89,7 @@ Import order in React components:
 5. Style imports
 
 Example:
+
 ```typescript
 import React, { useState, useCallback } from "react";
 import { useRouter } from "next/router";
@@ -115,6 +121,7 @@ import "./MyComponent.css";
 ## Examples
 
 ### Simple Component
+
 ```typescript
 import React from "react";
 
@@ -138,6 +145,7 @@ export function MyComponent({ title, onAction }: MyComponentProps) {
 ```
 
 ### Component with Custom Hook
+
 ```typescript
 import React from "react";
 import { useScheduledSyncs } from "../hooks/useScheduledSyncs";

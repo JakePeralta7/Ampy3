@@ -138,12 +138,15 @@ def validate_worker_startup(configured: bool | None, settings_obj: Any | None = 
 
     # Production requires a usable SECRET_KEY when instance is configured (True).
     # Fresh install (False) and unknown state (None) may boot to allow setup wizard.
-    if configured is True and s.app_env == "production":
-        if not s.secret_key or len(s.secret_key) < 32:
-            raise RuntimeError(
-                "APP_ENV=production requires SECRET_KEY (at least 32 characters). "
-                'Generate one with: python -c "import secrets; print(secrets.token_hex(32))"'
-            )
+    if (
+        configured is True
+        and s.app_env == "production"
+        and (not s.secret_key or len(s.secret_key) < 32)
+    ):
+        raise RuntimeError(
+            "APP_ENV=production requires SECRET_KEY (at least 32 characters). "
+            'Generate one with: python -c "import secrets; print(secrets.token_hex(32))"'
+        )
 
     # REQUIRE_AUTH requires a secret key (either from env or DB)
     if s.require_auth and (not s.secret_key or len(s.secret_key) < 32):

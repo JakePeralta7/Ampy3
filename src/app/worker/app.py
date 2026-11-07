@@ -7,6 +7,8 @@ from typing import Any
 
 from celery import Celery
 from celery.signals import worker_init
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import Session
 
 from src.app.log_config import setup_logging
 from src.app.settings import settings
@@ -19,10 +21,6 @@ def _load_db_settings_overrides() -> bool:
     to be ready and configured. This function loads settings from DB.
     """
     try:
-        import os
-        from sqlalchemy import create_engine, text
-        from sqlalchemy.orm import Session
-
         # Build database URL from environment variables directly
         # to avoid any issues with imported engine state
         db_user = os.getenv("DATABASE_USERNAME", "ampy3")
@@ -36,20 +34,20 @@ def _load_db_settings_overrides() -> bool:
         engine = create_engine(database_url, poolclass=None)
 
         with Session(engine) as session:
-            # Count rows with raw SQL
-            result = session.execute(text("SELECT count(*) FROM config"))
-            count = result.scalar()
+            # Check if config table has data
+            session.execute(text("SELECT count(*) FROM config")).scalar()
 
             # Try selecting actual data
-            result = session.execute(text("SELECT key, value FROM config"))
-            rows = result.fetchall()
+            session.execute(text("SELECT key, value FROM config")).fetchall()
 
             # Now try ORM
-            from src.app.models import Config as ConfigModel
-            from sqlalchemy.orm import sessionmaker
             from sqlalchemy import select
-            SessionFactory = sessionmaker(bind=engine)
-            with SessionFactory() as orm_session:
+            from sqlalchemy.orm import sessionmaker
+
+            from src.app.models import Config as ConfigModel
+
+            session_factory = sessionmaker(bind=engine)
+            with session_factory() as orm_session:
                 orm_rows = orm_session.execute(select(ConfigModel)).scalars().all()
                 overrides = {row.key: row.value for row in orm_rows}
 
@@ -70,12 +68,13 @@ def _validate_startup() -> None:
     is guaranteed to be available.
     """
     # Configured instance in production: require usable SECRET_KEY
-    if settings.app_env == "production":
-        if not settings.secret_key or len(settings.secret_key) < 32:
-            raise RuntimeError(
-                "APP_ENV=production requires SECRET_KEY (at least 32 characters). "
-                'Generate one with: python -c "import secrets; print(secrets.token_hex(32))"'
-            )
+    if settings.app_env == "production" and (
+        not settings.secret_key or len(settings.secret_key) < 32
+    ):
+        raise RuntimeError(
+            "APP_ENV=production requires SECRET_KEY (at least 32 characters). "
+            'Generate one with: python -c "import secrets; print(secrets.token_hex(32))"'
+        )
 
     # REQUIRE_AUTH requires a secret key (either from env or DB)
     if settings.require_auth and (not settings.secret_key or len(settings.secret_key) < 32):

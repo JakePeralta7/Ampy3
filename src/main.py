@@ -127,6 +127,7 @@ async def lifespan(app: FastAPI):
     if configured:
         try:
             from src.app.services import get_valkey_client
+
             await get_valkey_client().publish("app:configured", "1")
             logger.info("Published app:configured signal to Valkey")
         except Exception as e:

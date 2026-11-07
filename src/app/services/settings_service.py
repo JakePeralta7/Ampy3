@@ -194,6 +194,7 @@ class SettingsService:
 
         # Publish "app:configured" signal so worker can start
         from src.app.services import get_valkey_client
+
         await get_valkey_client().publish("app:configured", "1")
 
         return True, "Setup completed. Please log in."
