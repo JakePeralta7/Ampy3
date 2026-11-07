@@ -93,7 +93,11 @@ jobs:
         run: python -m pytest --tb=short -q
         env:
           PYTHONPATH: src
-          DATABASE_URL: postgresql://ampy3:ampy3@localhost:5432/ampy3
+          DATABASE_USERNAME: ampy3
+          DATABASE_PASSWORD: ampy3
+          DATABASE_HOST: localhost
+          DATABASE_PORT: 5432
+          DATABASE_NAME: ampy3
           # The startup gate is fail-closed: APP_ENV defaults to "production"
           # and requires a SECRET_KEY of >= 32 characters.
           SECRET_KEY: ci-test-secret-key-0123456789abcdef
@@ -136,5 +140,6 @@ jobs:
           docker compose ps --status running | grep web
           docker compose down
         env:
-          POSTGRES_PASSWORD: ci-smoke-test-password-123
+          DATABASE_USERNAME: ampy3
+          DATABASE_PASSWORD: ci-smoke-test-password-123
           SECRET_KEY: ci-smoke-secret-key-0123456789abcdef
