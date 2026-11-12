@@ -22,7 +22,7 @@ RUN rm -rf node_modules
 
 
 # --- Python dependency builder ---
-FROM python:3.14-slim AS builder
+FROM python:3.15-slim AS builder
 
 # Install cryptography from binary wheels to avoid requiring Rust toolchain
 # (wheels available for manylinux; only falls back to source on unsupported archs)
@@ -35,7 +35,7 @@ RUN python -c "import tomllib; data=tomllib.load(open('pyproject.toml','rb')); d
 
 
 # --- Base production image (shared by web + worker) ---
-FROM python:3.14-slim AS base
+FROM python:3.15-slim AS base
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends ffmpeg curl && \
