@@ -81,15 +81,9 @@ def enforce_startup_gate(*, allow_unconfigured: bool = False) -> None:
             'Generate one with: python -c "import secrets; print(secrets.token_hex(32))"'
         )
 
-    # No key at all: REQUIRE_AUTH can never work, and a production install
-    # that has already been configured must not serve without its key.
-    if settings.require_auth:
-        raise RuntimeError(
-            "REQUIRE_AUTH=true requires SECRET_KEY (at least 32 characters). "
-            'Generate one with: python -c "import secrets; print(secrets.token_hex(32))"'
-        )
-
-    if settings.app_env == "production" and not allow_unconfigured:
+    # No key at all: if instance is configured (DB has secret_key row), fail hard.
+    # allow_unconfigured=True only for fresh installs (no secret_key in DB).
+    if not allow_unconfigured:
         raise RuntimeError(
             "APP_ENV=production requires SECRET_KEY (at least 32 characters). "
             'Generate one with: python -c "import secrets; print(secrets.token_hex(32))"'

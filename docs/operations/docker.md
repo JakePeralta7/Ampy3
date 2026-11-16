@@ -72,11 +72,13 @@ The Compose file reads from the shell environment so you can override per-launch
 
 ```bash
 APP_PORT=9000 \
-REQUIRE_AUTH=true \
 APP_URL=https://ampy3.example.com \
-SECRET_KEY=$(openssl rand -hex 32) \
+DATABASE_USERNAME=ampy3 \
+DATABASE_PASSWORD=secure_password \
     docker compose up --build -d
 ```
+
+Security configuration is handled by the setup wizard on first boot and stored in the database.
 
 See [Configuration](../getting-started/configuration.md) for the full env-var reference.
 

@@ -65,21 +65,13 @@ def _validate_startup() -> None:
     """Validate required settings after DB overrides are loaded.
 
     Worker only starts after 'app:configured' signal, so secret_key
-    is guaranteed to be available.
+    is guaranteed to be available from the database.
     """
-    # Configured instance in production: require usable SECRET_KEY
-    if settings.app_env == "production" and (
-        not settings.secret_key or len(settings.secret_key) < 32
-    ):
+    # Worker only starts after app:configured, so instance is configured.
+    # Validate that secret_key from DB is usable.
+    if not settings.secret_key or len(settings.secret_key) < 32:
         raise RuntimeError(
-            "APP_ENV=production requires SECRET_KEY (at least 32 characters). "
-            'Generate one with: python -c "import secrets; print(secrets.token_hex(32))"'
-        )
-
-    # REQUIRE_AUTH requires a secret key (either from env or DB)
-    if settings.require_auth and (not settings.secret_key or len(settings.secret_key) < 32):
-        raise RuntimeError(
-            "REQUIRE_AUTH=true requires SECRET_KEY (at least 32 characters). "
+            "SECRET_KEY must be at least 32 characters. "
             'Generate one with: python -c "import secrets; print(secrets.token_hex(32))"'
         )
 

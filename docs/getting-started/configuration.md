@@ -1,27 +1,35 @@
 # Configuration
 
-Most Ampy3 configuration is read from **environment variables** via the Pydantic `Settings` singleton in `src/app/settings.py`. The exception is **runtime configuration** (target credentials, YouTube Music auth, and network/proxy settings), which is managed through the web UI and persisted in the database — see the **Settings** pages (Sources, Targets, and Network).
+Ampy3 has two categories of configuration:
 
-## Quick reference
+1. **Deployment environment variables** (required at container startup) — only `DATABASE_USERNAME`, `DATABASE_PASSWORD`, and `APP_URL`.
+2. **Runtime configuration** (managed via the web UI, stored in the database) — security settings, target credentials, YouTube Music auth, and network/proxy settings.
+
+On first boot, the setup wizard walks you through initial security configuration. Subsequent changes are made in the **Settings** pages (Sources, Targets, Network).
+
+## Quick reference: Deployment env vars
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DATABASE_USERNAME` | **Yes** | Postgres username. |
+| `DATABASE_PASSWORD` | **Yes** | Postgres password. |
+| `APP_URL` | **Yes** | Public URL used for OAuth redirects and CORS. |
+| `APP_BIND` | No | Host bind for the API (`127.0.0.1` by default; use `0.0.0.0` for LAN access). |
+| `APP_PORT` | No | Container port (default `8000`). |
+| `APP_ENV` | No | Environment label (`production` or `development`). Default: `production`. |
+
+## Quick reference: Celery / Valkey (override if using external broker)
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `POSTGRES_PASSWORD` | _(required in Docker)_ | Postgres password for the Compose stack. `docker compose` fails to start if unset. It becomes part of the database DSN verbatim, so stick to letters, digits, `-` and `_` (URL-reserved chars like `/` would break the connection). |
 | `CELERY_BROKER_URL` | `redis://valkey:6379/0` | Celery broker (Valkey/Redis). |
 | `CELERY_RESULT_BACKEND` | `redis://valkey:6379/1` | Celery result backend. |
 | `CELERY_WORKER_CONCURRENCY` | `1` | Worker prefork count. ≥1. |
 | `CELERY_LOG_LEVEL` | `info` | Worker log level (`debug`/`info`/`warning`/`error`/`critical`). |
-| `LOG_FORMAT` | `json` | Log output format, `json` (python-json-logger, one object per line) or `console` (human-readable). Applies to both API and worker. |
+| `LOG_FORMAT` | `json` | Log output format, `json` (python-json-logger) or `console`. |
 | `SOURCE_PLAYLIST_CACHE_TTL_SECONDS` | `300` | TTL for cached source playlist fetches (syncs). ≥1. |
 | `EXPLORE_CACHE_TTL_SECONDS` | `900` | TTL for cached Explore content (home, moods, search). ≥1. |
 | `YT_DLP_TIMEOUT` | `300` | Per-request YouTube Music fetch timeout in seconds. |
-| `REQUIRE_AUTH` | `false` | When `true`, only `APP_URL` is allowed by CORS and Plex SSO is enforced. |
-| `PLEX_CLIENT_ID` | _(empty)_ | OAuth client identifier for Plex SSO (only used when `REQUIRE_AUTH=true`). |
-| `APP_URL` | `http://localhost:8000` | Public URL used for OAuth redirects and CORS. |
-| `SECRET_KEY` | _(empty)_ | Session-signing and token-encryption key. **Required (≥32 chars) when `APP_ENV=production` or `REQUIRE_AUTH=true`** — the app refuses to start otherwise (fail-closed). Generate with `openssl rand -hex 32`. |
-| `SESSION_TTL_HOURS` | `168` | Session lifetime in hours (default = 1 week). |
-| `APP_ENV` | `production` | Environment label (`development`/`production`/…). `production` fails to start without a `SECRET_KEY`; used for log labels too. |
-| `DEBUG` | `false` | Enable verbose error pages and set the API log level to `debug`. |
 
 ## Section: Database
 
@@ -60,22 +68,9 @@ YT_DLP_TIMEOUT=600
 
 ## Section: Auth (Plex SSO)
 
-When `REQUIRE_AUTH=true`:
+Plex SSO is configured via the setup wizard on first boot. When authentication is enabled, CORS is restricted to `APP_URL` and the web UI redirects unauthenticated users to a Plex SSO flow. Sessions are signed with a key stored in the database.
 
-- CORS is restricted to `APP_URL` (instead of `*`)
-- The web UI redirects unauthenticated users to a Plex SSO flow handled by `src/app/auth/`
-- Sessions are signed with `SECRET_KEY`
-
-```bash
-REQUIRE_AUTH=true
-PLEX_CLIENT_ID=ampy3-docs-example
-APP_URL=https://ampy3.example.com
-SECRET_KEY=$(openssl rand -hex 32)
-SESSION_TTL_HOURS=72
-```
-
-!!! warning "`SECRET_KEY` is required when `APP_ENV=production` or `REQUIRE_AUTH=true`"
-    An empty `SECRET_KEY` in production (or with auth enabled) will refuse to start the app. It keys both session signing and at-rest token encryption — generate a fresh one per deployment and never commit it. Rotating `SECRET_KEY` will invalidate stored encrypted tokens.
+To change authentication settings after setup, use the **Settings → Config** page in the web UI.
 
 See [Auth](../guides/auth.md) for the full flow.
 

@@ -101,15 +101,9 @@ def enforce_startup_gate(
             'Generate one with: python -c "import secrets; print(secrets.token_hex(32))"'
         )
 
-    # No key at all: REQUIRE_AUTH can never work, and a production install
-    # that has already been configured must not serve without its key.
-    if s.require_auth:
-        raise RuntimeError(
-            "REQUIRE_AUTH=true requires SECRET_KEY (at least 32 characters). "
-            'Generate one with: python -c "import secrets; print(secrets.token_hex(32))"'
-        )
-
-    if s.app_env == "production" and not allow_unconfigured:
+    # No key at all: if instance is configured (DB has secret_key row), fail hard.
+    # allow_unconfigured=True only for fresh installs (no secret_key in DB).
+    if not allow_unconfigured:
         raise RuntimeError(
             "APP_ENV=production requires SECRET_KEY (at least 32 characters). "
             'Generate one with: python -c "import secrets; print(secrets.token_hex(32))"'
@@ -136,22 +130,11 @@ def validate_worker_startup(configured: bool | None, settings_obj: Any | None = 
             "config table and reconfigure via the setup wizard."
         )
 
-    # Production requires a usable SECRET_KEY when instance is configured (True).
     # Fresh install (False) and unknown state (None) may boot to allow setup wizard.
-    if (
-        configured is True
-        and s.app_env == "production"
-        and (not s.secret_key or len(s.secret_key) < 32)
-    ):
+    # Only configured instances (True) require a usable secret_key.
+    if configured is True and (not s.secret_key or len(s.secret_key) < 32):
         raise RuntimeError(
-            "APP_ENV=production requires SECRET_KEY (at least 32 characters). "
-            'Generate one with: python -c "import secrets; print(secrets.token_hex(32))"'
-        )
-
-    # REQUIRE_AUTH requires a secret key (either from env or DB)
-    if s.require_auth and (not s.secret_key or len(s.secret_key) < 32):
-        raise RuntimeError(
-            "REQUIRE_AUTH=true requires SECRET_KEY (at least 32 characters). "
+            "SECRET_KEY must be at least 32 characters. "
             'Generate one with: python -c "import secrets; print(secrets.token_hex(32))"'
         )
 

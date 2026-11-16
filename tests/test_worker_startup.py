@@ -26,7 +26,7 @@ def _settings(**overrides):
 
 
 def test_configured_worker_without_secret_key_fails():
-    with pytest.raises(RuntimeError, match="APP_ENV=production requires SECRET_KEY"):
+    with pytest.raises(RuntimeError, match="at least 32 characters"):
         validate_worker_startup(True, _settings())
 
 
@@ -39,6 +39,6 @@ def test_configured_worker_with_usable_secret_key_passes():
     validate_worker_startup(True, _settings(secret_key="k" * 32))
 
 
-def test_require_auth_always_requires_a_secret_key():
-    with pytest.raises(RuntimeError, match="REQUIRE_AUTH=true requires SECRET_KEY"):
-        validate_worker_startup(None, _settings(require_auth=True))
+def test_configured_worker_rejects_short_secret_key():
+    with pytest.raises(RuntimeError, match="at least 32 characters"):
+        validate_worker_startup(True, _settings(secret_key="short"))

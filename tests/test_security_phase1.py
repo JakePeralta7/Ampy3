@@ -483,41 +483,43 @@ def test_production_with_secret_key_passes_the_startup_gate(monkeypatch):
     main.enforce_startup_gate()
 
 
-def test_require_auth_without_secret_key_fails_the_startup_gate(monkeypatch):
-    """REQUIRE_AUTH=true always requires a SECRET_KEY."""
+def test_startup_gate_rejects_short_key(monkeypatch):
+    """Startup gate rejects SECRET_KEY < 32 chars even with allow_unconfigured=True."""
     from src import main
     from src.app.settings import Settings
 
-    # Construction is allowed: the key may still come from the config table.
     test_settings = Settings(
         _env_file=None,
-        app_env="development",
-        require_auth=True,
+        app_env="production",
+        require_auth=False,
+        secret_key="short",
+        database_username="test",
+        database_password="test",
+    )
+    monkeypatch.setattr(main, "settings", test_settings)
+
+    with pytest.raises(RuntimeError, match="at least 32 characters"):
+        main.enforce_startup_gate(allow_unconfigured=True)
+
+
+def test_configured_instance_without_secret_key_fails(monkeypatch):
+    """A configured instance (has secret_key in DB) without a usable key fails."""
+    from src import main
+    from src.app.settings import Settings
+
+    test_settings = Settings(
+        _env_file=None,
+        app_env="production",
+        require_auth=False,
         secret_key="",
         database_username="test",
         database_password="test",
     )
     monkeypatch.setattr(main, "settings", test_settings)
 
-    with pytest.raises(RuntimeError, match="REQUIRE_AUTH=true requires SECRET_KEY"):
-        main.enforce_startup_gate(allow_unconfigured=True)
-
-
-def test_require_auth_gate_rejects_short_key():
-    """REQUIRE_AUTH=true rejects SECRET_KEY < 32 chars."""
-    from src.app.settings import Settings
-
-    with pytest.raises(ValueError, match="at least 32 characters"):
-        Settings(_env_file=None, require_auth=True, secret_key="short")
-
-
-def test_require_auth_accepts_valid_key():
-    """REQUIRE_AUTH=true accepts SECRET_KEY >= 32 chars."""
-    from src.app.settings import Settings
-
-    settings = Settings(_env_file=None, require_auth=True, secret_key="a" * 32)
-
-    assert settings.secret_key == "a" * 32
+    # configured=True means allow_unconfigured=False
+    with pytest.raises(RuntimeError, match="APP_ENV=production requires SECRET_KEY"):
+        main.enforce_startup_gate(allow_unconfigured=False)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

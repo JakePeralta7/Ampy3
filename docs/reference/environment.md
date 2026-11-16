@@ -14,5 +14,5 @@ Every runtime knob lives in [`Settings`][app.settings.Settings] — a Pydantic `
 ## Where to look next
 
 - [Getting started → Configuration](../getting-started/configuration.md)
-- [Auth](../guides/auth.md) — `REQUIRE_AUTH`, `SECRET_KEY`, `APP_URL` in detail
+- [Auth](../guides/auth.md) — Plex SSO flow in detail
 - [Local setup](../development/local-setup.md) — development overrides
