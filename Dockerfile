@@ -54,6 +54,9 @@ COPY alembic/ ./alembic
 COPY docker/ ./docker
 COPY pyproject.toml ./
 
+# Make entrypoint scripts executable
+RUN chmod +x /app/docker/entrypoint.py /app/docker/worker-entrypoint.sh
+
 # Install the package in editable mode so code changes are reflected
 RUN pip install --no-cache-dir -e .
 
@@ -72,4 +75,5 @@ ENTRYPOINT ["python", "/app/docker/entrypoint.py"]
 
 # --- Worker image (no frontend) ---
 FROM base AS worker
+ENTRYPOINT ["/app/docker/worker-entrypoint.sh"]
 CMD ["celery", "-A", "app.worker.app", "worker"]
