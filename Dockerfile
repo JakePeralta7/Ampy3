@@ -1,5 +1,5 @@
 # --- Frontend builder ---
-FROM node:25-alpine AS web-builder
+FROM node:26-alpine AS web-builder
 
 RUN npm i -g pnpm@12.4.2
 
