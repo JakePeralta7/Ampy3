@@ -38,7 +38,7 @@ jobs:
 
       - name: Extract metadata (web)
         id: meta-web
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ steps.owner.outputs.name }}/ampy3-web
           tags: |
@@ -48,7 +48,7 @@ jobs:
 
       - name: Extract metadata (worker)
         id: meta-worker
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ steps.owner.outputs.name }}/ampy3-worker
           tags: |
